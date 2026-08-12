@@ -1,11 +1,19 @@
 # Changelog
 
+## 0.7.3 (2026-08-12)
+
+### Changed
+
+- **True async retune from event callback:** `retune_hz` / streaming `set_center_freq`
+  queue the LO and return `ESP_OK`; delivery task drains URBs, EP0 tunes, emits
+  `EVT_RETUNED`. App-task calls still apply synchronously.
+- Coalescing: newer pending LO while apply is in flight is not lost.
+
+### CI (carry-forward)
+
+- ESP-IDF P4 compile gate for smoke example (5.3.2 + 5.4.1)
+
 ## Unreleased
-
-### CI
-
-- **ESP-IDF P4 compile gate:** build `examples/p4_serial_smoke` for `esp32p4` on IDF v5.3.2 and v5.4.1 (compile only)
-- Smoke example uses stable component name `esp_rtl_sdr` via `components/esp_rtl_sdr/` wrapper (fixes `rtl_sdr_v4_esp` REQUIRES drift)
 
 ## 0.7.2 (2026-08-12)
 

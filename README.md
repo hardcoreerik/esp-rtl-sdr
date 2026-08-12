@@ -5,7 +5,7 @@
 Blog V4 (R828D) profile first · ESP32-P4 High-Speed · **not a librtlsdr port**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.7.2-green)
+![Status](https://img.shields.io/badge/version-0.7.3-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 

@@ -124,8 +124,10 @@ struct esp_rtl_sdr_handle {
     QueueHandle_t filled_q = nullptr;
     uint32_t iq_sequence = 0;
 
-    /** LO request; applied by retune path after bulk drain (never EP0 mid-bulk). */
+    /** LO request; applied after bulk drain (never EP0 mid-bulk). 0 = none. */
     volatile uint32_t pending_retune_hz = 0;
+    /** True while apply_pending_retune() runs (delivery or app task). */
+    volatile bool retune_busy = false;
 
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
     uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
@@ -627,7 +629,12 @@ static void bulk_cb(usb_transfer_t *xfer)
     }
 }
 
-/** Drain outstanding bulks (no resubmit), apply LO, resubmit. Must NOT run on USB client task. */
+/**
+ * Drain outstanding bulks (no resubmit), apply LO, resubmit.
+ * Must NOT run on the USB client/host lib tasks (blocks; does EP0).
+ * Safe from delivery task or app tasks. Coalesces: if pending changes mid-apply,
+ * leaves the newer pending_retune_hz set for another pass.
+ */
 static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 {
     if (h == nullptr || !h->streaming) {
@@ -637,6 +644,10 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     if (freq == 0) {
         return ESP_OK;
     }
+    if (h->retune_busy) {
+        return ESP_OK; /* another apply in flight; pending remains */
+    }
+    h->retune_busy = true;
 
     h->pause_resubmit = true;
 
@@ -658,19 +669,31 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 
     if (!h->streaming) {
         h->pause_resubmit = false;
-        h->pending_retune_hz = 0;
+        if (h->pending_retune_hz == freq) {
+            h->pending_retune_hz = 0;
+        }
+        h->retune_busy = false;
         return ESP_RTL_SDR_ERR_NOT_STREAMING;
     }
 
-    esp_err_t err = run_tune(h, freq);
+    /* Use latest pending if a newer retune arrived while draining. */
+    const uint32_t tune_hz =
+        (h->pending_retune_hz != 0) ? h->pending_retune_hz : freq;
+
+    esp_err_t err = run_tune(h, tune_hz);
     if (err == ESP_OK) {
-        h->frequency_hz = freq;
-        h->metrics.frequency_hz = freq;
-        h->pending_retune_hz = 0;
-        ESP_LOGI(TAG, "hot retune applied %u Hz", static_cast<unsigned>(freq));
+        h->frequency_hz = tune_hz;
+        h->metrics.frequency_hz = tune_hz;
+        h->preferred_frequency_hz = tune_hz;
+        if (h->pending_retune_hz == tune_hz) {
+            h->pending_retune_hz = 0;
+        }
+        ESP_LOGI(TAG, "hot retune applied %u Hz", static_cast<unsigned>(tune_hz));
     } else {
         ESP_LOGW(TAG, "hot retune EP0 failed: %s (keep LO)", esp_rtl_sdr_err_to_name(err));
-        h->pending_retune_hz = 0;
+        if (h->pending_retune_hz == tune_hz) {
+            h->pending_retune_hz = 0;
+        }
     }
 
     /* Resume multi-URB stream */
@@ -691,6 +714,8 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
             }
         }
     }
+
+    h->retune_busy = false;
 
     if (err == ESP_OK) {
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
@@ -817,6 +842,11 @@ static void delivery_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
+        /* Async retune from callback path: apply off the USB client task. */
+        if (h->streaming && h->pending_retune_hz != 0 && !h->retune_busy) {
+            (void)apply_pending_retune(h);
+        }
+
         IqSlot *slot = nullptr;
         if (h->filled_q == nullptr) {
             vTaskDelay(pdMS_TO_TICKS(20));
@@ -1725,6 +1755,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->metrics.consumer_drops = 0;
         handle->stream_start_ms = now_ms();
         handle->pending_retune_hz = 0;
+        handle->retune_busy = false;
         handle->pause_resubmit = false;
         handle->live_urbs = 0;
         handle->health_emit_blocks = 0;
@@ -1789,27 +1820,29 @@ esp_err_t esp_rtl_sdr_retune_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_
     }
 
     /*
-     * Strict reentrancy (0.7.2): lifecycle from callback → ERR_REENTRANT.
-     * True async retune from callback is a future enhancement (queue + owner drain).
+     * Always queue the LO. If called from the event callback, apply is deferred to
+     * the delivery task (true async). From an app task, apply immediately.
      */
+    bool from_callback = false;
     {
         HandleLock lk(handle, kQueryLockTicks);
         if (!lk.ok()) {
             return ESP_RTL_SDR_ERR_TIMEOUT;
-        }
-        esp_err_t re = check_not_reentrant(handle);
-        if (re != ESP_OK) {
-            set_error_unlocked(handle, re);
-            return re;
         }
         if (handle->state != ESP_RTL_SDR_STATE_STREAMING || !handle->streaming) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_STREAMING);
             return ESP_RTL_SDR_ERR_NOT_STREAMING;
         }
         handle->pending_retune_hz = q;
+        from_callback = (handle->in_callback_depth > 0);
+        set_error_unlocked(handle, ESP_OK);
     }
 
-    /* Apply outside lock: drains bulks, EP0 tune, resubmits. */
+    if (from_callback) {
+        /* Delivery task will drain bulks + EP0 + EVT_RETUNED. */
+        return ESP_OK;
+    }
+
     return apply_pending_retune(handle);
 }
 

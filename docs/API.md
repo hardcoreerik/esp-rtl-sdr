@@ -140,7 +140,8 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 
 | Function | Behavior |
 |---|---|
-| `set/get_center_freq` | Preferred LO when idle; retune when streaming |
+| `set/get_center_freq` | Preferred LO when idle; retune when streaming (async if called from callback) |
+| `retune_hz` | Hot LO change; **async from callback** → later `EVT_RETUNED` |
 | `set/get_sample_rate` | Quantize to exact; **BUSY** if streaming |
 | `quantize_sample_rate` | Pure helper; no handle |
 | `read` | Blocking CU8 IQ |

@@ -85,7 +85,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 2
+#define ESP_RTL_SDR_VERSION_PATCH 3
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -612,11 +612,19 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
 
 /**
  * Request in-stream retune. Frequency is normalized (quantized/clamped).
- * Implementation queues the request and applies it only when no bulk URB is
- * outstanding (safe for continuous operation).
  *
- * @return ESP_OK if accepted (applied or queued);
- *         ERR_NOT_STREAMING / BAD_FREQ / FAULT / UNSUPPORTED / REENTRANT otherwise.
+ * Safe hot path: drains bulk URBs, EP0 tune, resubmits (never EP0 mid-bulk).
+ *
+ * Threading:
+ * - From an app task: applies on the calling task (may block briefly while URBs drain).
+ * - From the event callback (e.g. EVT_IQ_BLOCK): **queues** only and returns ESP_OK;
+ *   the delivery task applies later and emits EVT_RETUNED. Does **not** return
+ *   ERR_REENTRANT — this is intentional async retune (0.7.3+).
+ *
+ * Coalescing: a newer retune while one is pending/in-flight replaces the target LO.
+ *
+ * @return ESP_OK if accepted (applied now, or queued for async apply);
+ *         ERR_NOT_STREAMING / BAD_FREQ / FAULT / TIMEOUT otherwise.
  */
 esp_err_t esp_rtl_sdr_retune_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_hz);
 

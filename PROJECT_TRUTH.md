@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-12**  
-Version: **0.7.2** (runtime hardening — not production-ready)  
+Version: **0.7.3** (async retune from callback — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -63,7 +63,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
 | Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 profile |
-| In-stream `retune_hz` | **Implemented** | Drain bulk before EP0 |
+| In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
 | Recommended rate list | **Implemented** | `get_supported_rates` |

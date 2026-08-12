@@ -24,7 +24,7 @@ This release pauses Phase 3 gain/bias **hardware** work for one hardening cut.
 
 | Item | Status |
 |---|---|
-| True async retune from callback (queue + owner drain) | Planned after 0.7.2 |
+| True async retune from callback (queue + owner drain) | **Done in 0.7.3** |
 | Delivery modes CALLBACK/READ/BOTH | Planned |
 | Lazy pull-ring (optional sync read) | Planned |
 | ESP-IDF P4 compile CI | **Done** in CI (`idf-p4-build`, IDF 5.3.2 + 5.4.1) |

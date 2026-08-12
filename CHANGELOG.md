@@ -9,6 +9,11 @@
   `EVT_RETUNED`. App-task calls still apply synchronously.
 - Coalescing: newer pending LO while apply is in flight is not lost.
 
+### Docs
+
+- `docs/DEVELOPMENT_NARRATIVE_0_7.md` — verbose 0.7.x development commentary
+  (architecture, CI meaning, hardening, async retune, lab honesty, open list)
+
 ### CI (carry-forward)
 
 - ESP-IDF P4 compile gate for smoke example (5.3.2 + 5.4.1)

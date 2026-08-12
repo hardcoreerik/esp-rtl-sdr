@@ -30,6 +30,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | Automated host tests + CI (TheOrc-style) |
 | [LAB_HOBBYIST.md](LAB_HOBBYIST.md) | Honest desk lab + TinySA Ultra how-to |
 | [HARDENING_0_7_2.md](HARDENING_0_7_2.md) | 0.7.2 runtime hardening notes |
+| [DEVELOPMENT_NARRATIVE_0_7.md](DEVELOPMENT_NARRATIVE_0_7.md) | Verbose 0.7.x development commentary |
 | [GAIN_BIAS_CAPTURE.md](GAIN_BIAS_CAPTURE.md) | Phase 3 clean-room capture procedure |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles |

@@ -61,7 +61,7 @@ Review-driven (pause Phase 3 hardware for one release):
 - [x] Kconfig defaults wired
 - [x] Pull-ring memcpy optimization
 - [x] Component `targets: esp32p4`
-- [ ] ESP-IDF P4 compile CI (next)
+- [x] ESP-IDF P4 compile CI (`idf-p4-build` on 5.3.2 + 5.4.1)
 - [ ] True async retune from callback
 - [ ] Delivery CALLBACK/READ/BOTH + lazy pull ring
 - [ ] Lab soak evidence from this tree

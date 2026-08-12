@@ -75,9 +75,16 @@ Workflow: `.github/workflows/ci.yml`
 
 1. **host-policy** — Ubuntu + Windows matrix; `-Werror` on Linux; `ctest` + direct run  
 2. **truth-hygiene** — `tests/scripts/check_truth_hygiene.sh` (versions, required docs, CAP_GAIN/BIAS not enabled)  
-3. **ci-ok** — aggregate gate  
+3. **idf-p4-build** — `examples/p4_serial_smoke` with `idf.py set-target esp32p4` + `build` on ESP-IDF **v5.3.2** and **v5.4.1** (compile only; no flash/RF)  
+4. **ci-ok** — aggregate gate  
 
-A red CI means **do not claim green policy** in docs or releases.
+| Green means | Does **not** mean |
+|---|---|
+| Policy unit tests pass | Blog V4 streams on hardware |
+| Smoke app **compiles** for P4 | USB host runtime soak |
+| Versions/docs consistent | Gain/bias work |
+
+A red CI means **do not claim green** in docs or releases.
 
 ---
 

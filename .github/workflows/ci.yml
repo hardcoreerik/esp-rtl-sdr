@@ -1,5 +1,7 @@
-# TheOrc-style: automated checks on every push / PR.
-# Host policy tests require only CMake + a C++17 compiler (no ESP-IDF, no hardware).
+# Automated gates:
+# 1) Host policy unit tests (no IDF)
+# 2) Truth / version hygiene
+# 3) ESP-IDF ESP32-P4 compile of examples/p4_serial_smoke (no hardware)
 
 name: ci
 
@@ -63,10 +65,38 @@ jobs:
           chmod +x tests/scripts/check_truth_hygiene.sh
           ./tests/scripts/check_truth_hygiene.sh
 
-  # Aggregate gate for branch protection convenience
+  idf-p4-build:
+    name: ESP-IDF P4 compile (${{ matrix.idf_ver }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # P4 USB host path: IDF 5.3+; pin known release tags for reproducibility
+        idf_ver: ["v5.3.2", "v5.4.1"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build p4_serial_smoke for esp32p4
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ matrix.idf_ver }}
+          target: esp32p4
+          path: examples/p4_serial_smoke
+          command: idf.py build
+
+      - name: Show binary size (if present)
+        if: success()
+        working-directory: examples/p4_serial_smoke
+        run: |
+          if [ -f build/esp_rtl_sdr_p4_smoke.bin ]; then
+            ls -la build/esp_rtl_sdr_p4_smoke.bin build/esp_rtl_sdr_p4_smoke.elf
+          else
+            find build -name '*.elf' -o -name '*.bin' | head -20
+          fi
+
   ci-ok:
     name: ci ok
-    needs: [host-policy, truth-hygiene]
+    needs: [host-policy, truth-hygiene, idf-p4-build]
     runs-on: ubuntu-latest
     steps:
       - run: echo "all required CI jobs passed"

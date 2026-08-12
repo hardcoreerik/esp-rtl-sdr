@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### CI
+
+- **ESP-IDF P4 compile gate:** build `examples/p4_serial_smoke` for `esp32p4` on IDF v5.3.2 and v5.4.1 (compile only)
+- Smoke example uses stable component name `esp_rtl_sdr` via `components/esp_rtl_sdr/` wrapper (fixes `rtl_sdr_v4_esp` REQUIRES drift)
+
 ## 0.7.2 (2026-08-12)
 
 ### Hardening (review-driven)

@@ -27,8 +27,6 @@ Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DIS
 | Production maturity | **0.x early** — API can still grow; fail-closed is a goal, not a warranty |
 | Formal security audit | **None** |
 | Stand-alone re-soak from this tree on P4 | **Still open** (Tab5/Waveshare = Provenance under OrcSDR) |
-| Automated host policy tests | **Implemented** — `tests/host` + GitHub Actions CI |
-| Automated full USB/RF CI | **No** — needs P4 + dongle (lab only) |
 
 If marketing copy contradicts this table, open a `truth:` issue.
 
@@ -72,6 +70,8 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Rate passport (`probe_rates`) | **Implemented** | On-device soak; needs P4+dongle run |
 | Host unit tests (policy) | **Implemented** | `tests/host` — no IDF; CI on push |
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
+| ESP-IDF P4 compile CI | **Implemented** | `examples/p4_serial_smoke` idf.py build esp32p4 |
+| Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
 | Gain / bias public API | **Implemented (stubs)** | Returns UNSUPPORTED; CAP bits **off** |

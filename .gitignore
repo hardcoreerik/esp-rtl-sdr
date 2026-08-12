@@ -1,8 +1,11 @@
 .pio/
 build/
 tests/host/build/
+examples/**/build/
 sdkconfig
 sdkconfig.old
+sdkconfig.defaults.esp32p4
+!examples/**/sdkconfig.defaults
 dependencies.lock
 managed_components/
 .vscode/

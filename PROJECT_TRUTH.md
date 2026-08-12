@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-12**  
-Version: **0.7.0** (continuous rates + need / health / passport)  
+Version: **0.7.1** (EVT_HEALTH live + Phase 3 API stubs)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -73,7 +73,8 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Host unit tests (policy) | **Implemented** | `tests/host` — no IDF; CI on push |
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
-| `get_health()` | **Implemented** | USB/RF narrative + advice |
+| `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
+| Gain / bias public API | **Implemented (stubs)** | Returns UNSUPPORTED; CAP bits **off** |
 | set/get center freq, rate, ppm | **Implemented** | |
 | Sync `read()` | **Implemented** | |
 | Multi-device select | **Implemented** | |
@@ -81,7 +82,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |
-| Gain / bias-T | **Planned** | Phase 3 — measured EP0 |
+| Gain / bias-T hardware | **Planned** | Phase 3 — needs capture (GAIN_BIAS_CAPTURE.md) |
 | HF upconverter path CAP | **Planned** | NEED_HF stores LO only today |
 | R828D stage gain / input / notches | **Planned** | |
 | Adaptive USB URB | **Planned** | |

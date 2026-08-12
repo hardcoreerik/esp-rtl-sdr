@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.1 (2026-08-12)
+
+### Added
+
+- Live **`EVT_HEALTH`** from delivery task (on overall change + every 48 IQ blocks)
+- Phase 3 **API surface** (fail-closed): `set/get_tuner_gain_mode`, `set/get_tuner_gain`,
+  `get_tuner_gains`, `set/get_bias_tee` — return `ERR_UNSUPPORTED`; **CAP_GAIN / CAP_BIAS_TEE remain off**
+- `docs/GAIN_BIAS_CAPTURE.md` — clean-room capture procedure for lab (Baofeng/Flipper stimulus later)
+
+### Notes
+
+- Gain/bias preferences may be stored for apps; **no hardware effect** until measured EP0 lands.
+- Version **0.7.1**.
+
 ## Unreleased
 
 ### Added (automated testing / TheOrc-aligned)

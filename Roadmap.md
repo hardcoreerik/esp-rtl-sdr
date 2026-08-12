@@ -44,7 +44,7 @@ Open: formal P4 soak logs for non-provenance rates.
 - [x] `probe_rates()` passport skeleton
 - [x] Docs: VISION, SILICON, TESTING (Heltec / Baofeng / Flipper)
 - [ ] Hardware run of passport on P4 + Blog V4 (lab)
-- [ ] Optional: emit `EVT_HEALTH` on a timer from delivery task
+- [x] Emit `EVT_HEALTH` from delivery (change + periodic)
 
 ---
 
@@ -62,8 +62,9 @@ Open: formal P4 soak logs for non-provenance rates.
 
 ## Phase 3 — Gain and bias-T (measured)
 
+- [x] Public fail-closed API surface + capture procedure (`docs/GAIN_BIAS_CAPTURE.md`)
 - [ ] Independent USB capture of gain / bias on Blog V4
-- [ ] `set_tuner_gain_mode`, `set_tuner_gain`, `get_tuner_gains`
+- [ ] Wire EP0 from capture into profile; `set_*` applies hardware
 - [ ] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only when implemented
 - [ ] Never paste librtlsdr gain tables
 - [ ] Lab: Baofeng / Flipper for clip vs weak health correlation

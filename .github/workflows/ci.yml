@@ -45,7 +45,7 @@ jobs:
           echo "header version=$VER"
           grep -q "version: \"${VER}\"" idf_component.yml
           grep -q "\"version\": \"${VER}\"" library.json
-          grep -q "version-0.7.0\|${VER}" README.md || grep -q "${VER}" README.md
+          grep -q "${VER}" README.md
           test -f PROJECT_TRUTH.md
           test -f docs/AI_DEVELOPMENT_DISCLOSURE.md
           test -f SECURITY.md

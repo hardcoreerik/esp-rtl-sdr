@@ -85,7 +85,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 0
+#define ESP_RTL_SDR_VERSION_PATCH 1
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -270,7 +270,7 @@ typedef enum {
     ESP_RTL_SDR_CAP_HOTPLUG = 1u << 2,      /**< disconnect/reconnect events */
     ESP_RTL_SDR_CAP_METRICS = 1u << 3,      /**< get_metrics live */
     ESP_RTL_SDR_CAP_CUSTOM_HZ = 1u << 4,    /**< CUSTOM_HZ preset */
-    ESP_RTL_SDR_CAP_BIAS_TEE = 1u << 5,     /**< reserved; not yet measured */
+    ESP_RTL_SDR_CAP_BIAS_TEE = 1u << 5,     /**< reserved until measured EP0 */
     ESP_RTL_SDR_CAP_DIRECT_SAMPLING = 1u << 6, /**< reserved; not claimed */
     ESP_RTL_SDR_CAP_IQ_ACQUIRE = 1u << 7,   /**< release_iq_block required */
     ESP_RTL_SDR_CAP_FREQ_CORRECTION = 1u << 8, /**< software ppm LO offset */
@@ -280,6 +280,7 @@ typedef enum {
     ESP_RTL_SDR_CAP_NEED = 1u << 12,        /**< apply_need() intent presets */
     ESP_RTL_SDR_CAP_HEALTH = 1u << 13,      /**< get_health / EVT_HEALTH */
     ESP_RTL_SDR_CAP_PASSPORT = 1u << 14,    /**< on-device rate passport probe */
+    ESP_RTL_SDR_CAP_GAIN = 1u << 15,        /**< tuner gain APIs (off until measured) */
 } esp_rtl_sdr_cap_t;
 
 /**
@@ -762,6 +763,52 @@ esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
  */
 esp_err_t esp_rtl_sdr_get_rate_passport(esp_rtl_sdr_handle_t handle,
                                         esp_rtl_sdr_rate_passport_t *out_passport);
+
+/* -------------------------------------------------------------------------- */
+/* Phase 3 surface — gain / bias (fail-closed until measured)                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Tuner gain mode. AUTO/MANUAL return ERR_UNSUPPORTED until CAP_GAIN is set
+ * (clean-room capture required — see docs/GAIN_BIAS_CAPTURE.md).
+ */
+typedef enum {
+    ESP_RTL_SDR_GAIN_MODE_AUTO = 0,
+    ESP_RTL_SDR_GAIN_MODE_MANUAL = 1,
+} esp_rtl_sdr_gain_mode_t;
+
+/**
+ * Set tuner gain mode. Currently always ESP_RTL_SDR_ERR_UNSUPPORTED
+ * (CAP_GAIN not enabled). Prefer checking get_capabilities() first.
+ */
+esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
+                                          esp_rtl_sdr_gain_mode_t mode);
+
+/** Get last requested gain mode (default AUTO). Valid even when CAP_GAIN off. */
+esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
+                                          esp_rtl_sdr_gain_mode_t *out_mode);
+
+/**
+ * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). ERR_UNSUPPORTED until measured.
+ */
+esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth_db);
+
+/** Last requested manual gain (tenths dB); 0 if never set. */
+esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_tenth_db);
+
+/**
+ * Copy supported manual gains (tenths dB). Until CAP_GAIN: *out_count=0, ESP_OK
+ * if buffers valid (empty list = not available).
+ */
+esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gains_tenth_db,
+                                      size_t max_count, size_t *out_count);
+
+/**
+ * Bias-T enable. ERR_UNSUPPORTED until CAP_BIAS_TEE (measured Blog V4 GPIO path).
+ * get still reports last requested preference.
+ */
+esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable);
+esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable);
 
 #ifdef __cplusplus
 }

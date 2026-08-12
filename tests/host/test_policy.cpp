@@ -68,6 +68,7 @@ static void test_capabilities(void)
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_HEALTH) != 0);
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_PASSPORT) != 0);
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_BIAS_TEE) == 0); /* not implemented */
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_GAIN) == 0);     /* Phase 3 not measured */
 }
 
 static void test_rate_windows(void)

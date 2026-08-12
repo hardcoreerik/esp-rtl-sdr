@@ -143,6 +143,12 @@ struct esp_rtl_sdr_handle {
 
     /** Health emission throttle (delivery task). */
     uint32_t health_emit_blocks = 0;
+    esp_rtl_sdr_health_t last_emitted_health = ESP_RTL_SDR_HEALTH_UNKNOWN;
+
+    /** Phase 3 preferences (not applied until CAP_GAIN / CAP_BIAS_TEE). */
+    esp_rtl_sdr_gain_mode_t gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
+    int gain_tenth_db = 0;
+    bool bias_tee_want = false;
 
     /** Sync-read pull ring (CU8 bytes). Filled by delivery task. */
     uint8_t *pull_buf = nullptr;
@@ -767,6 +773,11 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
     return ESP_OK;
 }
 
+static void fill_health_info(const esp_rtl_sdr_handle *h, esp_rtl_sdr_health_info_t *out);
+
+/** Emit EVT_HEALTH on overall change, or every kHealthPeriodBlocks while streaming. */
+static constexpr uint32_t kHealthPeriodBlocks = 48;
+
 static void delivery_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
@@ -788,15 +799,31 @@ static void delivery_task_fn(void *arg)
 
         esp_rtl_sdr_event_cb_t cb = nullptr;
         void *ctx = nullptr;
+        bool emit_health = false;
+        esp_rtl_sdr_health_info_t health{};
         {
             HandleLock lk(h, kQueryLockTicks);
             if (lk.ok()) {
                 cb = h->cfg.event_cb;
                 ctx = h->cfg.event_ctx;
+                h->health_emit_blocks++;
+                if (cb != nullptr && h->streaming) {
+                    fill_health_info(h, &health);
+                    const bool changed = (health.overall != h->last_emitted_health);
+                    const bool periodic =
+                        (h->health_emit_blocks % kHealthPeriodBlocks) == 0;
+                    if (changed || periodic) {
+                        h->last_emitted_health = health.overall;
+                        emit_health = true;
+                    }
+                }
             }
         }
         if (cb != nullptr) {
             emit_after_unlock(h, ESP_RTL_SDR_EVT_IQ_BLOCK, &block, cb, ctx);
+            if (emit_health) {
+                emit_after_unlock(h, ESP_RTL_SDR_EVT_HEALTH, &health, cb, ctx);
+            }
         }
         (void)xQueueSend(h->free_q, &slot, portMAX_DELAY);
     }
@@ -1598,6 +1625,8 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->pending_retune_hz = 0;
         handle->pause_resubmit = false;
         handle->live_urbs = 0;
+        handle->health_emit_blocks = 0;
+        handle->last_emitted_health = ESP_RTL_SDR_HEALTH_UNKNOWN;
         handle->streaming = true;
         handle->state = ESP_RTL_SDR_STATE_STREAMING;
 
@@ -2185,7 +2214,7 @@ static void fill_health_info(const esp_rtl_sdr_handle *h, esp_rtl_sdr_health_inf
         out->usb = ESP_RTL_SDR_HEALTH_USB_STARVING;
         out->overall = ESP_RTL_SDR_HEALTH_USB_STARVING;
         std::snprintf(out->advice, sizeof(out->advice),
-                      "USB starving (%.0f%% eff) — lower rate or grow URBs",
+                      "USB starving (%.0f%% eff) - lower rate or grow URBs",
                       static_cast<double>(out->efficiency * 100.f));
     } else if (h->metrics.consumer_drops > 0 &&
                h->metrics.consumer_drops >= h->metrics.overruns) {
@@ -2203,14 +2232,14 @@ static void fill_health_info(const esp_rtl_sdr_handle *h, esp_rtl_sdr_health_inf
         if (out->overall == ESP_RTL_SDR_HEALTH_OK) {
             out->overall = ESP_RTL_SDR_HEALTH_RF_CLIPPING;
             std::snprintf(out->advice, sizeof(out->advice),
-                          "RF clipping — reduce gain when CAP_GAIN lands");
+                          "RF clipping - reduce gain when CAP_GAIN measured");
         }
     } else if (h->metrics.blocks_total > 4 && swing >= 0 && swing < 16) {
         out->rf = ESP_RTL_SDR_HEALTH_RF_WEAK;
         if (out->overall == ESP_RTL_SDR_HEALTH_OK) {
             out->overall = ESP_RTL_SDR_HEALTH_RF_WEAK;
             std::snprintf(out->advice, sizeof(out->advice),
-                          "RF weak swing — antenna, LO, or raise gain");
+                          "RF weak swing - antenna, LO, or raise gain (when CAP_GAIN)");
         }
     }
 }
@@ -2531,5 +2560,123 @@ esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
     ESP_LOGI(TAG, "passport done entries=%u best_stable=%u",
              static_cast<unsigned>(out_passport->entry_count),
              static_cast<unsigned>(out_passport->best_stable_sps));
+    return ESP_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Phase 3 — gain / bias (fail-closed stubs until measured)                   */
+/* -------------------------------------------------------------------------- */
+
+esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
+                                          esp_rtl_sdr_gain_mode_t mode)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if (mode != ESP_RTL_SDR_GAIN_MODE_AUTO && mode != ESP_RTL_SDR_GAIN_MODE_MANUAL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    handle->gain_mode = mode;
+    /* CAP_GAIN not set until clean-room capture — store preference only. */
+    set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+    return ESP_RTL_SDR_ERR_UNSUPPORTED;
+}
+
+esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
+                                          esp_rtl_sdr_gain_mode_t *out_mode)
+{
+    if (out_mode == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_mode = handle->gain_mode;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth_db)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    handle->gain_tenth_db = gain_tenth_db;
+    handle->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
+    set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+    return ESP_RTL_SDR_ERR_UNSUPPORTED;
+}
+
+esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_tenth_db)
+{
+    if (out_gain_tenth_db == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_gain_tenth_db = handle->gain_tenth_db;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gains_tenth_db,
+                                      size_t max_count, size_t *out_count)
+{
+    (void)handle;
+    (void)out_gains_tenth_db;
+    (void)max_count;
+    if (out_count == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    /* Empty list until CAP_GAIN — not an error for size-query style APIs. */
+    *out_count = 0;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    handle->bias_tee_want = enable;
+    set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+    return ESP_RTL_SDR_ERR_UNSUPPORTED;
+}
+
+esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable)
+{
+    if (out_enable == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_enable = handle->bias_tee_want;
     return ESP_OK;
 }

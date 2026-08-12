@@ -28,6 +28,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [API.md](API.md) | Public C API contract |
 | [CAPABILITY_MATRIX.md](CAPABILITY_MATRIX.md) | vs librtlsdr-class desktop |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | Automated host tests + CI (TheOrc-style) |
+| [GAIN_BIAS_CAPTURE.md](GAIN_BIAS_CAPTURE.md) | Phase 3 clean-room capture procedure |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles |
 | [PORTING.md](PORTING.md) | Board BSP vs driver |

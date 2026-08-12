@@ -1,8 +1,8 @@
 /*
- * esp_rtl_sdr — streaming implementation (v0.6)
+ * esp_rtl_sdr — streaming implementation (v0.7)
  *
  * Clean-room USB Host client: multi-URB bulk IQ, dual-core delivery ring,
- * measured EP0 tables, ppm + multi-device. Not a librtlsdr port.
+ * measured EP0 tables, continuous rates, need/health/passport. Not a librtlsdr port.
  *
  * Core 0: USB host lib + client/owner (events, EP0, URB submit/resubmit)
  * Core 1: IQ delivery task posts EVT_IQ_BLOCK (keep callback light!)
@@ -50,10 +50,16 @@ static constexpr uint16_t kPid = ESP_RTL_SDR_USB_PID;
 static constexpr char kMfg[] = "RTLSDRBlog";
 static constexpr char kProduct[] = "Blog V4";
 
-static const uint32_t kAllowRates[] = {
+/** Recommended rates for get_supported_rates / passport defaults. */
+static const uint32_t kRecommendedRates[] = {
     ESP_RTL_SDR_RATE_250K,  ESP_RTL_SDR_RATE_256K,  ESP_RTL_SDR_RATE_960K,
     ESP_RTL_SDR_RATE_1024K, ESP_RTL_SDR_RATE_1800K, ESP_RTL_SDR_RATE_2048K,
-    ESP_RTL_SDR_RATE_2400K, ESP_RTL_SDR_RATE_3200K,
+    ESP_RTL_SDR_RATE_2400K, ESP_RTL_SDR_RATE_2560K, ESP_RTL_SDR_RATE_3200K,
+};
+
+/** Extra high-band steps when passport recommended_only == false. */
+static const uint32_t kPassportExtraRates[] = {
+    1200000u, 1536000u, 2000000u, 2800000u,
 };
 
 struct DeviceCandidate {
@@ -137,6 +143,13 @@ struct esp_rtl_sdr_handle {
     size_t preferred_device_index = 0;
     char preferred_serial[32]{};
     uint8_t open_addr = 0;
+
+    /** Last rate passport from probe_rates (for NEED_MAX_STABLE). */
+    esp_rtl_sdr_rate_passport_t passport{};
+    bool passport_valid = false;
+
+    /** Health emission throttle (delivery task). */
+    uint32_t health_emit_blocks = 0;
 
     /** Sync-read pull ring (CU8 bytes). Filled by delivery task. */
     uint8_t *pull_buf = nullptr;
@@ -311,23 +324,57 @@ uint32_t esp_rtl_sdr_get_capabilities(void)
     return ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE | ESP_RTL_SDR_CAP_METRICS |
            ESP_RTL_SDR_CAP_CUSTOM_HZ | ESP_RTL_SDR_CAP_HOTPLUG |
            ESP_RTL_SDR_CAP_FREQ_CORRECTION | ESP_RTL_SDR_CAP_MULTI_DEVICE |
-           ESP_RTL_SDR_CAP_SYNC_READ;
+           ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_CONTINUOUS_RATE |
+           ESP_RTL_SDR_CAP_NEED | ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT;
+}
+
+static bool rate_in_hardware_window(uint32_t sps)
+{
+    if (sps >= ESP_RTL_SDR_RATE_LOW_MIN_HZ && sps <= ESP_RTL_SDR_RATE_LOW_MAX_HZ) {
+        return true;
+    }
+    if (sps >= ESP_RTL_SDR_RATE_HIGH_MIN_HZ && sps <= ESP_RTL_SDR_RATE_HIGH_MAX_HZ) {
+        return true;
+    }
+    return false;
+}
+
+bool esp_rtl_sdr_quantize_sample_rate(uint32_t requested_sps, uint32_t *out_exact_sps)
+{
+    if (out_exact_sps == nullptr || requested_sps == 0) {
+        return false;
+    }
+    if (!rate_in_hardware_window(requested_sps)) {
+        return false;
+    }
+    uint32_t ratio =
+        static_cast<uint32_t>((static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / requested_sps);
+    ratio &= 0x0ffffffcu;
+    if (ratio == 0) {
+        return false;
+    }
+    const uint32_t exact = static_cast<uint32_t>(
+        (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / ratio);
+    if (exact == 0 || !rate_in_hardware_window(exact)) {
+        /* Exact may drift slightly; still accept if ratio valid and near request. */
+        if (exact == 0) {
+            return false;
+        }
+    }
+    *out_exact_sps = exact;
+    return true;
 }
 
 bool esp_rtl_sdr_is_rate_supported(uint32_t sample_rate_sps)
 {
-    for (uint32_t r : kAllowRates) {
-        if (r == sample_rate_sps) {
-            return true;
-        }
-    }
-    return false;
+    uint32_t exact = 0;
+    return esp_rtl_sdr_quantize_sample_rate(sample_rate_sps, &exact);
 }
 
 esp_err_t esp_rtl_sdr_get_supported_rates(uint32_t *out_rates, size_t max_count,
                                              size_t *out_count)
 {
-    const size_t total = sizeof(kAllowRates) / sizeof(kAllowRates[0]);
+    const size_t total = sizeof(kRecommendedRates) / sizeof(kRecommendedRates[0]);
     if (out_count == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -340,7 +387,7 @@ esp_err_t esp_rtl_sdr_get_supported_rates(uint32_t *out_rates, size_t max_count,
     }
     const size_t n = (max_count < total) ? max_count : total;
     for (size_t i = 0; i < n; ++i) {
-        out_rates[i] = kAllowRates[i];
+        out_rates[i] = kRecommendedRates[i];
     }
     *out_count = total;
     return (max_count < total) ? ESP_ERR_INVALID_SIZE : ESP_OK;
@@ -449,7 +496,9 @@ esp_err_t esp_rtl_sdr_stream_config_validate(const esp_rtl_sdr_stream_config_t *
     if (stream->preset > ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (!esp_rtl_sdr_is_rate_supported(stream->sample_rate_sps)) {
+    /* 0 = filled from preferred at start(); otherwise must be in-window. */
+    if (stream->sample_rate_sps != 0 &&
+        !esp_rtl_sdr_is_rate_supported(stream->sample_rate_sps)) {
         return ESP_RTL_SDR_ERR_BAD_RATE;
     }
     if (stream->preset == ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
@@ -654,8 +703,12 @@ static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
 
 static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps)
 {
-    constexpr uint64_t kRtlClockHz = 28800000ull;
-    uint32_t ratio = static_cast<uint32_t>((kRtlClockHz << 22) / sample_rate_sps);
+    uint32_t exact = sample_rate_sps;
+    if (!esp_rtl_sdr_quantize_sample_rate(sample_rate_sps, &exact)) {
+        return ESP_RTL_SDR_ERR_BAD_RATE;
+    }
+    uint32_t ratio = static_cast<uint32_t>(
+        (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / exact);
     ratio &= 0x0ffffffcu;
     for (size_t i = kRtlSampleRateFirst; i <= kRtlSampleRateLast; ++i) {
         RtlControlRecord rec = kRtlInitTransfers[i];
@@ -1701,6 +1754,16 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         }
         return verr;
     }
+    uint32_t exact_sps = 0;
+    if (!esp_rtl_sdr_quantize_sample_rate(local.sample_rate_sps, &exact_sps)) {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (lk.ok()) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_RATE);
+        }
+        return ESP_RTL_SDR_ERR_BAD_RATE;
+    }
+    local.sample_rate_sps = exact_sps;
+
     uint32_t freq = 0;
     verr = resolve_stream_frequency(&local, &freq);
     if (verr != ESP_OK) {
@@ -1825,8 +1888,8 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (cb) {
             emit_after_unlock(handle, ESP_RTL_SDR_EVT_STREAM_STARTED, nullptr, cb, ctx);
         }
-        ESP_LOGI(TAG, "stream start freq=%u rate=%u urbs=%ux%u", static_cast<unsigned>(freq),
-                 static_cast<unsigned>(stream->sample_rate_sps),
+        ESP_LOGI(TAG, "stream start freq=%u exact_rate=%u urbs=%ux%u",
+                 static_cast<unsigned>(freq), static_cast<unsigned>(exact_sps),
                  static_cast<unsigned>(handle->bulk_num),
                  static_cast<unsigned>(handle->bulk_len));
         return ESP_OK;
@@ -1997,7 +2060,8 @@ esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t samp
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
-    if (!esp_rtl_sdr_is_rate_supported(sample_rate_sps)) {
+    uint32_t exact = 0;
+    if (!esp_rtl_sdr_quantize_sample_rate(sample_rate_sps, &exact)) {
         return ESP_RTL_SDR_ERR_BAD_RATE;
     }
     HandleLock lk(handle);
@@ -2014,9 +2078,9 @@ esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t samp
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
         return ESP_RTL_SDR_ERR_BUSY;
     }
-    handle->preferred_sample_rate_sps = sample_rate_sps;
-    handle->sample_rate_sps = sample_rate_sps;
-    handle->metrics.sample_rate_sps = sample_rate_sps;
+    handle->preferred_sample_rate_sps = exact;
+    handle->sample_rate_sps = exact;
+    handle->metrics.sample_rate_sps = exact;
     set_error_unlocked(handle, ESP_OK);
     return ESP_OK;
 }
@@ -2339,5 +2403,401 @@ esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const ch
         return ESP_RTL_SDR_ERR_NO_DEVICE;
     }
     set_error_unlocked(handle, ESP_OK);
+    return ESP_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Beyond rates — need / health / passport (0.7)                              */
+/* -------------------------------------------------------------------------- */
+
+static constexpr uint32_t kAdsbHz = 1090000000u;
+static constexpr uint32_t kHfDefaultHz = 7100000u;
+
+static void fill_health_info(const esp_rtl_sdr_handle *h, esp_rtl_sdr_health_info_t *out)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->struct_size = sizeof(*out);
+    out->usb = ESP_RTL_SDR_HEALTH_UNKNOWN;
+    out->rf = ESP_RTL_SDR_HEALTH_UNKNOWN;
+    out->overall = ESP_RTL_SDR_HEALTH_UNKNOWN;
+    out->programmed_sps = h->sample_rate_sps != 0 ? h->sample_rate_sps : h->preferred_sample_rate_sps;
+    out->overruns = h->metrics.overruns;
+    out->consumer_drops = h->metrics.consumer_drops;
+    out->sample_min = h->metrics.sample_min;
+    out->sample_max = h->metrics.sample_max;
+    std::snprintf(out->advice, sizeof(out->advice), "ok");
+
+    if (h->state != ESP_RTL_SDR_STATE_STREAMING || h->stream_start_ms == 0) {
+        std::snprintf(out->advice, sizeof(out->advice), "not streaming");
+        return;
+    }
+
+    const uint32_t up = now_ms() - h->stream_start_ms;
+    if (up > 0) {
+        out->effective_sps =
+            static_cast<uint32_t>((h->metrics.bytes_total * 500ull) / up);
+    }
+    if (out->programmed_sps > 0 && out->effective_sps > 0) {
+        out->efficiency =
+            static_cast<float>(out->effective_sps) / static_cast<float>(out->programmed_sps);
+    }
+
+    out->usb = ESP_RTL_SDR_HEALTH_OK;
+    out->rf = ESP_RTL_SDR_HEALTH_OK;
+    out->overall = ESP_RTL_SDR_HEALTH_OK;
+
+    if (out->efficiency > 0.f && out->efficiency < 0.90f) {
+        out->usb = ESP_RTL_SDR_HEALTH_USB_STARVING;
+        out->overall = ESP_RTL_SDR_HEALTH_USB_STARVING;
+        std::snprintf(out->advice, sizeof(out->advice),
+                      "USB starving (%.0f%% eff) — lower rate or grow URBs",
+                      static_cast<double>(out->efficiency * 100.f));
+    } else if (h->metrics.consumer_drops > 0 &&
+               h->metrics.consumer_drops >= h->metrics.overruns) {
+        out->usb = ESP_RTL_SDR_HEALTH_APP_TOO_SLOW;
+        out->overall = ESP_RTL_SDR_HEALTH_APP_TOO_SLOW;
+        std::snprintf(out->advice, sizeof(out->advice),
+                      "app too slow (consumer_drops=%u)",
+                      static_cast<unsigned>(h->metrics.consumer_drops));
+    }
+
+    const int swing =
+        static_cast<int>(out->sample_max) - static_cast<int>(out->sample_min);
+    if (out->sample_max >= 250 && out->sample_min <= 8) {
+        out->rf = ESP_RTL_SDR_HEALTH_RF_CLIPPING;
+        if (out->overall == ESP_RTL_SDR_HEALTH_OK) {
+            out->overall = ESP_RTL_SDR_HEALTH_RF_CLIPPING;
+            std::snprintf(out->advice, sizeof(out->advice),
+                          "RF clipping — reduce gain when CAP_GAIN lands");
+        }
+    } else if (h->metrics.blocks_total > 4 && swing >= 0 && swing < 16) {
+        out->rf = ESP_RTL_SDR_HEALTH_RF_WEAK;
+        if (out->overall == ESP_RTL_SDR_HEALTH_OK) {
+            out->overall = ESP_RTL_SDR_HEALTH_RF_WEAK;
+            std::snprintf(out->advice, sizeof(out->advice),
+                          "RF weak swing — antenna, LO, or raise gain");
+        }
+    }
+}
+
+esp_err_t esp_rtl_sdr_apply_need(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_need_t need)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+
+    uint32_t freq = 0;
+    uint32_t rate = ESP_RTL_SDR_RATE_960K;
+    switch (need) {
+    case ESP_RTL_SDR_NEED_FM:
+        freq = 0;
+        rate = ESP_RTL_SDR_RATE_960K;
+        break;
+    case ESP_RTL_SDR_NEED_ADSB:
+        freq = kAdsbHz;
+        rate = ESP_RTL_SDR_RATE_2048K;
+        break;
+    case ESP_RTL_SDR_NEED_WX:
+        freq = ESP_RTL_SDR_PRESET_NOAA_HZ;
+        rate = ESP_RTL_SDR_RATE_960K;
+        break;
+    case ESP_RTL_SDR_NEED_HF:
+        freq = kHfDefaultHz;
+        rate = ESP_RTL_SDR_RATE_960K;
+        break;
+    case ESP_RTL_SDR_NEED_MAX_STABLE:
+        rate = ESP_RTL_SDR_RATE_2048K;
+        freq = 0;
+        break;
+    case ESP_RTL_SDR_NEED_LISTEN:
+        freq = 0;
+        rate = ESP_RTL_SDR_RATE_960K;
+        break;
+    default:
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint32_t exact = 0;
+    if (!esp_rtl_sdr_quantize_sample_rate(rate, &exact)) {
+        return ESP_RTL_SDR_ERR_BAD_RATE;
+    }
+
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    esp_err_t re = check_not_reentrant(handle);
+    if (re != ESP_OK) {
+        set_error_unlocked(handle, re);
+        return re;
+    }
+    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
+        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+        return ESP_RTL_SDR_ERR_BUSY;
+    }
+
+    if (need == ESP_RTL_SDR_NEED_MAX_STABLE && handle->passport_valid &&
+        handle->passport.best_stable_sps != 0) {
+        exact = handle->passport.best_stable_sps;
+    }
+
+    if (freq != 0) {
+        uint32_t q = 0;
+        if (need == ESP_RTL_SDR_NEED_HF) {
+            handle->preferred_frequency_hz = freq;
+        } else if (!esp_rtl_sdr_normalize_frequency(freq, &q)) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_FREQ);
+            return ESP_RTL_SDR_ERR_BAD_FREQ;
+        } else {
+            handle->preferred_frequency_hz = q;
+        }
+    }
+    handle->preferred_sample_rate_sps = exact;
+    handle->sample_rate_sps = exact;
+    handle->metrics.sample_rate_sps = exact;
+    handle->metrics.frequency_hz = handle->preferred_frequency_hz;
+
+    if (need == ESP_RTL_SDR_NEED_HF) {
+        ESP_LOGW(TAG, "NEED_HF: preferred LO=%u (upconverter CAP still open)",
+                 static_cast<unsigned>(handle->preferred_frequency_hz));
+    } else {
+        ESP_LOGI(TAG, "apply_need=%d freq=%u rate=%u", static_cast<int>(need),
+                 static_cast<unsigned>(handle->preferred_frequency_hz),
+                 static_cast<unsigned>(exact));
+    }
+    set_error_unlocked(handle, ESP_OK);
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_health(esp_rtl_sdr_handle_t handle,
+                                 esp_rtl_sdr_health_info_t *out_health)
+{
+    if (out_health == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    fill_health_info(handle, out_health);
+    return ESP_OK;
+}
+
+void esp_rtl_sdr_passport_opts_default(esp_rtl_sdr_passport_opts_t *opts)
+{
+    if (opts == nullptr) {
+        return;
+    }
+    std::memset(opts, 0, sizeof(*opts));
+    opts->struct_size = sizeof(*opts);
+    opts->frequency_hz = 0;
+    opts->dwell_ms = ESP_RTL_SDR_PASSPORT_DEFAULT_DWELL_MS;
+    opts->min_efficiency_pct = 95;
+    opts->recommended_only = true;
+}
+
+esp_err_t esp_rtl_sdr_get_rate_passport(esp_rtl_sdr_handle_t handle,
+                                        esp_rtl_sdr_rate_passport_t *out_passport)
+{
+    if (out_passport == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_passport = handle->passport;
+    out_passport->valid = handle->passport_valid;
+    out_passport->struct_size = sizeof(*out_passport);
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
+                                  const esp_rtl_sdr_passport_opts_t *opts,
+                                  esp_rtl_sdr_rate_passport_t *out_passport)
+{
+    if (out_passport == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+
+    esp_rtl_sdr_passport_opts_t local_opts;
+    if (opts == nullptr) {
+        esp_rtl_sdr_passport_opts_default(&local_opts);
+    } else {
+        if (opts->struct_size != sizeof(esp_rtl_sdr_passport_opts_t)) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        local_opts = *opts;
+    }
+    if (local_opts.dwell_ms == 0) {
+        local_opts.dwell_ms = ESP_RTL_SDR_PASSPORT_DEFAULT_DWELL_MS;
+    }
+    if (local_opts.dwell_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) {
+        local_opts.dwell_ms = ESP_RTL_SDR_MAX_TIMEOUT_MS;
+    }
+    if (local_opts.min_efficiency_pct == 0) {
+        local_opts.min_efficiency_pct = 95;
+    }
+
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        esp_err_t re = check_not_reentrant(handle);
+        if (re != ESP_OK) {
+            set_error_unlocked(handle, re);
+            return re;
+        }
+        if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
+            handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+            return ESP_RTL_SDR_ERR_BUSY;
+        }
+        if (handle->dev == nullptr || !handle->info.present) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
+            return ESP_RTL_SDR_ERR_NO_DEVICE;
+        }
+    }
+
+    uint32_t freq = local_opts.frequency_hz;
+    if (freq == 0) {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (lk.ok()) {
+            freq = handle->preferred_frequency_hz != 0 ? handle->preferred_frequency_hz
+                                                       : ESP_RTL_SDR_PRESET_KZEL_HZ;
+        } else {
+            freq = ESP_RTL_SDR_PRESET_KZEL_HZ;
+        }
+    }
+    uint32_t qfreq = 0;
+    if (!esp_rtl_sdr_normalize_frequency(freq, &qfreq)) {
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
+    }
+    freq = qfreq;
+
+    uint32_t candidates[ESP_RTL_SDR_PASSPORT_MAX_ENTRIES];
+    size_t n_cand = 0;
+    auto push_rate = [&](uint32_t r) {
+        uint32_t exact = 0;
+        if (!esp_rtl_sdr_quantize_sample_rate(r, &exact)) {
+            return;
+        }
+        for (size_t i = 0; i < n_cand; ++i) {
+            if (candidates[i] == exact) {
+                return;
+            }
+        }
+        if (n_cand < ESP_RTL_SDR_PASSPORT_MAX_ENTRIES) {
+            candidates[n_cand++] = exact;
+        }
+    };
+    for (uint32_t r : kRecommendedRates) {
+        push_rate(r);
+    }
+    if (!local_opts.recommended_only) {
+        for (uint32_t r : kPassportExtraRates) {
+            push_rate(r);
+        }
+    }
+
+    std::memset(out_passport, 0, sizeof(*out_passport));
+    out_passport->struct_size = sizeof(*out_passport);
+    out_passport->probe_freq_hz = freq;
+    out_passport->dwell_ms = local_opts.dwell_ms;
+    out_passport->best_stable_sps = 0;
+    out_passport->max_tried_sps = 0;
+
+    esp_rtl_sdr_event_cb_t cb = nullptr;
+    void *ctx = nullptr;
+    {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (lk.ok()) {
+            cb = handle->cfg.event_cb;
+            ctx = handle->cfg.event_ctx;
+        }
+    }
+
+    for (size_t i = 0; i < n_cand; ++i) {
+        esp_rtl_sdr_passport_entry_t entry{};
+        entry.requested_sps = candidates[i];
+        entry.exact_sps = candidates[i];
+        entry.start_err = ESP_OK;
+
+        esp_rtl_sdr_stream_config_t st;
+        esp_rtl_sdr_stream_config_default(&st);
+        st.preset = ESP_RTL_SDR_PRESET_CUSTOM_HZ;
+        st.frequency_hz = freq;
+        st.sample_rate_sps = candidates[i];
+
+        esp_err_t err = esp_rtl_sdr_start(handle, &st);
+        entry.start_err = err;
+        if (err != ESP_OK) {
+            entry.stable = false;
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(local_opts.dwell_ms));
+            esp_rtl_sdr_metrics_t m{};
+            if (esp_rtl_sdr_get_metrics(handle, &m) == ESP_OK) {
+                entry.effective_sps = m.effective_sps;
+                entry.overruns = m.overruns;
+                entry.consumer_drops = m.consumer_drops;
+                entry.sample_min = m.sample_min;
+                entry.sample_max = m.sample_max;
+            }
+            (void)esp_rtl_sdr_stop(handle, 2000);
+            if (entry.exact_sps > 0 && entry.effective_sps > 0) {
+                const uint32_t pct =
+                    static_cast<uint32_t>((100ull * entry.effective_sps) / entry.exact_sps);
+                entry.stable = pct >= local_opts.min_efficiency_pct;
+            }
+        }
+
+        if (entry.exact_sps > out_passport->max_tried_sps) {
+            out_passport->max_tried_sps = entry.exact_sps;
+        }
+        if (entry.stable && entry.exact_sps >= out_passport->best_stable_sps) {
+            out_passport->best_stable_sps = entry.exact_sps;
+        }
+        if (out_passport->entry_count < ESP_RTL_SDR_PASSPORT_MAX_ENTRIES) {
+            out_passport->entries[out_passport->entry_count++] = entry;
+        }
+
+        ESP_LOGI(TAG, "passport rate=%u eff=%u over=%u drops=%u stable=%d err=%s",
+                 static_cast<unsigned>(entry.exact_sps),
+                 static_cast<unsigned>(entry.effective_sps),
+                 static_cast<unsigned>(entry.overruns),
+                 static_cast<unsigned>(entry.consumer_drops), static_cast<int>(entry.stable),
+                 esp_rtl_sdr_err_to_name(entry.start_err));
+
+        if (cb) {
+            emit_after_unlock(handle, ESP_RTL_SDR_EVT_PASSPORT_PROGRESS, &entry, cb, ctx);
+        }
+    }
+
+    out_passport->valid = out_passport->entry_count > 0;
+    {
+        HandleLock lk(handle);
+        if (lk.ok()) {
+            handle->passport = *out_passport;
+            handle->passport_valid = out_passport->valid;
+            set_error_unlocked(handle, ESP_OK);
+        }
+    }
+    if (cb) {
+        emit_after_unlock(handle, ESP_RTL_SDR_EVT_PASSPORT_DONE, out_passport, cb, ctx);
+    }
+    ESP_LOGI(TAG, "passport done entries=%u best_stable=%u",
+             static_cast<unsigned>(out_passport->entry_count),
+             static_cast<unsigned>(out_passport->best_stable_sps));
     return ESP_OK;
 }

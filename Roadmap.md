@@ -1,7 +1,6 @@
 # Roadmap — esp_rtl_sdr
 
-Close the gap with desktop librtlsdr-class drivers **without** porting them.
-Evidence labels match `Project_truth.md`.
+Evidence labels match `Project_truth.md`. Vision: `docs/VISION.md`.
 
 ---
 
@@ -10,97 +9,85 @@ Evidence labels match `Project_truth.md`.
 A stand-alone ESP-IDF component that:
 
 1. Streams reliable CU8 IQ from RTL2832U-class dongles on ESP32-P4 HS USB.
-2. Exposes a clear, discoverable API (freq, rate, gain, ppm, bias as capabilities).
-3. Supports **multiple measured profiles** (Blog V4 first, then common R820T2-class).
-4. Earns trust via docs, soak logs, and fail-closed behavior — not silent over-claim.
+2. Exposes discoverable API (freq, rate, gain, ppm, bias as capabilities).
+3. Acts as a **dongle nervous system**: intent, health, on-host passport.
+4. Supports multiple measured profiles (Blog V4 first).
+5. Earns trust via docs, soak logs, fail-closed behavior.
 
 ---
 
-## Phase 0 — Stand-alone repo + rename (**complete**)
+## Phase 0 — Stand-alone repo (**complete**)
 
-| Item | Status |
-|---|---|
-| Repo at `F:\Ai\ESP_RTL_SDR\` | **Done** |
-| GitHub `hardcoreerik/esp-rtl-sdr` | **Done** |
-| Rename API to `esp_rtl_sdr` | **Done** |
-| Blog V4 profile tables preserved | **Done** |
-| Docs suite | **Done** |
-| Example smoke project | **Done** |
-
-**Exit:** Met.
+Done: repo, GitHub, rename, Blog V4 tables, docs suite, smoke example.
 
 ---
 
-## Phase 1 — API shape parity (same Blog V4 RF) (**complete in 0.5.0**)
+## Phase 1 — API shape parity (**complete in 0.5.0**)
 
-- [x] `set_center_freq` / `get_center_freq` (idle preferred LO; streaming → retune)
-- [x] `set_sample_rate` / `get_sample_rate` (allowlist; streaming → BUSY)
-- [x] Blocking `read` from pull ring (sync-read equivalent)
-- [x] `start_hz(frequency_hz, sample_rate_sps)` convenience
-- [x] Capability matrix updated
-- [x] Clearer device error alias `ERR_UNSUPPORTED_DEVICE` (Phase 2 polish)
-- [ ] Hardware re-run of *this* tree on Tab5/Waveshare — still open
-
-**Exit:** API shape met; hardware re-soak tracked in Project_truth.
+Done: set/get center freq & rate, `read`, `start_hz`, caps matrix.
 
 ---
 
 ## Phase 2 — Rates, ppm, multi-device (**complete in 0.6.0**)
 
-- [x] Expand allowlist with documented evidence (`docs/RATES.md`)
-- [x] `set_freq_correction` / `get_freq_correction` (software LO offset)
-- [x] Enumerate / open by index or serial (`refresh_device_list`, `select_*`)
-- [ ] Per-rate P4 continuous soak log for non-provenance rates (→ Phase 5)
-- [ ] Hardware re-soak of this tree for ppm + multi-device paths
+Done: expanded recommended rates, ppm, multi-device select, RATES.md.
 
-**Exit:** Documented rate matrix; ppm usable for known crystal offset; multi-device API live.
+Open: formal P4 soak logs for non-provenance rates.
+
+---
+
+## Phase 2.1 — Continuous rates + nervous system spine (**complete in 0.7.0**)
+
+- [x] Any rate within hardware windows + quantize + exact SPS
+- [x] `apply_need()` intent presets
+- [x] `get_health()` USB/RF narrative
+- [x] `probe_rates()` passport skeleton
+- [x] Docs: VISION, SILICON, TESTING (Heltec / Baofeng / Flipper)
+- [ ] Hardware run of passport on P4 + Blog V4 (lab)
+- [ ] Optional: emit `EVT_HEALTH` on a timer from delivery task
 
 ---
 
 ## Phase 3 — Gain and bias-T (measured)
 
-- [ ] Independent USB capture of gain-mode / gain-step traffic on physical Blog V4
+- [ ] Independent USB capture of gain / bias on Blog V4
 - [ ] `set_tuner_gain_mode`, `set_tuner_gain`, `get_tuner_gains`
-- [ ] Enable `CAP_GAIN` only when implemented
-- [ ] Bias-T control when measured; enable `CAP_BIAS_TEE`
+- [ ] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only when implemented
 - [ ] Never paste librtlsdr gain tables
+- [ ] Lab: Baofeng / Flipper for clip vs weak health correlation
 
-**Exit:** Gain and bias APIs work on Blog V4 with recorded procedure.
-
----
-
-## Phase 4 — Second profile (broader RTL2832U)
-
-- [ ] Capture init/tune for a common **R820T2** dongle (clean-room)
-- [ ] `profile_r820t2` (name TBD) beside `transfers_blog_v4`
-- [ ] VID/PID allowlist with fail-closed unknown
-- [ ] Probe strategy documented in `docs/PROFILES.md`
-- [ ] Direct sampling / HF only if separate evidence exists
-
-**Exit:** At least two hardware-verified profiles; marketing still honest.
+**Exit:** Gain and bias work on Blog V4 with recorded procedure.
 
 ---
 
-## Phase 5 — Reliability (peer “robust” bar)
+## Phase 4 — Second profile + V4 RF path depth
 
-- [ ] Unplug/replug recover to READY without reboot
-- [ ] Five-minute soak at 960k and 2.048M with drop/SPS report checked in or linked
-- [ ] Optional soak logs for formula rates (250k–3200k subset)
-- [ ] Optional IQ acquire mode (`CAP_IQ_ACQUIRE`) if apps need zero-copy hold
-- [ ] CI: build component + example on IDF 5.3+ (when available)
-
-**Exit:** Reliability story competitive with vertical ESP RTL apps that used librtlsdr ports.
+- [ ] R820T2 profile (clean-room) if needed for non-V4 sticks
+- [ ] Blog V4: HF upconverter CAP, R828D input AUTO, notches
+- [ ] `NEED_HF` becomes fully functional (not LO-only)
+- [ ] Direct sampling only if separate evidence (V4 uses upconverter)
 
 ---
 
-## Out of roadmap (unless evidence forces)
+## Phase 5 — Reliability + host superpowers
+
+- [ ] Unplug/replug recover without reboot
+- [ ] Five-minute soak artifacts (960k / 2.048M)
+- [ ] Adaptive URB size/count from passport
+- [ ] Auto rate downshift when health = USB_STARVING
+- [ ] Beacon ppm learn (ADS-B / NOAA)
+- [ ] CI build on IDF 5.3+ when available
+
+---
+
+## Out of roadmap
 
 | Item | Why |
 |---|---|
-| Full SoapyRTLSDR / GQRX control surface | App territory |
-| Wi-Fi rtl_tcp inside this component | Separate example/app |
-| Classic ESP32 (no HS host) | Out of scope |
-| Silent “try V4 tables on everything” | Violates fail-closed + clean-room honesty |
+| Full Soapy / GQRX surface | App territory |
+| rtl_tcp inside component | Separate example |
+| Classic ESP32 (no HS) | Out of scope |
+| Silent V4 tables on unknown sticks | Fail-closed |
 
 ---
 
@@ -109,7 +96,10 @@ A stand-alone ESP-IDF component that:
 | Doc | Role |
 |---|---|
 | `Project_truth.md` | What is true **now** |
-| `Roadmap.md` | How we get to parity |
-| `docs/CAPABILITY_MATRIX.md` | Row-by-row desktop comparison |
-| `docs/RATES.md` | Sample-rate allowlist + evidence |
-| `CHANGELOG.md` | Released deltas |
+| `Roadmap.md` | How we get there |
+| `docs/VISION.md` | Nervous-system product model |
+| `docs/SILICON.md` | DS / cousins / authority |
+| `docs/TESTING.md` | Lab gear |
+| `docs/RATES.md` | Rate windows + passport |
+| `docs/CAPABILITY_MATRIX.md` | vs desktop |
+| `CHANGELOG.md` | Releases |

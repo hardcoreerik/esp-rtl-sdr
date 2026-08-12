@@ -1,7 +1,7 @@
 # esp_rtl_sdr public API (best-in-class contract)
 
 **Header:** `include/esp_rtl_sdr.h`  
-**Version:** 0.6.0
+**Version:** 0.7.0
 
 This document is the human contract for a **professional, deterministic** driver API.
 The implementation must not break these rules as streaming and retune evolve.
@@ -74,7 +74,7 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 ### Stream (`stream_config_validate`)
 
 - `struct_size` match
-- `sample_rate_sps` allowlisted (see `docs/RATES.md`: 250k…3200k set)
+- `sample_rate_sps` 0 (fill preferred) or any in-window rate (see `docs/RATES.md`)
 - `CUSTOM_HZ`: frequency in [24 MHz, 1766 MHz], quantized to 1 kHz
 - Named presets ignore `frequency_hz` (driver LO constants)
 - `max_bytes` even (IQ pairs) when non-zero
@@ -115,35 +115,41 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 
 ---
 
-## Capabilities (0.6.0 binary)
+## Capabilities (0.7.0 binary)
 
 | Flag | Status |
 |---|---|
 | `STREAM` | On |
 | `RETUNE` | On; bulk drains before EP0 apply |
-| `HOTPLUG` | On; events implemented, unplug/replug recovery soak pending |
+| `HOTPLUG` | On; recovery soak pending |
 | `METRICS` | On |
 | `CUSTOM_HZ` | On |
-| `FREQ_CORRECTION` | On; software ppm LO offset |
-| `MULTI_DEVICE` | On; enumerate + select by index/serial |
-| `SYNC_READ` | On; blocking `read()` pull ring |
-| `IQ_ACQUIRE` | Off until acquire mode ships |
+| `FREQ_CORRECTION` | On |
+| `MULTI_DEVICE` | On |
+| `SYNC_READ` | On |
+| `CONTINUOUS_RATE` | On; windows + quantize |
+| `NEED` | On; `apply_need` |
+| `HEALTH` | On; `get_health` |
+| `PASSPORT` | On; `probe_rates` |
+| `IQ_ACQUIRE` | Off |
 | `BIAS_TEE` / `DIRECT_SAMPLING` | Reserved off |
 
 ---
 
-## Phase 1 / 2 ergonomics
+## Phase 1 / 2 / 2.1 ergonomics
 
 | Function | Behavior |
 |---|---|
 | `set/get_center_freq` | Preferred LO when idle; retune when streaming |
-| `set/get_sample_rate` | Preferred rate when idle; **BUSY** if streaming |
-| `read` | Blocking CU8 IQ from pull ring |
-| `start_hz` | Convenience start from freq + rate (0 = preferred) |
-| `set/get_freq_correction` | ppm in [-200, 200]; applied at next tune/retune; re-tunes if streaming |
-| `refresh_device_list` | Rescan USB for accepted profiles |
-| `get_device_count` / `get_device_at` | Candidate snapshot |
-| `select_device` / `select_device_serial` | Preferred device; open if idle; **BUSY** if streaming |
+| `set/get_sample_rate` | Quantize to exact; **BUSY** if streaming |
+| `quantize_sample_rate` | Pure helper; no handle |
+| `read` | Blocking CU8 IQ |
+| `start_hz` | Convenience start (0 = preferred) |
+| `set/get_freq_correction` | ±200 ppm software LO |
+| Multi-device APIs | refresh / count / at / select |
+| `apply_need` | Mission presets → preferred LO/rate |
+| `get_health` | USB/RF categories + advice |
+| `probe_rates` / `get_rate_passport` | On-device rate matrix |
 
 Apps must:
 

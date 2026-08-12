@@ -7,6 +7,8 @@
 3. Stay **clean-room**: no librtlsdr / rtl-sdr-blog source.
 4. Grow **profile-by-profile** toward multi-tuner support without collapsing into a monolithic port.
 5. Remain **board-agnostic**: host BSP (VBUS, display, network) lives in apps.
+6. Evolve a **dongle nervous system** (intent, health, on-host passport) that uses
+   the MCU host’s vantage point — see `docs/VISION.md`.
 
 ## Non-goals
 
@@ -28,14 +30,15 @@
 ┌────────────────────────────▼─────────────────────────────┐
 │  Public API                                              │
 │  validate · install · start · retune · stop · metrics    │
-│  events (ENUMERATED, READY, IQ_BLOCK, …)                 │
+│  need · health · passport · continuous rates · ppm       │
+│  events (IQ_BLOCK, HEALTH, PASSPORT_*, …)                │
 └────────────────────────────┬─────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────┐
 │  Core host client                                        │
 │  USB host install/client · IF0 claim · bulk EP 0x81      │
 │  multi-URB pool · dual-core delivery · state machine     │
-│  reentrancy guards · fail-closed teardown                │
+│  rate quantize · passport soak · reentrancy · fail-closed│
 └────────────────────────────┬─────────────────────────────┘
                              │
         ┌────────────────────┼────────────────────┐

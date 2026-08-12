@@ -4,7 +4,7 @@
 wins for *what is true right now*.
 
 Snapshot date: **2026-08-12**  
-Version: **0.6.0** (Phase 2: rates + ppm + multi-device)  
+Version: **0.7.0** (continuous rates + need / health / passport)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**
 
@@ -27,15 +27,11 @@ Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**
 ## What this project is
 
 **esp_rtl_sdr** is a **stand-alone ESP-IDF USB Host driver** for **RTL2832U-class**
-software-defined radio dongles. It delivers continuous **unsigned interleaved
-I/Q (CU8)** over a fail-closed C API designed for FreeRTOS / ESP32-P4.
+SDR dongles. It delivers continuous **CU8 IQ** with a fail-closed C API, and is
+evolving into a **dongle nervous system** (intent, health, on-host passport) —
+not a librtlsdr port.
 
-It is **not**:
-
-- A port of **librtlsdr** / rtl-sdr-blog
-- The OrcSDR application (demod, UI, web)
-- A claim of Full-Speed ESP32-S2/S3 support until measured
-- A claim that every RTL2832U dongle works until a **profile** is measured
+Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 
 ---
 
@@ -43,32 +39,28 @@ It is **not**:
 
 | Area | State | Boundary |
 |---|---|---|
-| Public C API lifecycle (install/start/stop/uninstall) | **Implemented** | Header + source in this repo |
-| Continuous bulk IQ stream (multi-URB) | **Implemented** | Blog V4 profile tables |
+| Lifecycle install/start/stop/uninstall | **Implemented** | |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 profile |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0 |
-| Metrics (bytes, SPS, min/max/mean, drops) | **Implemented** | `get_metrics` |
-| Sample rates | **Implemented** | Allowlist: 250k, 256k, 960k, 1024k, 1800k, 2048k, 2400k, 3200k — see `docs/RATES.md` |
-| P4 continuous rate evidence | **Provenance** | 960k + 2048k under OrcSDR; others **Formula** |
-| Frequency | **Implemented** | CUSTOM_HZ + presets; `set/get_center_freq`; retune when streaming |
-| Sample rate set/get (allowlist) | **Implemented** | `set/get_sample_rate`; mid-stream rate change = BUSY |
-| Sync `read()` (blocking IQ pull) | **Implemented** | Pull ring; `CAP_SYNC_READ` |
-| `start_hz(freq, rate)` convenience | **Implemented** | Phase 1 |
-| ppm correction (software LO offset) | **Implemented** | `set/get_freq_correction`; ±200 ppm; applied at tune |
-| Multi-device enumerate / select | **Implemented** | index + serial; max 8 candidates |
-| Blog V4 identity filter `0bda:2838` | **Implemented** | Product/mfg string checks in profile |
-| Dual-core USB / delivery split | **Implemented** | Core0 USB, Core1 delivery path |
-| Fail-closed / reentrancy rules | **Implemented** | Documented in `docs/API.md` |
-| Tab5 Blog V4 RF (960k / 2.048M ADS-B) | **Provenance** | Measured under OrcSDR; tables originated there |
-| Waveshare P4 Blog V4 (same driver, unmodified) | **Provenance** | Second-board proof under OrcSDR Waveshare shell |
-| Re-verify from *this* stand-alone tree on hardware | **Planned** | Flash example or consumer app from `F:\Ai\ESP_RTL_SDR` |
-| Gain get/set / AGC modes | **Planned** | Roadmap Phase 3 — needs independent USB evidence |
-| Bias-T | **Planned** | CAP reserved until measured |
-| Direct sampling / HF | **Deferred** | CAP reserved; not claimed |
-| Arbitrary sample rates | **Deferred** | Only allowlist |
-| R820T2 / other tuner profiles | **Planned** | Architecture ready; tables not present |
-| Hot-plug recovery without reboot | **Planned** | Events exist; full recovery open |
-| Five-minute formal soak artifact in-repo | **Planned** | Phase 5 |
-| librtlsdr ABI compatibility | **Deferred** | Not a goal; API is ESP-native |
+| Metrics | **Implemented** | `get_metrics` |
+| Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
+| Recommended rate list | **Implemented** | `get_supported_rates` |
+| Rate passport (`probe_rates`) | **Implemented** | On-device soak; needs P4+dongle run |
+| `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
+| `get_health()` | **Implemented** | USB/RF narrative + advice |
+| set/get center freq, rate, ppm | **Implemented** | |
+| Sync `read()` | **Implemented** | |
+| Multi-device select | **Implemented** | |
+| Blog V4 filter `0bda:2838` | **Implemented** | |
+| Dual-core USB/delivery | **Implemented** | |
+| Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
+| Re-verify from *this* tree on hardware | **Planned** | |
+| Gain / bias-T | **Planned** | Phase 3 — measured EP0 |
+| HF upconverter path CAP | **Planned** | NEED_HF stores LO only today |
+| R828D stage gain / input / notches | **Planned** | |
+| Adaptive USB URB | **Planned** | |
+| Beacon ppm learn | **Planned** | |
+| librtlsdr ABI | **Deferred** | Not a goal |
 
 ---
 
@@ -76,52 +68,45 @@ It is **not**:
 
 | Version | Meaning |
 |---|---|
-| OrcSDR component **0.4.1** | Historical name `rtl_sdr_v4_esp`; Blog V4 streaming + retune |
-| This repo **0.5.0** | Rename to `esp_rtl_sdr` + Phase 1 set/get freq/rate + sync `read` + `start_hz` |
-| This repo **0.6.0** | Phase 2: expanded rates + ppm + multi-device select |
+| OrcSDR **0.4.1** | Historical `rtl_sdr_v4_esp` |
+| **0.5.0** | Rename + Phase 1 freq/rate/read |
+| **0.6.0** | Phase 2: expanded rates list + ppm + multi-device |
+| **0.7.0** | Continuous rates + need + health + passport + docs (vision/silicon/lab) |
 
-Breaking rename (0.5.0): consumers must switch includes and symbols. No shim in
-this repo (OrcSDR may add a shim later; **not done here**).
+---
+
+## Test lab (available gear)
+
+See **`docs/TESTING.md`**.
+
+| Asset | Use |
+|---|---|
+| Blog V4 on P4 hosts | Primary IQ path |
+| 2× Heltec V4 | Prior LoRa decode work; controlled digital RF |
+| Baofeng UV-5R | FM / carrier stimulus (legal TX only) |
+| Flipper Zero | Test tones / interferer / protocol toys |
 
 ---
 
 ## Clean-room truth
 
-- Transfer sequences for the Blog V4 profile are from **independent USB
-  observation**, not from librtlsdr source.
-- Rules: `docs/CLEAN_ROOM.md`.
-- New tuners, gain, bias-T, HF require **new evidence** before claims.
+- Blog V4 EP0 tables: independent measurement, not librtlsdr.  
+- Rules: `docs/CLEAN_ROOM.md`.  
+- DS / R820T2 PDFs: insight only; new features need capture or soak.
 
 ---
 
 ## Relationship to OrcSDR
 
-| | |
-|---|---|
-| This repo | Stand-alone driver product |
-| OrcSDR | Optional application consumer (Tab5 UI, Waveshare web shell, demod) |
-| Coupling | **None required.** This tree must build and document without OrcSDR |
-
-**Project rule for this workspace:** do not modify OrcSDR / OrcSDR_Waveshare
-when working here unless a future task explicitly says otherwise.
+Stand-alone driver. **Do not modify OrcSDR / OrcSDR_Waveshare** from this workspace
+unless a task explicitly says otherwise.
 
 ---
 
-## Hardware matrix (truth)
+## Hardware matrix (hosts)
 
-| Host | USB | Dongle profile | State |
+| Host | USB | Dongle | State |
 |---|---|---|---|
-| ESP32-P4 M5Stack Tab5 | HS host | Blog V4 R828D | **Provenance** (OrcSDR) |
-| ESP32-P4 Waveshare Module-DEV-KIT | HS host | Blog V4 R828D | **Provenance** (OrcSDR second board) |
-| ESP32-S3 / S2 | FS OTG | — | **Not claimed** |
-| Classic ESP32 | no native HS host | — | **Out of scope** |
-
----
-
-## How to use this document
-
-1. Update the snapshot date when truth changes.
-2. Move rows from Planned → Implemented only when source lands.
-3. Move Implemented → Hardware-verified only when *this* repo’s build is
-   exercised on named hardware with a log reference.
-4. `Roadmap.md` tracks how we close gaps; this file tracks what is true **now**.
+| ESP32-P4 Tab5 | HS | Blog V4 | **Provenance** |
+| ESP32-P4 Waveshare | HS | Blog V4 | **Provenance** |
+| ESP32-S3/S2 | FS | — | **Not claimed** |

@@ -84,7 +84,7 @@ extern "C" {
 
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
-#define ESP_RTL_SDR_VERSION_MINOR 6
+#define ESP_RTL_SDR_VERSION_MINOR 7
 #define ESP_RTL_SDR_VERSION_PATCH 0
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
@@ -108,7 +108,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.6.0". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.7.0". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */
@@ -152,8 +152,8 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 #define ESP_RTL_SDR_USB_PID            0x2838
 
 /**
- * Allowlisted sample rates (Hz). Programming uses the RTL2832 ratio formula.
- * See docs/RATES.md for evidence: which rates are P4-soaked vs formula-only.
+ * Named sample rates (Hz) — convenience macros. Any in-spec rate is accepted
+ * after quantize (see docs/RATES.md). Programming uses RTL2832 ratio formula.
  */
 #define ESP_RTL_SDR_RATE_250K          250000u
 #define ESP_RTL_SDR_RATE_256K          256000u
@@ -162,7 +162,23 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 #define ESP_RTL_SDR_RATE_1800K         1800000u
 #define ESP_RTL_SDR_RATE_2048K         2048000u  /**< P4 ADS-B path (provenance) */
 #define ESP_RTL_SDR_RATE_2400K         2400000u  /**< PC clean-room capture rate */
-#define ESP_RTL_SDR_RATE_3200K         3200000u
+#define ESP_RTL_SDR_RATE_2560K         2560000u  /**< vendor "stable" ceiling (Blog V4 DS) */
+#define ESP_RTL_SDR_RATE_3200K         3200000u  /**< max; drops expected */
+
+/**
+ * Hardware sample-rate windows (RTL2832U resampler + ecosystem practice).
+ * Outside these, is_rate_supported / quantize reject.
+ * Low band ~225–300 kHz; high band ~900 kHz–3.2 MHz. Gap is unstable.
+ */
+#define ESP_RTL_SDR_RATE_LOW_MIN_HZ    225000u
+#define ESP_RTL_SDR_RATE_LOW_MAX_HZ    300000u
+#define ESP_RTL_SDR_RATE_HIGH_MIN_HZ   900000u
+#define ESP_RTL_SDR_RATE_HIGH_MAX_HZ   3200000u
+/** Vendor stable IQ bandwidth claim (Blog V4 datasheet). */
+#define ESP_RTL_SDR_RATE_STABLE_MAX_HZ 2560000u
+
+/** RTL2832 crystal for resampler math (Hz). */
+#define ESP_RTL_SDR_XTAL_HZ            28800000u
 
 /** ppm correction range for set_freq_correction (software LO offset). */
 #define ESP_RTL_SDR_PPM_MIN            (-200)
@@ -170,6 +186,12 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 
 /** Max simultaneous candidate dongles tracked for multi-device APIs. */
 #define ESP_RTL_SDR_MAX_DEVICES        8
+
+/** Max entries in a rate passport probe. */
+#define ESP_RTL_SDR_PASSPORT_MAX_ENTRIES 12
+
+/** Default dwell per rate during passport probe (ms). */
+#define ESP_RTL_SDR_PASSPORT_DEFAULT_DWELL_MS 1500u
 
 /** Named preset LO frequencies (Hz) — keep in sync with implementation. */
 #define ESP_RTL_SDR_PRESET_KZEL_HZ     96100000u
@@ -233,6 +255,9 @@ typedef enum {
     ESP_RTL_SDR_EVT_ERROR = 6,      /**< payload: error_info */
     ESP_RTL_SDR_EVT_DISCONNECTED = 7,
     ESP_RTL_SDR_EVT_RETUNED = 8,    /**< payload: uint32_t frequency_hz */
+    ESP_RTL_SDR_EVT_HEALTH = 9,     /**< payload: health_info (snapshot) */
+    ESP_RTL_SDR_EVT_PASSPORT_PROGRESS = 10, /**< payload: passport_entry */
+    ESP_RTL_SDR_EVT_PASSPORT_DONE = 11,     /**< payload: rate_passport */
 } esp_rtl_sdr_event_t;
 
 /**
@@ -251,7 +276,34 @@ typedef enum {
     ESP_RTL_SDR_CAP_FREQ_CORRECTION = 1u << 8, /**< software ppm LO offset */
     ESP_RTL_SDR_CAP_MULTI_DEVICE = 1u << 9, /**< enumerate / select by index/serial */
     ESP_RTL_SDR_CAP_SYNC_READ = 1u << 10,   /**< blocking read() pull ring */
+    ESP_RTL_SDR_CAP_CONTINUOUS_RATE = 1u << 11, /**< any in-window rate + quantize */
+    ESP_RTL_SDR_CAP_NEED = 1u << 12,        /**< apply_need() intent presets */
+    ESP_RTL_SDR_CAP_HEALTH = 1u << 13,      /**< get_health / EVT_HEALTH */
+    ESP_RTL_SDR_CAP_PASSPORT = 1u << 14,    /**< on-device rate passport probe */
 } esp_rtl_sdr_cap_t;
+
+/**
+ * Intent presets — apps describe the mission; driver picks LO/rate defaults.
+ * Does not start streaming; call start() / start_hz() after.
+ */
+typedef enum {
+    ESP_RTL_SDR_NEED_FM = 0,         /**< broadcast FM-class: 960k @ preferred LO */
+    ESP_RTL_SDR_NEED_ADSB = 1,       /**< 1090 MHz, 2.048 MSPS */
+    ESP_RTL_SDR_NEED_WX = 2,         /**< NOAA WX 162.400 MHz, 960k */
+    ESP_RTL_SDR_NEED_HF = 3,         /**< HF intent (V4 upconverter path; LO stored, CAP open) */
+    ESP_RTL_SDR_NEED_MAX_STABLE = 4, /**< passport best_stable, else 2.048M */
+    ESP_RTL_SDR_NEED_LISTEN = 5,     /**< lowest-drop default: 960k, keep LO */
+} esp_rtl_sdr_need_t;
+
+/** Coarse health categories for dashboards (not medical). */
+typedef enum {
+    ESP_RTL_SDR_HEALTH_UNKNOWN = 0,
+    ESP_RTL_SDR_HEALTH_OK = 1,
+    ESP_RTL_SDR_HEALTH_USB_STARVING = 2,  /**< host/USB cannot keep effective SPS */
+    ESP_RTL_SDR_HEALTH_APP_TOO_SLOW = 3,  /**< consumer drops / ring pressure */
+    ESP_RTL_SDR_HEALTH_RF_CLIPPING = 4,   /**< sample range near full-scale */
+    ESP_RTL_SDR_HEALTH_RF_WEAK = 5,       /**< very low sample swing */
+} esp_rtl_sdr_health_t;
 
 typedef struct {
     uint16_t vid;
@@ -298,6 +350,69 @@ typedef struct {
     esp_err_t code;
     char message[96];
 } esp_rtl_sdr_error_info_t;
+
+/**
+ * Health snapshot for EVT_HEALTH / get_health().
+ * struct_size must be set by the driver on output.
+ */
+typedef struct {
+    size_t struct_size;
+    esp_rtl_sdr_health_t usb;
+    esp_rtl_sdr_health_t rf;
+    esp_rtl_sdr_health_t overall;
+    float efficiency; /**< effective_sps / programmed_sps; 0 if unknown */
+    uint32_t effective_sps;
+    uint32_t programmed_sps;
+    uint32_t overruns;
+    uint32_t consumer_drops;
+    uint8_t sample_min;
+    uint8_t sample_max;
+    char advice[96]; /**< short human hint; never empty when overall != OK */
+} esp_rtl_sdr_health_info_t;
+
+/** One passport probe row (also EVT_PASSPORT_PROGRESS payload). */
+typedef struct {
+    uint32_t requested_sps;
+    uint32_t exact_sps;
+    uint32_t effective_sps;
+    uint32_t overruns;
+    uint32_t consumer_drops;
+    uint8_t sample_min;
+    uint8_t sample_max;
+    bool stable; /**< efficiency >= min_efficiency_pct / 100 */
+    esp_err_t start_err;
+} esp_rtl_sdr_passport_entry_t;
+
+/**
+ * On-device rate passport: learned truth for *this* host + dongle.
+ * Not a claim of universal hardware; re-run after cable/board change.
+ */
+typedef struct {
+    size_t struct_size;
+    size_t entry_count;
+    esp_rtl_sdr_passport_entry_t entries[ESP_RTL_SDR_PASSPORT_MAX_ENTRIES];
+    uint32_t best_stable_sps; /**< 0 if none met efficiency bar */
+    uint32_t max_tried_sps;
+    uint32_t probe_freq_hz;
+    uint32_t dwell_ms;
+    bool valid;
+} esp_rtl_sdr_rate_passport_t;
+
+/** Options for probe_rates(). Always call passport_opts_default first. */
+typedef struct {
+    size_t struct_size;
+    /** LO during probe; 0 = preferred / KZEL. */
+    uint32_t frequency_hz;
+    /** Per-rate stream time; 0 = DEFAULT_DWELL_MS. */
+    uint32_t dwell_ms;
+    /** Stable if 100*effective/exact >= this; 0 = 95. */
+    uint32_t min_efficiency_pct;
+    /**
+     * true: only recommended named rates.
+     * false: recommended + a few extra high-band steps (still bounded).
+     */
+    bool recommended_only;
+} esp_rtl_sdr_passport_opts_t;
 
 /**
  * Event callback.
@@ -380,17 +495,22 @@ void esp_rtl_sdr_stream_config_default(esp_rtl_sdr_stream_config_t *stream);
 esp_err_t esp_rtl_sdr_config_validate(const esp_rtl_sdr_config_t *config);
 esp_err_t esp_rtl_sdr_stream_config_validate(const esp_rtl_sdr_stream_config_t *stream);
 
-/** True if sample_rate_sps is on the allowlist for this build. */
+/**
+ * True if sample_rate_sps is within hardware windows and quantizes to a legal
+ * RTL2832 ratio (continuous rates — not only named macros).
+ */
 bool esp_rtl_sdr_is_rate_supported(uint32_t sample_rate_sps);
 
 /**
- * Copy the allowlisted sample rates into out_rates (up to max_count entries).
- * @param out_rates  Destination; may be NULL if max_count == 0 (query size only).
- * @param max_count  Capacity of out_rates.
- * @param out_count  Required; set to number of rates written (or total if max_count==0).
- * @return ESP_OK, or ESP_ERR_INVALID_ARG if out_count is NULL, or
- *         ESP_ERR_INVALID_SIZE if max_count > 0 but too small for the full list
- *         (still writes min(max_count, total) rates and sets *out_count = total).
+ * Map requested SPS to the nearest exact rate the resampler can program.
+ * @return true and *out_exact_sps set on success; false if out of window / bad.
+ */
+bool esp_rtl_sdr_quantize_sample_rate(uint32_t requested_sps, uint32_t *out_exact_sps);
+
+/**
+ * Copy the *recommended* sample rates (named presets) into out_rates.
+ * Continuous in-window rates are also accepted by set_sample_rate / start even
+ * when not in this list. Query size with max_count == 0.
  */
 esp_err_t esp_rtl_sdr_get_supported_rates(uint32_t *out_rates,
                                              size_t max_count,
@@ -609,6 +729,39 @@ esp_err_t esp_rtl_sdr_select_device(esp_rtl_sdr_handle_t handle, size_t index);
  * Must not be streaming.
  */
 esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const char *serial);
+
+/* -------------------------------------------------------------------------- */
+/* Beyond rates — intent, health, passport (0.7)                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Apply a mission intent: sets preferred LO + sample rate (quantized).
+ * Does not start streaming. NEED_HF stores HF LO; full upconverter CAP still open.
+ * NEED_MAX_STABLE uses last successful passport best_stable_sps when valid.
+ */
+esp_err_t esp_rtl_sdr_apply_need(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_need_t need);
+
+/** Snapshot USB/RF health from live metrics. Safe while streaming. */
+esp_err_t esp_rtl_sdr_get_health(esp_rtl_sdr_handle_t handle,
+                                 esp_rtl_sdr_health_info_t *out_health);
+
+void esp_rtl_sdr_passport_opts_default(esp_rtl_sdr_passport_opts_t *opts);
+
+/**
+ * On-device rate passport: stream each candidate rate for dwell_ms, measure
+ * effective SPS / drops, fill out_passport. Must not already be streaming.
+ * Blocks for ~entry_count * dwell_ms. Emits PASSPORT_PROGRESS / DONE.
+ * Stores passport on the handle for NEED_MAX_STABLE.
+ */
+esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
+                                  const esp_rtl_sdr_passport_opts_t *opts,
+                                  esp_rtl_sdr_rate_passport_t *out_passport);
+
+/**
+ * Copy last passport from handle (from probe_rates). valid=false if never probed.
+ */
+esp_err_t esp_rtl_sdr_get_rate_passport(esp_rtl_sdr_handle_t handle,
+                                        esp_rtl_sdr_rate_passport_t *out_passport);
 
 #ifdef __cplusplus
 }

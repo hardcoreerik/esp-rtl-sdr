@@ -1248,10 +1248,11 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
     if (h->owns_host) {
         usb_host_config_t hc{};
         hc.intr_flags = ESP_INTR_FLAG_LEVEL1;
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
-        /* IDF 5.4+: peripheral_map selects HS controller on multi-controller chips (P4). */
-        hc.peripheral_map = 0;
-#endif
+        /*
+         * Do not set peripheral_map here: field is not present on all IDF 5.3/5.4
+         * headers. Default install selects the primary HS host on ESP32-P4.
+         * Re-add with #ifdef when a stable API field exists for dual-controller boards.
+         */
         esp_err_t ret = usb_host_install(&hc);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "usb_host_install: %s", esp_err_to_name(ret));

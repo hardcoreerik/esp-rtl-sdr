@@ -5,6 +5,7 @@
 
 #include "esp_rtl_sdr.h"
 
+#include <cstddef>
 #include <cstring>
 
 /* -------------------------------------------------------------------------- */
@@ -50,6 +51,7 @@ const char *esp_rtl_sdr_state_to_name(esp_rtl_sdr_state_t state)
     case ESP_RTL_SDR_STATE_STREAMING: return "STREAMING";
     case ESP_RTL_SDR_STATE_STOPPING: return "STOPPING";
     case ESP_RTL_SDR_STATE_FAULT: return "FAULT";
+    case ESP_RTL_SDR_STATE_STARTING: return "STARTING";
     default: return "UNKNOWN";
     }
 }
@@ -212,8 +214,16 @@ void esp_rtl_sdr_config_default(esp_rtl_sdr_config_t *config)
     std::memset(config, 0, sizeof(*config));
     config->struct_size = sizeof(esp_rtl_sdr_config_t);
     config->host_library_already_installed = false;
+#if defined(CONFIG_ESP_RTL_SDR_ESP_DEFAULT_TRANSFER_BYTES)
+    config->transfer_bytes = static_cast<size_t>(CONFIG_ESP_RTL_SDR_ESP_DEFAULT_TRANSFER_BYTES);
+#else
     config->transfer_bytes = ESP_RTL_SDR_DEFAULT_XFER_BYTES;
+#endif
+#if defined(CONFIG_ESP_RTL_SDR_ESP_DEFAULT_TRANSFER_COUNT)
+    config->transfer_count = static_cast<size_t>(CONFIG_ESP_RTL_SDR_ESP_DEFAULT_TRANSFER_COUNT);
+#else
     config->transfer_count = ESP_RTL_SDR_DEFAULT_XFER_COUNT;
+#endif
     config->control_timeout_ms = 1000;
     config->usb_task_priority = 0;
     config->usb_task_core_id = 0xFF;
@@ -231,26 +241,38 @@ void esp_rtl_sdr_stream_config_default(esp_rtl_sdr_stream_config_t *stream)
     stream->sample_rate_sps = ESP_RTL_SDR_RATE_960K;
 }
 
+/* Append-only ABI: accept [min, sizeof]; smaller structs get defaults for new fields. */
+static constexpr size_t kConfigSizeMin =
+    offsetof(esp_rtl_sdr_config_t, usb_task_core_id) + sizeof(uint8_t);
+static constexpr size_t kStreamSizeMin =
+    offsetof(esp_rtl_sdr_stream_config_t, timeout_ms) + sizeof(uint32_t);
+
 esp_err_t esp_rtl_sdr_config_validate(const esp_rtl_sdr_config_t *config)
 {
     if (config == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (config->struct_size != sizeof(esp_rtl_sdr_config_t)) {
+    if (config->struct_size < kConfigSizeMin ||
+        config->struct_size > sizeof(esp_rtl_sdr_config_t)) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (!is_xfer_bytes_ok(config->transfer_bytes)) {
+    esp_rtl_sdr_config_t local;
+    esp_rtl_sdr_config_default(&local);
+    std::memcpy(&local, config, config->struct_size);
+    local.struct_size = sizeof(local);
+
+    if (!is_xfer_bytes_ok(local.transfer_bytes)) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (config->transfer_count < ESP_RTL_SDR_MIN_XFER_COUNT ||
-        config->transfer_count > ESP_RTL_SDR_MAX_XFER_COUNT) {
+    if (local.transfer_count < ESP_RTL_SDR_MIN_XFER_COUNT ||
+        local.transfer_count > ESP_RTL_SDR_MAX_XFER_COUNT) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (config->control_timeout_ms == 0 ||
-        config->control_timeout_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) {
+    if (local.control_timeout_ms == 0 ||
+        local.control_timeout_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (config->usb_task_core_id != 0xFF && config->usb_task_core_id > 1) {
+    if (local.usb_task_core_id != 0xFF && local.usb_task_core_id > 1) {
         return ESP_ERR_INVALID_ARG;
     }
     return ESP_OK;
@@ -261,26 +283,32 @@ esp_err_t esp_rtl_sdr_stream_config_validate(const esp_rtl_sdr_stream_config_t *
     if (stream == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (stream->struct_size != sizeof(esp_rtl_sdr_stream_config_t)) {
+    if (stream->struct_size < kStreamSizeMin ||
+        stream->struct_size > sizeof(esp_rtl_sdr_stream_config_t)) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (stream->preset > ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
+    esp_rtl_sdr_stream_config_t local;
+    esp_rtl_sdr_stream_config_default(&local);
+    std::memcpy(&local, stream, stream->struct_size);
+    local.struct_size = sizeof(local);
+
+    if (local.preset > ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (stream->sample_rate_sps != 0 &&
-        !esp_rtl_sdr_is_rate_supported(stream->sample_rate_sps)) {
+    if (local.sample_rate_sps != 0 &&
+        !esp_rtl_sdr_is_rate_supported(local.sample_rate_sps)) {
         return ESP_RTL_SDR_ERR_BAD_RATE;
     }
-    if (stream->preset == ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
+    if (local.preset == ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
         uint32_t q = 0;
-        if (!esp_rtl_sdr_normalize_frequency(stream->frequency_hz, &q)) {
+        if (!esp_rtl_sdr_normalize_frequency(local.frequency_hz, &q)) {
             return ESP_RTL_SDR_ERR_BAD_FREQ;
         }
     }
-    if (stream->max_bytes != 0 && (stream->max_bytes % 2u) != 0) {
+    if (local.max_bytes != 0 && (local.max_bytes % 2u) != 0) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (stream->timeout_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) {
+    if (local.timeout_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) {
         return ESP_ERR_INVALID_ARG;
     }
     return ESP_OK;

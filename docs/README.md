@@ -29,6 +29,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [CAPABILITY_MATRIX.md](CAPABILITY_MATRIX.md) | vs librtlsdr-class desktop |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | Automated host tests + CI (TheOrc-style) |
 | [LAB_HOBBYIST.md](LAB_HOBBYIST.md) | Honest desk lab + TinySA Ultra how-to |
+| [HARDENING_0_7_2.md](HARDENING_0_7_2.md) | 0.7.2 runtime hardening notes |
 | [GAIN_BIAS_CAPTURE.md](GAIN_BIAS_CAPTURE.md) | Phase 3 clean-room capture procedure |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles |

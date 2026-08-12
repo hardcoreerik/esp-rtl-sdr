@@ -256,6 +256,12 @@ static void test_config_validate(void)
     cfg.struct_size = 1;
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
 
+    /* Append-only ABI: exact sizeof still OK (min..sizeof). */
+    esp_rtl_sdr_config_default(&cfg);
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+    cfg.struct_size = sizeof(cfg) + 1;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
     esp_rtl_sdr_config_default(&cfg);
     cfg.transfer_bytes = 1000; /* not multiple of 512 */
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
@@ -341,6 +347,7 @@ static void test_names(void)
     EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_STREAMING), "STREAMING");
     EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_STOPPING), "STOPPING");
     EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_FAULT), "FAULT");
+    EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_STARTING), "STARTING");
     EXPECT_STREQ(esp_rtl_sdr_state_to_name(static_cast<esp_rtl_sdr_state_t>(99)), "UNKNOWN");
 
     EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_OK), "ESP_OK");

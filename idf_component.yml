@@ -1,13 +1,15 @@
 ## esp_rtl_sdr — ESP Component Registry metadata
-version: "0.7.1"
+version: "0.7.2"
 description: >
   Clean-room ESP-IDF USB Host client for RTL2832U-class SDR dongles.
   Blog V4 (R828D) profile first; profile-based expansion for other tuners.
-  Not a librtlsdr port.
+  Not a librtlsdr port. Target: ESP32-P4 High-Speed USB host (measured path).
 url: https://github.com/hardcoreerik/esp-rtl-sdr
 issues: https://github.com/hardcoreerik/esp-rtl-sdr/issues
 repository: https://github.com/hardcoreerik/esp-rtl-sdr.git
 license: "AGPL-3.0-only"
+targets:
+  - esp32p4
 tags:
   - sdr
   - rtl-sdr

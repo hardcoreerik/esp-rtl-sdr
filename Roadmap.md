@@ -48,6 +48,28 @@ Open: formal P4 soak logs for non-provenance rates.
 
 ---
 
+## Phase 2.3 — Runtime hardening 0.7.2 (**complete in tree**)
+
+Review-driven (pause Phase 3 hardware for one release):
+
+- [x] STARTING state / concurrent start serialization
+- [x] Deterministic worker join on uninstall
+- [x] Callback emit without API-lock reentrancy trap on select_device
+- [x] ensure_ring transactional rollback
+- [x] struct_size min..sizeof compatibility
+- [x] Strict retune reentrancy (ERR_REENTRANT from callback)
+- [x] Kconfig defaults wired
+- [x] Pull-ring memcpy optimization
+- [x] Component `targets: esp32p4`
+- [ ] ESP-IDF P4 compile CI (next)
+- [ ] True async retune from callback
+- [ ] Delivery CALLBACK/READ/BOTH + lazy pull ring
+- [ ] Lab soak evidence from this tree
+
+See `docs/HARDENING_0_7_2.md`.
+
+---
+
 ## Phase 2.2 — Automated testing spine (TheOrc-aligned) (**complete**)
 
 - [x] Extract pure policy to `esp_rtl_sdr_policy.cpp` (host-linkable)

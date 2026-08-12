@@ -97,6 +97,9 @@ struct esp_rtl_sdr_handle {
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
+    /** Set during uninstall; worker tasks notify this task before vTaskDelete. */
+    TaskHandle_t join_waiter = nullptr;
+    uint8_t worker_task_count = 0;
     volatile bool tasks_run = false;
 
     SemaphoreHandle_t ctrl_sem = nullptr;
@@ -231,6 +234,12 @@ static uint32_t now_ms(void)
 }
 
 
+/**
+ * Invoke app callback without holding the API mutex.
+ * Uses atomic in_callback_depth so reentrancy guards work even if emit is
+ * nested under another caller's lock (which must not happen — callers should
+ * release first; select_device defers emit until after unlock).
+ */
 static void emit_after_unlock(esp_rtl_sdr_handle *h,
                               esp_rtl_sdr_event_t ev,
                               const void *payload,
@@ -241,18 +250,23 @@ static void emit_after_unlock(esp_rtl_sdr_handle *h,
         return;
     }
     if (handle_live(h)) {
-        HandleLock lk(h, kQueryLockTicks);
-        if (lk.ok()) {
-            h->in_callback_depth++;
-        }
+        __atomic_add_fetch(&h->in_callback_depth, 1u, __ATOMIC_SEQ_CST);
     }
     cb(ev, payload, ctx);
     if (handle_live(h)) {
-        HandleLock lk(h, kQueryLockTicks);
-        if (lk.ok() && h->in_callback_depth > 0) {
-            h->in_callback_depth--;
+        uint32_t d = __atomic_load_n(&h->in_callback_depth, __ATOMIC_SEQ_CST);
+        if (d > 0) {
+            __atomic_sub_fetch(&h->in_callback_depth, 1u, __ATOMIC_SEQ_CST);
         }
     }
+}
+
+static void worker_task_exit(esp_rtl_sdr_handle *h)
+{
+    if (h != nullptr && h->join_waiter != nullptr) {
+        xTaskNotifyGive(h->join_waiter);
+    }
+    vTaskDelete(nullptr);
 }
 
 /* Pure policy (version, rates, config validate) lives in esp_rtl_sdr_policy.cpp */
@@ -706,15 +720,35 @@ static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t by
     size_t off = 0;
     while (remaining > 0) {
         if (pull_ring_space(h) == 0) {
-            /* Drop oldest byte to make room (consumer too slow). */
-            h->pull_r = (h->pull_r + 1) % h->pull_cap;
-            h->pull_count--;
-            h->metrics.consumer_drops++;
+            /* Drop oldest sample pair region (at least 1 byte) for room. */
+            size_t drop = remaining;
+            if (drop > h->pull_count) {
+                drop = h->pull_count;
+            }
+            if (drop == 0) {
+                break;
+            }
+            h->pull_r = (h->pull_r + drop) % h->pull_cap;
+            h->pull_count -= drop;
+            h->metrics.consumer_drops += static_cast<uint32_t>(drop);
         }
-        h->pull_buf[h->pull_w] = data[off++];
-        h->pull_w = (h->pull_w + 1) % h->pull_cap;
-        h->pull_count++;
-        remaining--;
+        const size_t space = pull_ring_space(h);
+        if (space == 0) {
+            break;
+        }
+        size_t chunk = remaining < space ? remaining : space;
+        const size_t first = h->pull_cap - h->pull_w;
+        if (chunk <= first) {
+            std::memcpy(h->pull_buf + h->pull_w, data + off, chunk);
+            h->pull_w = (h->pull_w + chunk) % h->pull_cap;
+        } else {
+            std::memcpy(h->pull_buf + h->pull_w, data + off, first);
+            std::memcpy(h->pull_buf, data + off + first, chunk - first);
+            h->pull_w = chunk - first;
+        }
+        h->pull_count += chunk;
+        off += chunk;
+        remaining -= chunk;
     }
     xSemaphoreGive(h->pull_mux);
     if (h->pull_sem != nullptr) {
@@ -742,7 +776,7 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
     if (h->pull_buf != nullptr && h->pull_cap > 0) {
         return ESP_OK;
     }
-    /* ~0.5 s at 960 kS/s CU8, or 4× URB, whichever larger (cap 512 KiB). */
+    /* ~0.2 s at 960 kS/s CU8 (192 KiB), or 4× URB total, cap 512 KiB. */
     size_t need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
     if (need < 96000u * 2u) {
         need = 96000u * 2u;
@@ -783,6 +817,10 @@ static void delivery_task_fn(void *arg)
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
         IqSlot *slot = nullptr;
+        if (h->filled_q == nullptr) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
         if (xQueueReceive(h->filled_q, &slot, pdMS_TO_TICKS(50)) != pdTRUE || slot == nullptr) {
             continue;
         }
@@ -827,7 +865,7 @@ static void delivery_task_fn(void *arg)
         }
         (void)xQueueSend(h->free_q, &slot, portMAX_DELAY);
     }
-    vTaskDelete(nullptr);
+    worker_task_exit(h);
 }
 
 static void free_bulk_pool(esp_rtl_sdr_handle *h)
@@ -869,27 +907,70 @@ static esp_err_t alloc_bulk_pool(esp_rtl_sdr_handle *h, uint32_t num, uint32_t l
     return ESP_OK;
 }
 
-static esp_err_t ensure_ring(esp_rtl_sdr_handle *h, size_t slot_bytes)
+static void destroy_iq_ring(esp_rtl_sdr_handle *h)
 {
-    if (h->free_q != nullptr) {
-        return ESP_OK;
-    }
-    h->free_q = xQueueCreate(kRingDepth, sizeof(IqSlot *));
-    h->filled_q = xQueueCreate(kRingDepth, sizeof(IqSlot *));
-    if (h->free_q == nullptr || h->filled_q == nullptr) {
-        return ESP_ERR_NO_MEM;
+    if (h == nullptr) {
+        return;
     }
     for (size_t i = 0; i < kRingDepth; ++i) {
-        h->ring[i].capacity = slot_bytes;
-        h->ring[i].data = static_cast<uint8_t *>(
+        if (h->ring[i].data != nullptr) {
+            free(h->ring[i].data);
+            h->ring[i].data = nullptr;
+        }
+        h->ring[i].capacity = 0;
+        h->ring[i].bytes = 0;
+    }
+    if (h->free_q != nullptr) {
+        vQueueDelete(h->free_q);
+        h->free_q = nullptr;
+    }
+    if (h->filled_q != nullptr) {
+        vQueueDelete(h->filled_q);
+        h->filled_q = nullptr;
+    }
+}
+
+static esp_err_t ensure_ring(esp_rtl_sdr_handle *h, size_t slot_bytes)
+{
+    if (h->free_q != nullptr && h->filled_q != nullptr && h->ring[0].data != nullptr) {
+        return ESP_OK;
+    }
+    /* Partial prior failure — tear down before rebuild (fail-closed). */
+    destroy_iq_ring(h);
+
+    QueueHandle_t free_q = xQueueCreate(kRingDepth, sizeof(IqSlot *));
+    QueueHandle_t filled_q = xQueueCreate(kRingDepth, sizeof(IqSlot *));
+    if (free_q == nullptr || filled_q == nullptr) {
+        if (free_q) {
+            vQueueDelete(free_q);
+        }
+        if (filled_q) {
+            vQueueDelete(filled_q);
+        }
+        return ESP_ERR_NO_MEM;
+    }
+    IqSlot temp[kRingDepth]{};
+    for (size_t i = 0; i < kRingDepth; ++i) {
+        temp[i].capacity = slot_bytes;
+        temp[i].data = static_cast<uint8_t *>(
             heap_caps_malloc(slot_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-        if (h->ring[i].data == nullptr) {
-            h->ring[i].data =
+        if (temp[i].data == nullptr) {
+            temp[i].data =
                 static_cast<uint8_t *>(heap_caps_malloc(slot_bytes, MALLOC_CAP_INTERNAL));
         }
-        if (h->ring[i].data == nullptr) {
+        if (temp[i].data == nullptr) {
+            for (size_t j = 0; j < i; ++j) {
+                free(temp[j].data);
+            }
+            vQueueDelete(free_q);
+            vQueueDelete(filled_q);
             return ESP_ERR_NO_MEM;
         }
+    }
+    h->free_q = free_q;
+    h->filled_q = filled_q;
+    for (size_t i = 0; i < kRingDepth; ++i) {
+        h->ring[i] = temp[i];
         IqSlot *p = &h->ring[i];
         xQueueSend(h->free_q, &p, 0);
     }
@@ -1011,7 +1092,8 @@ static bool serial_matches_preferred(const esp_rtl_sdr_handle *h, const char *se
     return serial != nullptr && std::strcmp(h->preferred_serial, serial) == 0;
 }
 
-static void open_selected_candidate(esp_rtl_sdr_handle *h)
+/** Open preferred candidate. If fire_events is false, caller emits after unlock. */
+static void open_selected_candidate(esp_rtl_sdr_handle *h, bool fire_events = true)
 {
     if (h->dev != nullptr || h->candidate_count == 0) {
         return;
@@ -1044,11 +1126,13 @@ static void open_selected_candidate(esp_rtl_sdr_handle *h)
              cand.info.product, cand.info.serial, static_cast<int>(cand.info.high_speed),
              static_cast<unsigned>(idx));
 
-    esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
-    void *ctx = h->cfg.event_ctx;
-    if (cb) {
-        emit_after_unlock(h, ESP_RTL_SDR_EVT_ENUMERATED, &h->info, cb, ctx);
-        emit_after_unlock(h, ESP_RTL_SDR_EVT_READY, nullptr, cb, ctx);
+    if (fire_events) {
+        esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
+        void *ctx = h->cfg.event_ctx;
+        if (cb) {
+            emit_after_unlock(h, ESP_RTL_SDR_EVT_ENUMERATED, &h->info, cb, ctx);
+            emit_after_unlock(h, ESP_RTL_SDR_EVT_READY, nullptr, cb, ctx);
+        }
     }
 }
 
@@ -1114,9 +1198,10 @@ static void host_lib_task_fn(void *arg)
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
         uint32_t flags = 0;
-        usb_host_lib_handle_events(pdMS_TO_TICKS(100), &flags);
+        /* 50 ms: faster join on uninstall than 100 ms. */
+        usb_host_lib_handle_events(pdMS_TO_TICKS(50), &flags);
     }
-    vTaskDelete(nullptr);
+    worker_task_exit(h);
 }
 
 static void client_task_fn(void *arg)
@@ -1150,12 +1235,13 @@ static void client_task_fn(void *arg)
             }
         }
     }
-    vTaskDelete(nullptr);
+    worker_task_exit(h);
 }
 
 static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
 {
     h->tasks_run = true;
+    h->worker_task_count = 0;
     h->owns_host = !h->cfg.host_library_already_installed;
 
     if (h->owns_host) {
@@ -1173,6 +1259,7 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
                                     &h->host_task, kUsbCore) != pdPASS) {
             return ESP_ERR_NO_MEM;
         }
+        h->worker_task_count++;
     }
 
     usb_host_client_config_t cc{};
@@ -1194,10 +1281,11 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
                                 core) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
+    h->worker_task_count++;
 
     /* Scan already-attached devices and open preferred candidate. */
     rebuild_candidate_list(h);
-    open_selected_candidate(h);
+    open_selected_candidate(h, true);
     return ESP_OK;
 }
 
@@ -1234,7 +1322,13 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
     }
 
     h->magic = kHandleMagic;
-    h->cfg = *config;
+    {
+        esp_rtl_sdr_config_t full;
+        esp_rtl_sdr_config_default(&full);
+        std::memcpy(&full, config, config->struct_size);
+        full.struct_size = sizeof(full);
+        h->cfg = full;
+    }
     h->state = ESP_RTL_SDR_STATE_IDLE;
     h->info.vid = kVid;
     h->info.pid = kPid;
@@ -1286,8 +1380,19 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     }
 
     (void)stop_stream_internal(handle, ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS);
+
+    /* Deterministic worker join (no fixed 50 ms hope). */
+    handle->join_waiter = xTaskGetCurrentTaskHandle();
+    const uint8_t expect = handle->worker_task_count;
     handle->tasks_run = false;
-    vTaskDelay(pdMS_TO_TICKS(50));
+    for (uint8_t i = 0; i < expect; ++i) {
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(500));
+    }
+    handle->join_waiter = nullptr;
+    handle->host_task = nullptr;
+    handle->client_task = nullptr;
+    handle->delivery_task = nullptr;
+    handle->worker_task_count = 0;
 
     if (handle->iface_claimed && handle->dev != nullptr) {
         usb_host_interface_release(handle->client, handle->dev, 0);
@@ -1311,19 +1416,10 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         usb_host_transfer_free(handle->ctrl_xfer);
         handle->ctrl_xfer = nullptr;
     }
-    for (size_t i = 0; i < kRingDepth; ++i) {
-        free(handle->ring[i].data);
-        handle->ring[i].data = nullptr;
-    }
+    destroy_iq_ring(handle);
     free(handle->pull_buf);
     handle->pull_buf = nullptr;
     handle->pull_cap = handle->pull_count = handle->pull_r = handle->pull_w = 0;
-    if (handle->free_q) {
-        vQueueDelete(handle->free_q);
-    }
-    if (handle->filled_q) {
-        vQueueDelete(handle->filled_q);
-    }
 
     HandleLock lk(handle, kUninstallLockTicks);
     handle->magic = 0;
@@ -1545,8 +1641,8 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_FAULT);
         return ESP_RTL_SDR_ERR_FAULT;
     }
-    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
-        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+    if (handle->state != ESP_RTL_SDR_STATE_IDLE) {
+        /* STREAMING / STOPPING / STARTING — no concurrent start. */
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
         return ESP_RTL_SDR_ERR_BUSY;
     }
@@ -1554,6 +1650,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
         return ESP_RTL_SDR_ERR_NO_DEVICE;
     }
+    handle->state = ESP_RTL_SDR_STATE_STARTING;
 
     /* USB work without holding API mutex across long EP0 sequences */
     lk.release();
@@ -1609,6 +1706,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                 ret = ESP_ERR_NO_MEM;
                 break;
             }
+            handle->worker_task_count++;
         }
 
         handle->frequency_hz = freq;
@@ -1628,7 +1726,6 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->health_emit_blocks = 0;
         handle->last_emitted_health = ESP_RTL_SDR_HEALTH_UNKNOWN;
         handle->streaming = true;
-        handle->state = ESP_RTL_SDR_STATE_STREAMING;
 
         for (uint32_t i = 0; i < handle->bulk_num; ++i) {
             ret = usb_host_transfer_submit(handle->bulk[i]);
@@ -1643,12 +1740,17 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             break;
         }
 
-        HandleLock lk2(handle);
-        if (lk2.ok()) {
-            set_error_unlocked(handle, ESP_OK);
+        esp_rtl_sdr_event_cb_t cb = nullptr;
+        void *ctx = nullptr;
+        {
+            HandleLock lk2(handle);
+            if (lk2.ok()) {
+                handle->state = ESP_RTL_SDR_STATE_STREAMING;
+                set_error_unlocked(handle, ESP_OK);
+                cb = handle->cfg.event_cb;
+                ctx = handle->cfg.event_ctx;
+            }
         }
-        esp_rtl_sdr_event_cb_t cb = handle->cfg.event_cb;
-        void *ctx = handle->cfg.event_ctx;
         if (cb) {
             emit_after_unlock(handle, ESP_RTL_SDR_EVT_STREAM_STARTED, nullptr, cb, ctx);
         }
@@ -1683,25 +1785,24 @@ esp_err_t esp_rtl_sdr_retune_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_
     }
 
     /*
-     * Queue is always safe (including from event callback). EP0 apply must not
-     * run on the USB client task or nested under in_callback_depth — so if we
-     * are re-entered, only queue and return ESP_OK; app/owner will apply.
+     * Strict reentrancy (0.7.2): lifecycle from callback → ERR_REENTRANT.
+     * True async retune from callback is a future enhancement (queue + owner drain).
      */
     {
         HandleLock lk(handle, kQueryLockTicks);
         if (!lk.ok()) {
             return ESP_RTL_SDR_ERR_TIMEOUT;
         }
+        esp_err_t re = check_not_reentrant(handle);
+        if (re != ESP_OK) {
+            set_error_unlocked(handle, re);
+            return re;
+        }
         if (handle->state != ESP_RTL_SDR_STATE_STREAMING || !handle->streaming) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_STREAMING);
             return ESP_RTL_SDR_ERR_NOT_STREAMING;
         }
         handle->pending_retune_hz = q;
-        if (handle->in_callback_depth > 0) {
-            /* Coalesce; delivery/app task must call again or service pending. */
-            set_error_unlocked(handle, ESP_OK);
-            return ESP_OK;
-        }
     }
 
     /* Apply outside lock: drains bulks, EP0 tune, resubmits. */
@@ -1732,6 +1833,10 @@ esp_err_t esp_rtl_sdr_stop(esp_rtl_sdr_handle_t handle, uint32_t timeout_ms)
             handle->state == ESP_RTL_SDR_STATE_UNINSTALLED) {
             return ESP_OK;
         }
+        if (handle->state == ESP_RTL_SDR_STATE_STARTING) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+            return ESP_RTL_SDR_ERR_BUSY;
+        }
     }
     return stop_stream_internal(handle, timeout_ms);
 }
@@ -1746,7 +1851,8 @@ esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle)
         return ESP_RTL_SDR_ERR_TIMEOUT;
     }
     if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
-        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+        handle->state == ESP_RTL_SDR_STATE_STOPPING ||
+        handle->state == ESP_RTL_SDR_STATE_STARTING) {
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
         return ESP_RTL_SDR_ERR_BUSY;
     }
@@ -2072,44 +2178,59 @@ esp_err_t esp_rtl_sdr_select_device(esp_rtl_sdr_handle_t handle, size_t index)
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
-    HandleLock lk(handle);
-    if (!lk.ok()) {
-        return ESP_RTL_SDR_ERR_TIMEOUT;
-    }
-    esp_err_t re = check_not_reentrant(handle);
-    if (re != ESP_OK) {
-        set_error_unlocked(handle, re);
-        return re;
-    }
-    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
-        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
-        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
-        return ESP_RTL_SDR_ERR_BUSY;
-    }
-    rebuild_candidate_list(handle);
-    if (index >= handle->candidate_count) {
-        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_DEVICE);
-        return ESP_RTL_SDR_ERR_BAD_DEVICE;
-    }
-    handle->preferred_device_index = index;
-    handle->preferred_serial[0] = '\0';
+    esp_rtl_sdr_event_cb_t cb = nullptr;
+    void *ctx = nullptr;
+    bool fire = false;
+    esp_rtl_sdr_device_info_t info_snap{};
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        esp_err_t re = check_not_reentrant(handle);
+        if (re != ESP_OK) {
+            set_error_unlocked(handle, re);
+            return re;
+        }
+        if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
+            handle->state == ESP_RTL_SDR_STATE_STOPPING ||
+            handle->state == ESP_RTL_SDR_STATE_STARTING) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+            return ESP_RTL_SDR_ERR_BUSY;
+        }
+        rebuild_candidate_list(handle);
+        if (index >= handle->candidate_count) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_DEVICE);
+            return ESP_RTL_SDR_ERR_BAD_DEVICE;
+        }
+        handle->preferred_device_index = index;
+        handle->preferred_serial[0] = '\0';
 
-    if (handle->dev != nullptr && handle->open_addr == handle->candidates[index].addr) {
+        if (handle->dev != nullptr && handle->open_addr == handle->candidates[index].addr) {
+            set_error_unlocked(handle, ESP_OK);
+            return ESP_OK;
+        }
+        if (handle->dev != nullptr) {
+            usb_host_device_close(handle->client, handle->dev);
+            handle->dev = nullptr;
+            handle->open_addr = 0;
+            handle->info.present = false;
+        }
+        open_selected_candidate(handle, false); /* no callback under lock */
+        if (handle->dev == nullptr) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
+            return ESP_RTL_SDR_ERR_NO_DEVICE;
+        }
         set_error_unlocked(handle, ESP_OK);
-        return ESP_OK;
+        cb = handle->cfg.event_cb;
+        ctx = handle->cfg.event_ctx;
+        info_snap = handle->info;
+        fire = (cb != nullptr);
     }
-    if (handle->dev != nullptr) {
-        usb_host_device_close(handle->client, handle->dev);
-        handle->dev = nullptr;
-        handle->open_addr = 0;
-        handle->info.present = false;
+    if (fire) {
+        emit_after_unlock(handle, ESP_RTL_SDR_EVT_ENUMERATED, &info_snap, cb, ctx);
+        emit_after_unlock(handle, ESP_RTL_SDR_EVT_READY, nullptr, cb, ctx);
     }
-    open_selected_candidate(handle);
-    if (handle->dev == nullptr) {
-        set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
-        return ESP_RTL_SDR_ERR_NO_DEVICE;
-    }
-    set_error_unlocked(handle, ESP_OK);
     return ESP_OK;
 }
 
@@ -2121,52 +2242,66 @@ esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const ch
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
-    HandleLock lk(handle);
-    if (!lk.ok()) {
-        return ESP_RTL_SDR_ERR_TIMEOUT;
-    }
-    esp_err_t re = check_not_reentrant(handle);
-    if (re != ESP_OK) {
-        set_error_unlocked(handle, re);
-        return re;
-    }
-    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
-        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
-        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
-        return ESP_RTL_SDR_ERR_BUSY;
-    }
-    rebuild_candidate_list(handle);
-    size_t idx = SIZE_MAX;
-    for (size_t i = 0; i < handle->candidate_count; ++i) {
-        if (std::strcmp(handle->candidates[i].info.serial, serial) == 0) {
-            idx = i;
-            break;
+    esp_rtl_sdr_event_cb_t cb = nullptr;
+    void *ctx = nullptr;
+    bool fire = false;
+    esp_rtl_sdr_device_info_t info_snap{};
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
         }
-    }
-    if (idx == SIZE_MAX) {
-        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_DEVICE);
-        return ESP_RTL_SDR_ERR_BAD_DEVICE;
-    }
-    std::snprintf(handle->preferred_serial, sizeof(handle->preferred_serial), "%s", serial);
-    handle->preferred_device_index = idx;
+        esp_err_t re = check_not_reentrant(handle);
+        if (re != ESP_OK) {
+            set_error_unlocked(handle, re);
+            return re;
+        }
+        if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
+            handle->state == ESP_RTL_SDR_STATE_STOPPING ||
+            handle->state == ESP_RTL_SDR_STATE_STARTING) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+            return ESP_RTL_SDR_ERR_BUSY;
+        }
+        rebuild_candidate_list(handle);
+        size_t idx = SIZE_MAX;
+        for (size_t i = 0; i < handle->candidate_count; ++i) {
+            if (std::strcmp(handle->candidates[i].info.serial, serial) == 0) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx == SIZE_MAX) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_DEVICE);
+            return ESP_RTL_SDR_ERR_BAD_DEVICE;
+        }
+        std::snprintf(handle->preferred_serial, sizeof(handle->preferred_serial), "%s", serial);
+        handle->preferred_device_index = idx;
 
-    if (handle->dev != nullptr &&
-        std::strcmp(handle->info.serial, serial) == 0) {
+        if (handle->dev != nullptr && std::strcmp(handle->info.serial, serial) == 0) {
+            set_error_unlocked(handle, ESP_OK);
+            return ESP_OK;
+        }
+        if (handle->dev != nullptr) {
+            usb_host_device_close(handle->client, handle->dev);
+            handle->dev = nullptr;
+            handle->open_addr = 0;
+            handle->info.present = false;
+        }
+        open_selected_candidate(handle, false);
+        if (handle->dev == nullptr) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
+            return ESP_RTL_SDR_ERR_NO_DEVICE;
+        }
         set_error_unlocked(handle, ESP_OK);
-        return ESP_OK;
+        cb = handle->cfg.event_cb;
+        ctx = handle->cfg.event_ctx;
+        info_snap = handle->info;
+        fire = (cb != nullptr);
     }
-    if (handle->dev != nullptr) {
-        usb_host_device_close(handle->client, handle->dev);
-        handle->dev = nullptr;
-        handle->open_addr = 0;
-        handle->info.present = false;
+    if (fire) {
+        emit_after_unlock(handle, ESP_RTL_SDR_EVT_ENUMERATED, &info_snap, cb, ctx);
+        emit_after_unlock(handle, ESP_RTL_SDR_EVT_READY, nullptr, cb, ctx);
     }
-    open_selected_candidate(handle);
-    if (handle->dev == nullptr) {
-        set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
-        return ESP_RTL_SDR_ERR_NO_DEVICE;
-    }
-    set_error_unlocked(handle, ESP_OK);
     return ESP_OK;
 }
 

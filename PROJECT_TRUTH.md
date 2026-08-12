@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-12**  
-Version: **0.7.1** (EVT_HEALTH live + Phase 3 API stubs)  
+Version: **0.7.2** (runtime hardening — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·

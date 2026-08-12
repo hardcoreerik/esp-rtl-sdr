@@ -1,11 +1,29 @@
 # Changelog
 
+## 0.7.2 (2026-08-12)
+
+### Hardening (review-driven)
+
+- **STARTING** state serializes concurrent `start()`
+- Deterministic **task join** on uninstall (notify, not fixed 50 ms delay)
+- User callbacks use **atomic** `in_callback_depth`; `select_device*` emits **after** unlock
+- **Transactional** IQ ring allocation / destroy on failure
+- **struct_size** accepts min..sizeof (append-only ABI)
+- **retune** from callback → `ERR_REENTRANT` (strict; true async later)
+- **Kconfig** transfer size/count wired into `config_default` when built under IDF
+- Pull ring uses **block memcpy** instead of per-byte loop
+- `idf_component.yml` **targets: esp32p4**
+- Docs: `docs/HARDENING_0_7_2.md`
+
+### Fixed (carry-forward)
+
+- Low-band min **225001 Hz** (not 225000) for ratio/desktop parity
+
+### Version
+
+- **0.7.2** (do not retag 0.7.1)
+
 ## Unreleased
-
-### Fixed
-
-- CI host tests: low-band min is **225001 Hz** (not 225000). Exact 225 kHz masks the
-  28-bit resampler ratio to 0 and matches desktop librtlsdr rejection of `rate <= 225000`.
 
 ### Tests / CI
 

@@ -85,7 +85,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 1
+#define ESP_RTL_SDR_VERSION_PATCH 2
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -237,6 +237,8 @@ typedef enum {
     ESP_RTL_SDR_STATE_STREAMING = 2,
     ESP_RTL_SDR_STATE_STOPPING = 3,
     ESP_RTL_SDR_STATE_FAULT = 4,
+    /** start() in progress (API locked only for transition; USB work outside). */
+    ESP_RTL_SDR_STATE_STARTING = 5,
 } esp_rtl_sdr_state_t;
 
 /** Convert state enum to a stable string. Never NULL. */
@@ -434,12 +436,12 @@ typedef void (*esp_rtl_sdr_event_cb_t)(esp_rtl_sdr_event_t event,
 /**
  * Install configuration.
  *
- * struct_size must be set to sizeof(esp_rtl_sdr_config_t) so future fields
- * remain backward compatible when apps are recompiled against newer headers.
- * Always call esp_rtl_sdr_config_default() before setting fields.
+ * struct_size: set to sizeof(esp_rtl_sdr_config_t) from the header you compiled
+ * against. Validation accepts min..sizeof (append-only ABI): smaller sizes get
+ * newer trailing fields defaulted. Always call config_default() first when able.
  */
 typedef struct {
-    size_t struct_size; /**< MUST be sizeof(esp_rtl_sdr_config_t) */
+    size_t struct_size; /**< sizeof(esp_rtl_sdr_config_t) at app compile time */
     /** App already called usb_host_install(); driver only registers a client. */
     bool host_library_already_installed;
     /** Bulk URB size (bytes). Must be multiple of 512 for HS. */
@@ -463,7 +465,7 @@ typedef struct {
 } esp_rtl_sdr_config_t;
 
 typedef struct {
-    size_t struct_size; /**< MUST be sizeof(esp_rtl_sdr_stream_config_t) */
+    size_t struct_size; /**< sizeof(esp_rtl_sdr_stream_config_t) at app compile time */
     esp_rtl_sdr_preset_t preset;
     /**
      * Required for CUSTOM_HZ. For named presets, ignored (driver uses fixed LO).

@@ -5,7 +5,8 @@
 Blog V4 (R828D) profile first · ESP32-P4 High-Speed · not a librtlsdr port
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.5.0--dev-orange)
+![Status](https://img.shields.io/badge/version-0.5.0-green)
+[![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
 ---
@@ -66,10 +67,21 @@ Smoke example: [`examples/p4_serial_smoke`](examples/p4_serial_smoke).
 |---|---|
 | Blog V4 `0bda:2838` stream | Implemented (profile tables) |
 | Rates 960k / 1024k / 2048k | Allowlisted |
-| Hot retune | Implemented |
+| Hot retune / set_center_freq | Implemented |
+| set/get sample rate | Implemented (mid-stream rate = stop/start) |
+| Sync `read()` IQ pull | Implemented |
 | Metrics | Implemented |
 | Gain / ppm / bias-T | Roadmap |
 | Any random RTL2832U | **Not claimed** — profiles only |
+
+```c
+esp_rtl_sdr_set_sample_rate(sdr, ESP_RTL_SDR_RATE_960K);
+esp_rtl_sdr_set_center_freq(sdr, 100100000);
+esp_rtl_sdr_start_hz(sdr, 0, 0);  /* uses preferred rate/freq */
+uint8_t buf[16384];
+size_t n = 0;
+esp_rtl_sdr_read(sdr, buf, sizeof(buf), 1000, &n);
+```
 
 Authoritative status: **[`Project_truth.md`](Project_truth.md)**.  
 Architecture: **[`architecture.md`](architecture.md)**.  

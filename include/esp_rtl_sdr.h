@@ -493,6 +493,57 @@ esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle);
 esp_err_t esp_rtl_sdr_release_iq_block(esp_rtl_sdr_handle_t handle,
                                           const esp_rtl_sdr_iq_block_t *block);
 
+/* -------------------------------------------------------------------------- */
+/* Desktop-shaped ergonomics (Phase 1) — map closely to librtlsdr mental model */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Set preferred / active center frequency (Hz).
+ * - IDLE: stores preferred LO for the next start() (and for get_center_freq).
+ * - STREAMING: equivalent to retune_hz() (queued safe hot retune).
+ * Frequency is normalized (quantized/clamped). 0 is rejected.
+ */
+esp_err_t esp_rtl_sdr_set_center_freq(esp_rtl_sdr_handle_t handle, uint32_t frequency_hz);
+
+/**
+ * Get last applied or preferred center frequency (Hz).
+ * 0 if never set and never streamed.
+ */
+esp_err_t esp_rtl_sdr_get_center_freq(esp_rtl_sdr_handle_t handle, uint32_t *out_hz);
+
+/**
+ * Set preferred sample rate (Hz). Must be allowlisted (is_rate_supported).
+ * - IDLE: stored for next start() if stream.sample_rate_sps is 0.
+ * - STREAMING: returns ERR_BUSY (rate change requires stop/start in Phase 1).
+ */
+esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t sample_rate_sps);
+
+/**
+ * Get last applied or preferred sample rate (Hz).
+ */
+esp_err_t esp_rtl_sdr_get_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t *out_sps);
+
+/**
+ * Blocking pull of interleaved CU8 IQ bytes (sync-read equivalent).
+ * Works while STREAMING whether or not an event callback is installed.
+ * @param out_buf  Destination; must be non-NULL.
+ * @param max_bytes  Capacity; should be even (odd truncated down).
+ * @param timeout_ms  0 = return immediately with whatever is buffered.
+ * @param out_bytes  Required; set to bytes copied (0 on timeout with empty buffer).
+ * @return ESP_OK if any bytes copied, ERR_TIMEOUT if none within timeout while
+ *         streaming, ERR_NOT_STREAMING if idle, other errors as usual.
+ */
+esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t max_bytes,
+                           uint32_t timeout_ms, size_t *out_bytes);
+
+/**
+ * Convenience: build a stream config from preferred LO/rate (or overrides) and start.
+ * If frequency_hz is 0, uses preferred center freq (must be set).
+ * If sample_rate_sps is 0, uses preferred sample rate (default 960k after install).
+ */
+esp_err_t esp_rtl_sdr_start_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_hz,
+                               uint32_t sample_rate_sps);
+
 #ifdef __cplusplus
 }
 #endif

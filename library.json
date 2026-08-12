@@ -1,6 +1,6 @@
 {
   "name": "esp_rtl_sdr",
-  "version": "0.5.0-dev",
+  "version": "0.5.0",
   "description": "Clean-room ESP USB Host client for RTL2832U-class SDR (Blog V4 profile first)",
   "keywords": "sdr, rtl-sdr, rtl2832u, usb, esp32-p4, esp_rtl_sdr",
   "license": "AGPL-3.0-only",

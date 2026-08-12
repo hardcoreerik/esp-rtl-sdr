@@ -16,34 +16,32 @@ A stand-alone ESP-IDF component that:
 
 ---
 
-## Phase 0 — Stand-alone repo + rename (**this delivery**)
+## Phase 0 — Stand-alone repo + rename (**complete**)
 
 | Item | Status |
 |---|---|
-| Repo at `F:\Ai\ESP_RTL_SDR\` | **In progress** |
-| Rename API to `esp_rtl_sdr` | **In progress** |
-| Blog V4 profile tables preserved | **In progress** |
-| `Project_truth.md` / `architecture.md` / `Roadmap.md` + docs suite | **In progress** |
-| Example smoke project | **In progress** |
-| Independent of OrcSDR tree edits | **Required** |
+| Repo at `F:\Ai\ESP_RTL_SDR\` | **Done** |
+| GitHub `hardcoreerik/esp-rtl-sdr` | **Done** |
+| Rename API to `esp_rtl_sdr` | **Done** |
+| Blog V4 profile tables preserved | **Done** |
+| Docs suite | **Done** |
+| Example smoke project | **Done** |
 
-**Exit:** Local git repo; docs complete; symbols renamed; Blog V4 path source-complete.
+**Exit:** Met.
 
 ---
 
-## Phase 1 — API shape parity (same Blog V4 RF)
+## Phase 1 — API shape parity (same Blog V4 RF) (**complete in 0.5.0**)
 
-Add ergonomic APIs apps expect from desktop drivers (wrappers / small features):
+- [x] `set_center_freq` / `get_center_freq` (idle preferred LO; streaming → retune)
+- [x] `set_sample_rate` / `get_sample_rate` (allowlist; streaming → BUSY)
+- [x] Blocking `read` from pull ring (sync-read equivalent)
+- [x] `start_hz(frequency_hz, sample_rate_sps)` convenience
+- [x] Capability matrix updated
+- [ ] Optional clearer device error name for non-V4 (`ERR_UNSUPPORTED_DEVICE`) — Phase 2 polish
+- [ ] Hardware re-run of *this* tree on Tab5/Waveshare — still open
 
-- [ ] `set_center_freq` / `get_center_freq` (alias over retune / metrics)
-- [ ] `set_sample_rate` / `get_sample_rate` (allowlist-enforced)
-- [ ] Blocking `read` / pull of N IQ bytes from an internal ring (sync-read equivalent)
-- [ ] Documented mapping table vs librtlsdr function names in `docs/CAPABILITY_MATRIX.md`
-- [ ] Optional clearer device error name for non-V4 (`ERR_UNSUPPORTED_DEVICE`)
-
-**Evidence:** Build-verified example; optional hardware re-run on Tab5 or Waveshare.
-
-**Exit:** App authors can write open → set rate → set freq → read/async without learning OrcSDR-only names.
+**Exit:** API shape met; hardware re-soak tracked in Project_truth.
 
 ---
 

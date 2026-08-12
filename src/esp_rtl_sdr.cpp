@@ -116,6 +116,19 @@ struct esp_rtl_sdr_handle {
 
     /** LO request; applied by retune path after bulk drain (never EP0 mid-bulk). */
     volatile uint32_t pending_retune_hz = 0;
+
+    /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
+    uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
+    uint32_t preferred_sample_rate_sps = ESP_RTL_SDR_RATE_960K;
+
+    /** Sync-read pull ring (CU8 bytes). Filled by delivery task. */
+    uint8_t *pull_buf = nullptr;
+    size_t pull_cap = 0;
+    size_t pull_r = 0;
+    size_t pull_w = 0;
+    size_t pull_count = 0;
+    SemaphoreHandle_t pull_mux = nullptr;
+    SemaphoreHandle_t pull_sem = nullptr;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -841,6 +854,91 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     return err;
 }
 
+static size_t pull_ring_space(const esp_rtl_sdr_handle *h)
+{
+    return h->pull_cap - h->pull_count;
+}
+
+static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t bytes)
+{
+    if (h == nullptr || h->pull_buf == nullptr || h->pull_mux == nullptr || data == nullptr ||
+        bytes == 0) {
+        return;
+    }
+    if (xSemaphoreTake(h->pull_mux, pdMS_TO_TICKS(5)) != pdTRUE) {
+        return;
+    }
+    size_t remaining = bytes;
+    size_t off = 0;
+    while (remaining > 0) {
+        if (pull_ring_space(h) == 0) {
+            /* Drop oldest byte to make room (consumer too slow). */
+            h->pull_r = (h->pull_r + 1) % h->pull_cap;
+            h->pull_count--;
+            h->metrics.consumer_drops++;
+        }
+        h->pull_buf[h->pull_w] = data[off++];
+        h->pull_w = (h->pull_w + 1) % h->pull_cap;
+        h->pull_count++;
+        remaining--;
+    }
+    xSemaphoreGive(h->pull_mux);
+    if (h->pull_sem != nullptr) {
+        xSemaphoreGive(h->pull_sem);
+    }
+}
+
+static void pull_ring_reset(esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr || h->pull_mux == nullptr) {
+        return;
+    }
+    if (xSemaphoreTake(h->pull_mux, pdMS_TO_TICKS(50)) == pdTRUE) {
+        h->pull_r = h->pull_w = h->pull_count = 0;
+        xSemaphoreGive(h->pull_mux);
+    }
+    if (h->pull_sem != nullptr) {
+        while (xSemaphoreTake(h->pull_sem, 0) == pdTRUE) {
+        }
+    }
+}
+
+static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
+{
+    if (h->pull_buf != nullptr && h->pull_cap > 0) {
+        return ESP_OK;
+    }
+    /* ~0.5 s at 960 kS/s CU8, or 4× URB, whichever larger (cap 512 KiB). */
+    size_t need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
+    if (need < 96000u * 2u) {
+        need = 96000u * 2u;
+    }
+    if (need > 512u * 1024u) {
+        need = 512u * 1024u;
+    }
+    h->pull_buf = static_cast<uint8_t *>(
+        heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (h->pull_buf == nullptr) {
+        h->pull_buf =
+            static_cast<uint8_t *>(heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+    if (h->pull_buf == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
+    h->pull_cap = need;
+    h->pull_r = h->pull_w = h->pull_count = 0;
+    if (h->pull_mux == nullptr) {
+        h->pull_mux = xSemaphoreCreateMutex();
+    }
+    if (h->pull_sem == nullptr) {
+        h->pull_sem = xSemaphoreCreateBinary();
+    }
+    if (h->pull_mux == nullptr || h->pull_sem == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
 static void delivery_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
@@ -856,6 +954,9 @@ static void delivery_task_fn(void *arg)
         block.frequency_hz = slot->frequency_hz;
         block.sample_rate_sps = slot->sample_rate_sps;
         block.host_timestamp_us = slot->host_timestamp_us;
+
+        /* Always feed sync-read ring so read() works with or without event_cb. */
+        pull_ring_push(h, slot->data, slot->bytes);
 
         esp_rtl_sdr_event_cb_t cb = nullptr;
         void *ctx = nullptr;
@@ -1247,6 +1348,9 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         free(handle->ring[i].data);
         handle->ring[i].data = nullptr;
     }
+    free(handle->pull_buf);
+    handle->pull_buf = nullptr;
+    handle->pull_cap = handle->pull_count = handle->pull_r = handle->pull_w = 0;
     if (handle->free_q) {
         vQueueDelete(handle->free_q);
     }
@@ -1268,6 +1372,14 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     }
     if (handle->bulk_done_sem) {
         vSemaphoreDelete(handle->bulk_done_sem);
+    }
+    if (handle->pull_mux) {
+        vSemaphoreDelete(handle->pull_mux);
+        handle->pull_mux = nullptr;
+    }
+    if (handle->pull_sem) {
+        vSemaphoreDelete(handle->pull_sem);
+        handle->pull_sem = nullptr;
     }
     if (lock) {
         (void)xSemaphoreTake(lock, 0);
@@ -1390,6 +1502,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     }
 
     free_bulk_pool(h);
+    pull_ring_reset(h);
     h->stream_start_ms = 0;
     h->state = ESP_RTL_SDR_STATE_IDLE;
     set_error_unlocked(h, ESP_OK);
@@ -1414,7 +1527,21 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
 
-    esp_err_t verr = esp_rtl_sdr_stream_config_validate(stream);
+    /* Fill zeros from preferred LO/rate (Phase 1 desktop-shaped set_* APIs). */
+    esp_rtl_sdr_stream_config_t local = *stream;
+    {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (lk.ok()) {
+            if (local.sample_rate_sps == 0) {
+                local.sample_rate_sps = handle->preferred_sample_rate_sps;
+            }
+            if (local.preset == ESP_RTL_SDR_PRESET_CUSTOM_HZ && local.frequency_hz == 0) {
+                local.frequency_hz = handle->preferred_frequency_hz;
+            }
+        }
+    }
+
+    esp_err_t verr = esp_rtl_sdr_stream_config_validate(&local);
     if (verr != ESP_OK) {
         HandleLock lk(handle, kQueryLockTicks);
         if (lk.ok()) {
@@ -1423,7 +1550,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         return verr;
     }
     uint32_t freq = 0;
-    verr = resolve_stream_frequency(stream, &freq);
+    verr = resolve_stream_frequency(&local, &freq);
     if (verr != ESP_OK) {
         return verr;
     }
@@ -1467,7 +1594,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (ret != ESP_OK) {
             break;
         }
-        ret = run_sample_rate(handle, stream->sample_rate_sps);
+        ret = run_sample_rate(handle, local.sample_rate_sps);
         if (ret != ESP_OK) {
             break;
         }
@@ -1486,6 +1613,11 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (ret != ESP_OK) {
             break;
         }
+        ret = ensure_pull_ring(handle);
+        if (ret != ESP_OK) {
+            break;
+        }
+        pull_ring_reset(handle);
         ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
                               static_cast<uint32_t>(handle->cfg.transfer_bytes));
         if (ret != ESP_OK) {
@@ -1503,9 +1635,11 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         }
 
         handle->frequency_hz = freq;
-        handle->sample_rate_sps = stream->sample_rate_sps;
+        handle->sample_rate_sps = local.sample_rate_sps;
+        handle->preferred_frequency_hz = freq;
+        handle->preferred_sample_rate_sps = local.sample_rate_sps;
         handle->metrics.frequency_hz = freq;
-        handle->metrics.sample_rate_sps = stream->sample_rate_sps;
+        handle->metrics.sample_rate_sps = local.sample_rate_sps;
         handle->metrics.bytes_total = 0;
         handle->metrics.blocks_total = 0;
         handle->metrics.overruns = 0;
@@ -1651,4 +1785,197 @@ esp_err_t esp_rtl_sdr_release_iq_block(esp_rtl_sdr_handle_t handle,
     }
     (void)handle;
     return ESP_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Phase 1 — desktop-shaped ergonomics                                        */
+/* -------------------------------------------------------------------------- */
+
+esp_err_t esp_rtl_sdr_set_center_freq(esp_rtl_sdr_handle_t handle, uint32_t frequency_hz)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    uint32_t q = 0;
+    if (frequency_hz == 0 || !esp_rtl_sdr_normalize_frequency(frequency_hz, &q)) {
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
+    }
+
+    bool streaming = false;
+    {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        esp_err_t re = check_not_reentrant(handle);
+        if (re != ESP_OK) {
+            set_error_unlocked(handle, re);
+            return re;
+        }
+        handle->preferred_frequency_hz = q;
+        streaming = handle->state == ESP_RTL_SDR_STATE_STREAMING && handle->streaming;
+        if (!streaming) {
+            handle->frequency_hz = q;
+            handle->metrics.frequency_hz = q;
+            set_error_unlocked(handle, ESP_OK);
+            return ESP_OK;
+        }
+    }
+    return esp_rtl_sdr_retune_hz(handle, q);
+}
+
+esp_err_t esp_rtl_sdr_get_center_freq(esp_rtl_sdr_handle_t handle, uint32_t *out_hz)
+{
+    if (out_hz == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_hz = handle->frequency_hz != 0 ? handle->frequency_hz : handle->preferred_frequency_hz;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t sample_rate_sps)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if (!esp_rtl_sdr_is_rate_supported(sample_rate_sps)) {
+        return ESP_RTL_SDR_ERR_BAD_RATE;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    esp_err_t re = check_not_reentrant(handle);
+    if (re != ESP_OK) {
+        set_error_unlocked(handle, re);
+        return re;
+    }
+    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
+        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+        return ESP_RTL_SDR_ERR_BUSY;
+    }
+    handle->preferred_sample_rate_sps = sample_rate_sps;
+    handle->sample_rate_sps = sample_rate_sps;
+    handle->metrics.sample_rate_sps = sample_rate_sps;
+    set_error_unlocked(handle, ESP_OK);
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t *out_sps)
+{
+    if (out_sps == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_sps =
+        handle->sample_rate_sps != 0 ? handle->sample_rate_sps : handle->preferred_sample_rate_sps;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t max_bytes,
+                           uint32_t timeout_ms, size_t *out_bytes)
+{
+    if (out_buf == nullptr || out_bytes == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out_bytes = 0;
+    max_bytes &= ~size_t{1}; /* even only */
+    if (max_bytes == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+
+    {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        if (handle->state != ESP_RTL_SDR_STATE_STREAMING || !handle->streaming) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_STREAMING);
+            return ESP_RTL_SDR_ERR_NOT_STREAMING;
+        }
+        if (handle->pull_buf == nullptr || handle->pull_mux == nullptr) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_READY);
+            return ESP_RTL_SDR_ERR_NOT_READY;
+        }
+    }
+
+    const TickType_t deadline =
+        timeout_ms == 0 ? 0 : (xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms));
+    size_t copied = 0;
+
+    for (;;) {
+        if (xSemaphoreTake(handle->pull_mux, pdMS_TO_TICKS(20)) != pdTRUE) {
+            if (timeout_ms == 0) {
+                break;
+            }
+            if (xTaskGetTickCount() >= deadline) {
+                break;
+            }
+            continue;
+        }
+        while (copied < max_bytes && handle->pull_count > 0) {
+            out_buf[copied++] = handle->pull_buf[handle->pull_r];
+            handle->pull_r = (handle->pull_r + 1) % handle->pull_cap;
+            handle->pull_count--;
+        }
+        xSemaphoreGive(handle->pull_mux);
+
+        if (copied > 0) {
+            *out_bytes = copied;
+            return ESP_OK;
+        }
+        if (timeout_ms == 0) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        TickType_t wait = pdMS_TO_TICKS(20);
+        if (deadline > xTaskGetTickCount()) {
+            const TickType_t left = deadline - xTaskGetTickCount();
+            if (left < wait) {
+                wait = left;
+            }
+        } else {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        if (handle->pull_sem != nullptr) {
+            (void)xSemaphoreTake(handle->pull_sem, wait);
+        } else {
+            vTaskDelay(wait);
+        }
+        if (xTaskGetTickCount() >= deadline) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+    }
+    return copied > 0 ? ESP_OK : ESP_RTL_SDR_ERR_TIMEOUT;
+}
+
+esp_err_t esp_rtl_sdr_start_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_hz,
+                               uint32_t sample_rate_sps)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    esp_rtl_sdr_stream_config_t st;
+    esp_rtl_sdr_stream_config_default(&st);
+    st.preset = ESP_RTL_SDR_PRESET_CUSTOM_HZ;
+    st.frequency_hz = frequency_hz;
+    st.sample_rate_sps = sample_rate_sps;
+    /* Zeros filled from preferred inside start(). */
+    return esp_rtl_sdr_start(handle, &st);
 }

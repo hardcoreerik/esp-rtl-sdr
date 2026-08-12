@@ -89,6 +89,14 @@ void app_main(void)
     memset(&metrics, 0, sizeof(metrics));
     ESP_ERROR_CHECK(esp_rtl_sdr_get_metrics(sdr, &metrics));
 
+    /* Phase 1 desktop-shaped helpers (idle path). */
+    ESP_ERROR_CHECK(esp_rtl_sdr_set_sample_rate(sdr, ESP_RTL_SDR_RATE_960K));
+    ESP_ERROR_CHECK(esp_rtl_sdr_set_center_freq(sdr, 96100000));
+    uint32_t got_hz = 0, got_sps = 0;
+    ESP_ERROR_CHECK(esp_rtl_sdr_get_center_freq(sdr, &got_hz));
+    ESP_ERROR_CHECK(esp_rtl_sdr_get_sample_rate(sdr, &got_sps));
+    ESP_LOGI(TAG, "preferred freq=%u sps=%u", (unsigned)got_hz, (unsigned)got_sps);
+
     esp_rtl_sdr_stream_config_t stream;
     esp_rtl_sdr_stream_config_default(&stream);
     ESP_ERROR_CHECK(esp_rtl_sdr_stream_config_validate(&stream));
@@ -106,9 +114,13 @@ void app_main(void)
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "stream active; state=%s",
                  esp_rtl_sdr_state_to_name(esp_rtl_sdr_get_state(sdr)));
-        err = esp_rtl_sdr_retune_hz(sdr, 100100000);
-        ESP_LOGI(TAG, "retune_hz (queue-only) -> %s", esp_rtl_sdr_err_to_name(err));
-        vTaskDelay(pdMS_TO_TICKS(500));
+        err = esp_rtl_sdr_set_center_freq(sdr, 100100000);
+        ESP_LOGI(TAG, "set_center_freq -> %s", esp_rtl_sdr_err_to_name(err));
+        uint8_t iq[4096];
+        size_t n = 0;
+        err = esp_rtl_sdr_read(sdr, iq, sizeof(iq), 500, &n);
+        ESP_LOGI(TAG, "read -> %s bytes=%u", esp_rtl_sdr_err_to_name(err), (unsigned)n);
+        vTaskDelay(pdMS_TO_TICKS(200));
     } else if (err != ESP_RTL_SDR_ERR_NO_DEVICE) {
         /* Failed start must not leave half-open USB (FAULT or IDLE only). */
         esp_rtl_sdr_state_t st = esp_rtl_sdr_get_state(sdr);

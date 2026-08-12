@@ -9,11 +9,11 @@ Status values match `Project_truth.md`. Phase numbers match `Roadmap.md`.
 |---|---|---|---|---|
 | 1 | Open / close device | `rtlsdr_open` / `close` | `install` / `uninstall` | **Done** |
 | 2 | Async continuous IQ | `rtlsdr_read_async` | `start` + `EVT_IQ_BLOCK` | **Done** |
-| 3 | Sync IQ read | `rtlsdr_read_sync` | — | 1 |
-| 4 | Set center frequency | `rtlsdr_set_center_freq` | `start` freq + `retune_hz` | **Done** (alias API Phase 1) |
-| 5 | Get center frequency | `rtlsdr_get_center_freq` | via `get_metrics` | **Partial** → 1 |
-| 6 | Set sample rate | many rates | allowlist 960k/1024k/2048k | **Partial** → 2 expand |
-| 7 | Get sample rate | yes | via metrics / stream config | **Partial** → 1 |
+| 3 | Sync IQ read | `rtlsdr_read_sync` | `esp_rtl_sdr_read` | **Done** (0.5.0) |
+| 4 | Set center frequency | `rtlsdr_set_center_freq` | `set_center_freq` / `retune_hz` / `start` | **Done** |
+| 5 | Get center frequency | `rtlsdr_get_center_freq` | `get_center_freq` | **Done** |
+| 6 | Set sample rate | many rates | `set_sample_rate` allowlist only | **Partial** → 2 expand rates |
+| 7 | Get sample rate | yes | `get_sample_rate` | **Done** |
 | 8 | Tuner gain modes | manual / auto | fixed path | 3 |
 | 9 | Set/get tuner gain | dB steps / lists | — | 3 |
 | 10 | IF / secondary gains | various | — | 4 |

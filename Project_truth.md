@@ -4,9 +4,9 @@
 wins for *what is true right now*.
 
 Snapshot date: **2026-08-11**  
-Version: **0.5.0-dev** (stand-alone rename of the former OrcSDR component API)  
+Version: **0.5.0** (stand-alone rename + Phase 1 desktop-shaped API)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
-Intended remote (not required yet): `hardcoreerik/esp-rtl-sdr`
+Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**
 
 ---
 
@@ -47,14 +47,16 @@ It is **not**:
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0 |
 | Metrics (bytes, SPS, min/max/mean, drops) | **Implemented** | `get_metrics` |
 | Sample rates | **Implemented** | Allowlist: **960k, 1024k, 2048k** only |
-| Frequency | **Implemented** | CUSTOM_HZ + presets; 24 MHz–1766 MHz policy quantize 1 kHz |
+| Frequency | **Implemented** | CUSTOM_HZ + presets; `set/get_center_freq`; retune when streaming |
+| Sample rate set/get (allowlist) | **Implemented** | `set/get_sample_rate`; mid-stream rate change = BUSY (stop/start) |
+| Sync `read()` (blocking IQ pull) | **Implemented** | Pull ring fed by delivery task; works with or without event_cb |
+| `start_hz(freq, rate)` convenience | **Implemented** | Phase 1 |
 | Blog V4 identity filter `0bda:2838` | **Implemented** | Product/mfg string checks in profile |
 | Dual-core USB / delivery split | **Implemented** | Core0 USB, Core1 delivery path |
 | Fail-closed / reentrancy rules | **Implemented** | Documented in `docs/API.md` |
 | Tab5 Blog V4 RF (960k / 2.048M ADS-B) | **Provenance** | Measured under OrcSDR; tables originated there |
 | Waveshare P4 Blog V4 (same driver, unmodified) | **Provenance** | Second-board proof under OrcSDR Waveshare shell |
 | Re-verify from *this* stand-alone tree on hardware | **Planned** | Flash example or consumer app from `F:\Ai\ESP_RTL_SDR` |
-| Sync `read()` pull API | **Planned** | Roadmap Phase 1 |
 | Gain get/set / AGC modes | **Planned** | Roadmap Phase 3 — needs independent USB evidence |
 | ppm correction | **Planned** | Phase 2 (software LO offset first) |
 | Bias-T | **Planned** | CAP reserved until measured |
@@ -72,7 +74,7 @@ It is **not**:
 | Version | Meaning |
 |---|---|
 | OrcSDR component **0.4.1** | Historical name `rtl_sdr_v4_esp`; Blog V4 streaming + retune |
-| This repo **0.5.0-dev** | Rename to `esp_rtl_sdr`; same Blog V4 transfer behavior; new home + docs |
+| This repo **0.5.0** | Rename to `esp_rtl_sdr` + Phase 1 set/get freq/rate + sync `read` + `start_hz` |
 
 Breaking rename: consumers must switch includes and symbols. No shim in this
 repo (OrcSDR may add a shim later; **not done here**).

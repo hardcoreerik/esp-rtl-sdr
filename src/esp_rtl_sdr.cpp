@@ -20,6 +20,7 @@
 
 #include "esp_check.h"
 #include "esp_heap_caps.h"
+#include "esp_idf_version.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -1247,8 +1248,10 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
     if (h->owns_host) {
         usb_host_config_t hc{};
         hc.intr_flags = ESP_INTR_FLAG_LEVEL1;
-        /* Tab5 path: peripheral_map 0 selects default HS controller on P4 */
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+        /* IDF 5.4+: peripheral_map selects HS controller on multi-controller chips (P4). */
         hc.peripheral_map = 0;
+#endif
         esp_err_t ret = usb_host_install(&hc);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "usb_host_install: %s", esp_err_to_name(ret));

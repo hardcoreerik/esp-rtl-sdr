@@ -8,26 +8,49 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   host-policy:
     name: host policy unit tests
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build
 
-      - name: Configure & build host tests
+      - name: Configure & build (Linux)
+        if: runner.os == 'Linux'
         working-directory: tests/host
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror"
           cmake --build build
+          ctest --test-dir build --output-on-failure
+          ./build/esp_rtl_sdr_host_tests
 
-      - name: Run host policy tests
-        working-directory: tests/host/build
-        run: ./esp_rtl_sdr_host_tests
+      - name: Configure & build (Windows)
+        if: runner.os == 'Windows'
+        working-directory: tests/host
+        shell: pwsh
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build --config Debug
+          $exe = "build/Debug/esp_rtl_sdr_host_tests.exe"
+          if (-not (Test-Path $exe)) { $exe = "build/esp_rtl_sdr_host_tests.exe" }
+          if (-not (Test-Path $exe)) { $exe = "build/esp_rtl_sdr_host_tests" }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   truth-hygiene:
     name: truth / version hygiene
@@ -35,18 +58,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Version macros match component metadata
+      - name: Run hygiene script
         run: |
-          set -e
-          MAJOR=$(grep -E 'ESP_RTL_SDR_VERSION_MAJOR' include/esp_rtl_sdr.h | head -1 | grep -oE '[0-9]+')
-          MINOR=$(grep -E 'ESP_RTL_SDR_VERSION_MINOR' include/esp_rtl_sdr.h | head -1 | grep -oE '[0-9]+')
-          PATCH=$(grep -E 'ESP_RTL_SDR_VERSION_PATCH' include/esp_rtl_sdr.h | head -1 | grep -oE '[0-9]+')
-          VER="${MAJOR}.${MINOR}.${PATCH}"
-          echo "header version=$VER"
-          grep -q "version: \"${VER}\"" idf_component.yml
-          grep -q "\"version\": \"${VER}\"" library.json
-          grep -q "${VER}" README.md
-          test -f PROJECT_TRUTH.md
-          test -f docs/AI_DEVELOPMENT_DISCLOSURE.md
-          test -f SECURITY.md
-          echo "TRUTH_HYGIENE_OK"
+          chmod +x tests/scripts/check_truth_hygiene.sh
+          ./tests/scripts/check_truth_hygiene.sh
+
+  # Aggregate gate for branch protection convenience
+  ci-ok:
+    name: ci ok
+    needs: [host-policy, truth-hygiene]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "all required CI jobs passed"

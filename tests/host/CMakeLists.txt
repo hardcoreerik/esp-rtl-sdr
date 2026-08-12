@@ -15,5 +15,11 @@ target_include_directories(esp_rtl_sdr_host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
+if(MSVC)
+  target_compile_options(esp_rtl_sdr_host_tests PRIVATE /W4)
+else()
+  target_compile_options(esp_rtl_sdr_host_tests PRIVATE -Wall -Wextra)
+endif()
+
 enable_testing()
 add_test(NAME policy COMMAND esp_rtl_sdr_host_tests)

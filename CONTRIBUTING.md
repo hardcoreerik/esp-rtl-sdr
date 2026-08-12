@@ -30,7 +30,9 @@ Thanks for caring about a careful ESP32 RTL path. This project follows the same
 ## PR checklist
 
 - [ ] **Host unit tests pass** — `tests/scripts/run_host_tests.ps1` (or `.sh`)
+- [ ] **Truth hygiene** — `tests/scripts/check_truth_hygiene.sh` (or rely on CI)
 - [ ] Pure policy changes land in `src/esp_rtl_sdr_policy.cpp` when possible
+- [ ] New pure behavior has a host assertion when practical
 - [ ] Code builds as an ESP-IDF component (or you state you could not run IDF)
 - [ ] Public API changes update `include/esp_rtl_sdr.h` + `docs/API.md`
 - [ ] Version macros / CHANGELOG if releasing

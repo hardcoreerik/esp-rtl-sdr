@@ -32,8 +32,10 @@ powershell -ExecutionPolicy Bypass -File tests\scripts\run_host_tests.ps1
 ### Linux / macOS
 
 ```bash
-chmod +x tests/scripts/run_host_tests.sh
+chmod +x tests/scripts/run_host_tests.sh tests/scripts/check_truth_hygiene.sh
 ./tests/scripts/run_host_tests.sh
+./tests/scripts/run_host_tests.sh --with-hygiene   # tests + version/docs gate
+./tests/scripts/check_truth_hygiene.sh              # hygiene only
 ```
 
 ### Manual CMake
@@ -41,6 +43,7 @@ chmod +x tests/scripts/run_host_tests.sh
 ```bash
 cmake -S tests/host -B tests/host/build -DCMAKE_BUILD_TYPE=Debug
 cmake --build tests/host/build
+ctest --test-dir tests/host/build --output-on-failure
 ./tests/host/build/esp_rtl_sdr_host_tests   # or .exe on Windows
 ```
 
@@ -50,14 +53,16 @@ Expected: `RESULT passed=N failed=0` and exit code 0.
 
 | Area | Examples |
 |---|---|
-| Version | macros match packed `get_version()` |
-| Capabilities | STREAM, CONTINUOUS_RATE, NEED, HEALTH, PASSPORT on; BIAS off |
-| Rates | 960k/2048k/1536k ok; gap 500k rejected; quantize |
-| Recommended list | `get_supported_rates` non-empty; all in-window |
-| Frequency | normalize 1 kHz quant; presets; out-of-range reject |
-| Config validate | struct_size, xfer size/count, stream BAD_RATE/BAD_FREQ |
-| Names | state/err strings stable |
-| Passport opts | defaults |
+| Version | string `X.Y.Z`, packed bits, `VERSION_NUMBER` |
+| Capabilities | full “on” mask; GAIN/BIAS/DS/IQ_ACQUIRE **off** |
+| Rates | all named macros; window edges; gap reject; quantize idempotent |
+| Recommended list | non-empty; sorted; INVALID_SIZE partial fill |
+| Frequency | quantize 1 kHz; min/max edges; presets |
+| Config validate | xfer 512-multiple; count; timeout; core id; stream rate/freq/max_bytes |
+| Names | all states; key err codes; NOT_V4 alias |
+| Passport opts | defaults; MAX_ENTRIES |
+| USB identity / ppm | VID/PID; ppm range constants |
+| Error codes | distinct / alias checks |
 
 Source under test: `src/esp_rtl_sdr_policy.cpp` (no FreeRTOS/USB).  
 Driver body: `src/esp_rtl_sdr.cpp` (not host-linked).
@@ -68,9 +73,9 @@ Driver body: `src/esp_rtl_sdr.cpp` (not host-linked).
 
 Workflow: `.github/workflows/ci.yml`
 
-1. **host-policy** — build + run host tests on Ubuntu  
-2. **truth-hygiene** — header version matches `idf_component.yml` / `library.json`;
-   `PROJECT_TRUTH.md` and AI disclosure / SECURITY present  
+1. **host-policy** — Ubuntu + Windows matrix; `-Werror` on Linux; `ctest` + direct run  
+2. **truth-hygiene** — `tests/scripts/check_truth_hygiene.sh` (versions, required docs, CAP_GAIN/BIAS not enabled)  
+3. **ci-ok** — aggregate gate  
 
 A red CI means **do not claim green policy** in docs or releases.
 

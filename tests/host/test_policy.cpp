@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 #include "esp_rtl_sdr.h"
 
@@ -50,47 +51,110 @@ static int g_passed = 0;
         }                                                                      \
     } while (0)
 
+#define EXPECT_STREQ(a, b)                                                     \
+    do {                                                                       \
+        const char *_a = (a);                                                  \
+        const char *_b = (b);                                                  \
+        if (_a == nullptr || _b == nullptr || std::strcmp(_a, _b) != 0) {     \
+            std::printf("FAIL %s:%d: \"%s\" != \"%s\"\n", __FILE__, __LINE__,  \
+                        _a ? _a : "(null)", _b ? _b : "(null)");               \
+            g_failed++;                                                        \
+        } else {                                                               \
+            g_passed++;                                                        \
+        }                                                                      \
+    } while (0)
+
 static void test_version(void)
 {
-    EXPECT_EQ_U(esp_rtl_sdr_get_version_string()[0], '0');
+    const char *vs = esp_rtl_sdr_get_version_string();
+    EXPECT_TRUE(vs != nullptr);
+    EXPECT_TRUE(vs[0] != '\0');
+    EXPECT_STREQ(vs, ESP_RTL_SDR_VERSION_STRING);
+
+    char expect[32];
+    std::snprintf(expect, sizeof(expect), "%u.%u.%u", ESP_RTL_SDR_VERSION_MAJOR,
+                  ESP_RTL_SDR_VERSION_MINOR, ESP_RTL_SDR_VERSION_PATCH);
+    EXPECT_STREQ(vs, expect);
+
     const uint32_t packed = esp_rtl_sdr_get_version();
     EXPECT_EQ_U((packed >> 16) & 0xff, ESP_RTL_SDR_VERSION_MAJOR);
     EXPECT_EQ_U((packed >> 8) & 0xff, ESP_RTL_SDR_VERSION_MINOR);
     EXPECT_EQ_U(packed & 0xff, ESP_RTL_SDR_VERSION_PATCH);
+
+    EXPECT_EQ_U(ESP_RTL_SDR_VERSION_NUMBER,
+                ESP_RTL_SDR_VERSION_MAJOR * 10000u + ESP_RTL_SDR_VERSION_MINOR * 100u +
+                    ESP_RTL_SDR_VERSION_PATCH);
 }
 
 static void test_capabilities(void)
 {
     const uint32_t c = esp_rtl_sdr_get_capabilities();
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_STREAM) != 0);
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_CONTINUOUS_RATE) != 0);
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_NEED) != 0);
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_HEALTH) != 0);
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_PASSPORT) != 0);
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_BIAS_TEE) == 0); /* not implemented */
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_GAIN) == 0);     /* Phase 3 not measured */
+    const uint32_t need_on = ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
+                             ESP_RTL_SDR_CAP_METRICS | ESP_RTL_SDR_CAP_CUSTOM_HZ |
+                             ESP_RTL_SDR_CAP_HOTPLUG | ESP_RTL_SDR_CAP_FREQ_CORRECTION |
+                             ESP_RTL_SDR_CAP_MULTI_DEVICE | ESP_RTL_SDR_CAP_SYNC_READ |
+                             ESP_RTL_SDR_CAP_CONTINUOUS_RATE | ESP_RTL_SDR_CAP_NEED |
+                             ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT;
+    EXPECT_EQ_U(c & need_on, need_on);
+
+    /* Phase 3 / reserved — must stay off until measured */
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_GAIN) == 0);
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_DIRECT_SAMPLING) == 0);
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_IQ_ACQUIRE) == 0);
 }
 
 static void test_rate_windows(void)
 {
+    /* Named + continuous */
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_250K));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_256K));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_960K));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_1024K));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_1800K));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_2048K));
-    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1536000));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_2400K));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_2560K));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_3200K));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1536000));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1200000));
 
+    /* Window edges */
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MIN_HZ));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MAX_HZ));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MAX_HZ));
+
+    /* Rejects */
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(0));
-    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(500000));  /* gap */
-    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(100000));  /* below low */
-    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(4000000)); /* above max */
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MIN_HZ - 1));
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MAX_HZ + 1)); /* into gap */
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(500000));
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ - 1));
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MAX_HZ + 1));
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(4000000));
 
     uint32_t exact = 0;
     EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(2048000, &exact));
     EXPECT_TRUE(exact > 0);
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(exact));
 
+    /* Idempotent: quantize(exact) stays exact (or very close re-quantizable) */
+    uint32_t exact2 = 0;
+    EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(exact, &exact2));
+    EXPECT_EQ_U(exact2, exact);
+
+    /* Re-quantize request maps to same exact */
+    uint32_t again = 0;
+    EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(2048000, &again));
+    EXPECT_EQ_U(again, exact);
+
     EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(500000, &exact));
     EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(2048000, nullptr));
+    EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(0, &exact));
+
+    /* XTAL constant used by formula */
+    EXPECT_EQ_U(ESP_RTL_SDR_XTAL_HZ, 28800000u);
 }
 
 static void test_recommended_rates(void)
@@ -98,23 +162,41 @@ static void test_recommended_rates(void)
     size_t n = 0;
     EXPECT_EQ_I(esp_rtl_sdr_get_supported_rates(nullptr, 0, &n), ESP_OK);
     EXPECT_TRUE(n >= 8);
+    EXPECT_TRUE(n <= 16);
 
     uint32_t rates[16];
     size_t written = 0;
     EXPECT_EQ_I(esp_rtl_sdr_get_supported_rates(rates, n, &written), ESP_OK);
     EXPECT_EQ_U(written, n);
-    bool has_960 = false, has_2048 = false;
+
+    bool has_960 = false, has_2048 = false, has_2560 = false;
+    uint32_t prev = 0;
     for (size_t i = 0; i < written; ++i) {
         EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(rates[i]));
+        if (i > 0) {
+            EXPECT_TRUE(rates[i] >= prev); /* non-decreasing list */
+        }
+        prev = rates[i];
         if (rates[i] == ESP_RTL_SDR_RATE_960K) {
             has_960 = true;
         }
         if (rates[i] == ESP_RTL_SDR_RATE_2048K) {
             has_2048 = true;
         }
+        if (rates[i] == ESP_RTL_SDR_RATE_2560K) {
+            has_2560 = true;
+        }
     }
     EXPECT_TRUE(has_960);
     EXPECT_TRUE(has_2048);
+    EXPECT_TRUE(has_2560);
+
+    /* Truncated buffer: INVALID_SIZE but still reports total */
+    size_t total = 0;
+    uint32_t one = 0;
+    EXPECT_EQ_I(esp_rtl_sdr_get_supported_rates(&one, 1, &total), ESP_ERR_INVALID_SIZE);
+    EXPECT_EQ_U(total, n);
+    EXPECT_EQ_U(one, rates[0]);
 
     EXPECT_EQ_I(esp_rtl_sdr_get_supported_rates(nullptr, 1, &n), ESP_ERR_INVALID_ARG);
     EXPECT_EQ_I(esp_rtl_sdr_get_supported_rates(rates, 1, nullptr), ESP_ERR_INVALID_ARG);
@@ -125,9 +207,27 @@ static void test_frequency(void)
     uint32_t q = 0;
     EXPECT_TRUE(esp_rtl_sdr_normalize_frequency(96123456, &q));
     EXPECT_EQ_U(q, 96123000);
+
+    /* Already quantized */
+    EXPECT_TRUE(esp_rtl_sdr_normalize_frequency(100000000, &q));
+    EXPECT_EQ_U(q, 100000000);
+
+    /* Range edges */
+    EXPECT_TRUE(esp_rtl_sdr_normalize_frequency(ESP_RTL_SDR_FREQ_MIN_HZ, &q));
+    EXPECT_EQ_U(q, ESP_RTL_SDR_FREQ_MIN_HZ);
+    EXPECT_TRUE(esp_rtl_sdr_normalize_frequency(ESP_RTL_SDR_FREQ_MAX_HZ, &q));
+    EXPECT_EQ_U(q, ESP_RTL_SDR_FREQ_MAX_HZ);
+
+    EXPECT_TRUE(!esp_rtl_sdr_normalize_frequency(ESP_RTL_SDR_FREQ_MIN_HZ - 1, &q));
+    EXPECT_TRUE(!esp_rtl_sdr_normalize_frequency(ESP_RTL_SDR_FREQ_MAX_HZ + 1, &q));
     EXPECT_TRUE(!esp_rtl_sdr_normalize_frequency(1000, &q));
     EXPECT_TRUE(!esp_rtl_sdr_normalize_frequency(2000000000u, &q));
     EXPECT_TRUE(!esp_rtl_sdr_normalize_frequency(100000000, nullptr));
+
+    /* Quant step */
+    EXPECT_EQ_U(ESP_RTL_SDR_FREQ_QUANT_HZ, 1000u);
+    EXPECT_TRUE(esp_rtl_sdr_normalize_frequency(100000999, &q));
+    EXPECT_EQ_U(q, 100000000);
 
     uint32_t preset = 0;
     EXPECT_EQ_I(esp_rtl_sdr_preset_frequency_hz(ESP_RTL_SDR_PRESET_KZEL_96_1, &preset),
@@ -138,46 +238,126 @@ static void test_frequency(void)
     EXPECT_EQ_U(preset, ESP_RTL_SDR_PRESET_NOAA_HZ);
     EXPECT_EQ_I(esp_rtl_sdr_preset_frequency_hz(ESP_RTL_SDR_PRESET_CUSTOM_HZ, &preset),
                 ESP_ERR_INVALID_ARG);
+    EXPECT_EQ_I(esp_rtl_sdr_preset_frequency_hz(ESP_RTL_SDR_PRESET_KZEL_96_1, nullptr),
+                ESP_ERR_INVALID_ARG);
 }
 
 static void test_config_validate(void)
 {
     esp_rtl_sdr_config_t cfg;
     esp_rtl_sdr_config_default(&cfg);
+    EXPECT_EQ_U(cfg.struct_size, sizeof(cfg));
+    EXPECT_EQ_U(cfg.transfer_bytes, ESP_RTL_SDR_DEFAULT_XFER_BYTES);
+    EXPECT_EQ_U(cfg.transfer_count, ESP_RTL_SDR_DEFAULT_XFER_COUNT);
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+
     cfg.struct_size = 1;
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
     esp_rtl_sdr_config_default(&cfg);
     cfg.transfer_bytes = 1000; /* not multiple of 512 */
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.transfer_bytes = 511;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.transfer_bytes = ESP_RTL_SDR_MIN_XFER_BYTES;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+
     esp_rtl_sdr_config_default(&cfg);
     cfg.transfer_count = 1;
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.transfer_count = ESP_RTL_SDR_MAX_XFER_COUNT;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.transfer_count = ESP_RTL_SDR_MAX_XFER_COUNT + 1;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.control_timeout_ms = 0;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.control_timeout_ms = ESP_RTL_SDR_MAX_TIMEOUT_MS + 1;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.usb_task_core_id = 2;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.usb_task_core_id = 0;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+    cfg.usb_task_core_id = 1;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+    cfg.usb_task_core_id = 0xFF;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(nullptr), ESP_ERR_INVALID_ARG);
+    esp_rtl_sdr_config_default(nullptr); /* no crash */
 
     esp_rtl_sdr_stream_config_t st;
     esp_rtl_sdr_stream_config_default(&st);
+    EXPECT_EQ_U(st.struct_size, sizeof(st));
+    EXPECT_EQ_U(st.sample_rate_sps, ESP_RTL_SDR_RATE_960K);
     EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(&st), ESP_OK);
+
     st.sample_rate_sps = 12345;
     EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(&st), ESP_RTL_SDR_ERR_BAD_RATE);
+
     st.sample_rate_sps = 0; /* allowed — filled at start */
     EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(&st), ESP_OK);
+
     st.preset = ESP_RTL_SDR_PRESET_CUSTOM_HZ;
     st.frequency_hz = 1000;
     EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(&st), ESP_RTL_SDR_ERR_BAD_FREQ);
+
     st.frequency_hz = 100000000;
+    st.sample_rate_sps = ESP_RTL_SDR_RATE_2048K;
+    EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(&st), ESP_OK);
+
     st.max_bytes = 3; /* odd */
     EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(&st), ESP_ERR_INVALID_ARG);
+
+    st.max_bytes = 2;
+    st.timeout_ms = ESP_RTL_SDR_MAX_TIMEOUT_MS + 1;
+    EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(&st), ESP_ERR_INVALID_ARG);
+
+    EXPECT_EQ_I(esp_rtl_sdr_stream_config_validate(nullptr), ESP_ERR_INVALID_ARG);
+    esp_rtl_sdr_stream_config_default(nullptr);
 }
 
 static void test_names(void)
 {
-    EXPECT_TRUE(std::strcmp(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_IDLE), "IDLE") == 0);
-    EXPECT_TRUE(std::strcmp(esp_rtl_sdr_err_to_name(ESP_OK), "ESP_OK") == 0);
-    EXPECT_TRUE(std::strcmp(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_BAD_RATE),
-                            "ESP_RTL_SDR_ERR_BAD_RATE") == 0);
-    EXPECT_TRUE(std::strcmp(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_NOT_V4),
-                            "ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE") == 0);
+    EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_UNINSTALLED), "UNINSTALLED");
+    EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_IDLE), "IDLE");
+    EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_STREAMING), "STREAMING");
+    EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_STOPPING), "STOPPING");
+    EXPECT_STREQ(esp_rtl_sdr_state_to_name(ESP_RTL_SDR_STATE_FAULT), "FAULT");
+    EXPECT_STREQ(esp_rtl_sdr_state_to_name(static_cast<esp_rtl_sdr_state_t>(99)), "UNKNOWN");
+
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_OK), "ESP_OK");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_ERR_INVALID_ARG), "ESP_ERR_INVALID_ARG");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_NO_DEVICE), "ESP_RTL_SDR_ERR_NO_DEVICE");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_BAD_RATE), "ESP_RTL_SDR_ERR_BAD_RATE");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_BAD_FREQ), "ESP_RTL_SDR_ERR_BAD_FREQ");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_BUSY), "ESP_RTL_SDR_ERR_BUSY");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_UNSUPPORTED),
+                 "ESP_RTL_SDR_ERR_UNSUPPORTED");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_BAD_DEVICE),
+                 "ESP_RTL_SDR_ERR_BAD_DEVICE");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_NOT_V4),
+                 "ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE");
+    EXPECT_STREQ(esp_rtl_sdr_err_to_name(ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE),
+                 "ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE");
+
+    /* Never null */
+    EXPECT_TRUE(esp_rtl_sdr_err_to_name(static_cast<esp_err_t>(-99999)) != nullptr);
 }
 
 static void test_passport_opts(void)
@@ -188,7 +368,30 @@ static void test_passport_opts(void)
     EXPECT_EQ_U(o.dwell_ms, ESP_RTL_SDR_PASSPORT_DEFAULT_DWELL_MS);
     EXPECT_EQ_U(o.min_efficiency_pct, 95u);
     EXPECT_TRUE(o.recommended_only);
+    EXPECT_EQ_U(o.frequency_hz, 0u);
+    EXPECT_TRUE(ESP_RTL_SDR_PASSPORT_MAX_ENTRIES >= 8);
     esp_rtl_sdr_passport_opts_default(nullptr); /* no crash */
+}
+
+static void test_usb_identity_constants(void)
+{
+    EXPECT_EQ_U(ESP_RTL_SDR_USB_VID, 0x0BDAu);
+    EXPECT_EQ_U(ESP_RTL_SDR_USB_PID, 0x2838u);
+    EXPECT_TRUE(ESP_RTL_SDR_PPM_MIN < 0);
+    EXPECT_EQ_I(ESP_RTL_SDR_PPM_MIN, -200);
+    EXPECT_EQ_I(ESP_RTL_SDR_PPM_MAX, 200);
+    EXPECT_EQ_U(ESP_RTL_SDR_DEFAULT_XFER_BYTES % 512u, 0u);
+    EXPECT_TRUE(ESP_RTL_SDR_MIN_XFER_COUNT >= 2);
+    EXPECT_TRUE(ESP_RTL_SDR_MAX_XFER_COUNT >= ESP_RTL_SDR_MIN_XFER_COUNT);
+}
+
+static void test_error_base_unique(void)
+{
+    /* Distinct component codes (spot-check) */
+    EXPECT_TRUE(ESP_RTL_SDR_ERR_NO_DEVICE != ESP_RTL_SDR_ERR_BUSY);
+    EXPECT_TRUE(ESP_RTL_SDR_ERR_BAD_RATE != ESP_RTL_SDR_ERR_BAD_FREQ);
+    EXPECT_TRUE(ESP_RTL_SDR_ERR_UNSUPPORTED != ESP_RTL_SDR_ERR_STALE_HANDLE);
+    EXPECT_EQ_I(ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE, ESP_RTL_SDR_ERR_NOT_V4);
 }
 
 int main(void)
@@ -202,6 +405,8 @@ int main(void)
     test_config_validate();
     test_names();
     test_passport_opts();
+    test_usb_identity_constants();
+    test_error_base_unique();
     std::printf("RESULT passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

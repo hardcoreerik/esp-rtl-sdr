@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Tests / CI
+
+- Expanded host policy suite (window edges, quantize idempotence, config matrix, names, CAP off)
+- CI: Ubuntu + Windows matrix, `-Werror` on Linux, `ctest`, concurrency cancel
+- `tests/scripts/check_truth_hygiene.sh` (version + required docs + CAP_GAIN/BIAS guard)
+
 ### Docs
 
 - `docs/LAB_HOBBYIST.md` — honest hobbyist lab capabilities + TinySA Ultra how-to

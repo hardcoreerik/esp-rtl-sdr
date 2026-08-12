@@ -1,0 +1,19 @@
+## esp_rtl_sdr — ESP Component Registry metadata
+version: "0.5.0-dev"
+description: >
+  Clean-room ESP-IDF USB Host client for RTL2832U-class SDR dongles.
+  Blog V4 (R828D) profile first; profile-based expansion for other tuners.
+  Not a librtlsdr port.
+url: https://github.com/hardcoreerik/esp-rtl-sdr
+issues: https://github.com/hardcoreerik/esp-rtl-sdr/issues
+repository: https://github.com/hardcoreerik/esp-rtl-sdr.git
+license: "AGPL-3.0-only"
+tags:
+  - sdr
+  - rtl-sdr
+  - rtl2832u
+  - usb-host
+  - esp32-p4
+dependencies:
+  idf:
+    version: ">=5.3.0"

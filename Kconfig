@@ -1,0 +1,25 @@
+menu "ESP_RTL_SDR-ESP"
+
+    config ESP_RTL_SDR_ESP_ENABLED
+        bool "Enable ESP_RTL_SDR-ESP driver"
+        default y
+        help
+            USB Host client for official RTL-SDR Blog V4.
+
+    config ESP_RTL_SDR_ESP_DEFAULT_TRANSFER_BYTES
+        int "Default bulk transfer size (bytes)"
+        default 16384
+        range 512 262144
+        help
+            Gate 2 multi-URB default is 16384. Tab5 may override to 32768.
+
+    config ESP_RTL_SDR_ESP_DEFAULT_TRANSFER_COUNT
+        int "Default number of bulk buffers"
+        default 6
+        range 2 8
+
+    config ESP_RTL_SDR_ESP_LOG_VERBOSE
+        bool "Verbose driver logs"
+        default n
+
+endmenu

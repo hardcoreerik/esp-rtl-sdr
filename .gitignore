@@ -1,0 +1,10 @@
+.pio/
+build/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+managed_components/
+.vscode/
+.idea/
+*.user
+.DS_Store

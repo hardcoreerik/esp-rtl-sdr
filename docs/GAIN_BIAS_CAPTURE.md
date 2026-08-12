@@ -22,13 +22,14 @@ Then implement only from those captures in this repo (clean-room).
 | Item | Role |
 |---|---|
 | RTL-SDR Blog V4 | DUT |
-| Windows/Linux PC | Capture host with USB analyzer or `usbmon` / Wireshark USBPcap |
+| Windows/Linux PC | Capture host — Wireshark + USBPcap / `usbmon` |
 | ESP32-P4 optional | Later validate ESP path |
-| Baofeng UV-5R / Flipper | RF stimulus for clip vs weak after gain works |
-| Multimeter (bias-T) | Confirm SMA bias voltage when enabled |
+| **TinySA Ultra** | Relative RF / weak generator — **not** a substitute for USB capture |
+| Baofeng UV-5R / Flipper / Heltec | RF stimulus (distance, low power) |
+| Multimeter | Bias-T **DC** when enabled |
 
-See [TESTING.md](TESTING.md).
-
+**Hobbyist desk is enough** for USB + multimeter + relative RF. See honest limits and
+TinySA step-by-step: **[LAB_HOBBYIST.md](LAB_HOBBYIST.md)**.
 ---
 
 ## Capture plan
@@ -53,7 +54,9 @@ See [TESTING.md](TESTING.md).
    init/tune tables (do not invent registers from memory).
 5. Cross-check R820T2 public register description for *names* only after capture
    shows which registers change ([SILICON.md](SILICON.md)).
-
+6. **Optional RF corroboration (TinySA Ultra):** fixed weak generator tone (or stable
+   broadcast) while stepping gain; record only **relative** louder/quieter or ΔdB —
+   not a cal table. Procedure in [LAB_HOBBYIST.md](LAB_HOBBYIST.md).
 ### C. Evidence package (check into `docs/captures/` or private vault + hash here)
 
 | File | Content |

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Docs
+
+- `docs/LAB_HOBBYIST.md` — honest hobbyist lab capabilities + TinySA Ultra how-to
+- TESTING / GAIN_BIAS / PROJECT_TRUTH cross-links for desk-lab posture
+
 ## 0.7.1 (2026-08-12)
 
 ### Added

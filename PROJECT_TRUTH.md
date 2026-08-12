@@ -104,14 +104,19 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 
 ## Test lab (available gear)
 
-See **`docs/TESTING.md`**.
+See **`docs/TESTING.md`** and honest hobbyist guide **`docs/LAB_HOBBYIST.md`**.
 
 | Asset | Use |
 |---|---|
 | Blog V4 on P4 hosts | Primary IQ path |
 | 2× Heltec V4 | Prior LoRa decode work; controlled digital RF |
-| Baofeng UV-5R | FM / carrier stimulus (legal TX only) |
+| Baofeng UV-5R | FM / carrier stimulus (legal TX only; power risk) |
 | Flipper Zero | Test tones / interferer / protocol toys |
+| **TinySA Ultra** | Spectrum + weak generator; **relative** RF only |
+| PC USBPcap/Wireshark | Phase 3 USB capture (hobbyist) |
+
+**Lab posture:** hobbyist desk, not a cal chamber. Enough for USB + multimeter +
+relative RF if claims stay labeled.
 
 ---
 

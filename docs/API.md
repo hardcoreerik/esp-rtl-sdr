@@ -227,7 +227,7 @@ Preserve these implemented invariants:
 - [x] `CAP_STREAM | CAP_RETUNE | CAP_FREQ_CORRECTION | CAP_MULTI_DEVICE | CAP_SYNC_READ` match working code paths
 - [x] Reentrancy guard rejects lifecycle calls from callbacks
 
-Hardware soak and recovery acceptance remain tracked in `Project_truth.md`.
+Hardware soak and recovery acceptance remain tracked in `PROJECT_TRUTH.md`.
 
 ---
 

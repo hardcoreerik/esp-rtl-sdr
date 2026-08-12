@@ -1,12 +1,34 @@
-# Project truth — esp_rtl_sdr
+# PROJECT_TRUTH — esp_rtl_sdr
 
 **Authoritative current-state document.** When other docs disagree, this file
 wins for *what is true right now*.
 
+Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
+claims need evidence labels; oversell is a bug; retract rather than spin.
+
 Snapshot date: **2026-08-12**  
 Version: **0.7.0** (continuous rates + need / health / passport)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
-Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**
+Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
+Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
+[docs/DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md) ·
+[SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## Development honesty (read this first)
+
+| Fact | Truth |
+|---|---|
+| Human maintainer | Erik / hardcoreerik — product direction, lab, release authority |
+| How code is written | **AI-assisted** (Claude, Codex, Grok Build); human owns outcomes |
+| Professional audit team | **No** — single maintainer + multi-AI review, not a firm |
+| librtlsdr port? | **No** — clean-room measured Blog V4 path; different API |
+| Production maturity | **0.x early** — API can still grow; fail-closed is a goal, not a warranty |
+| Formal security audit | **None** |
+| Stand-alone re-soak from this tree on P4 | **Still open** (Tab5/Waveshare = Provenance under OrcSDR) |
+
+If marketing copy contradicts this table, open a `truth:` issue.
 
 ---
 
@@ -110,3 +132,27 @@ unless a task explicitly says otherwise.
 | ESP32-P4 Tab5 | HS | Blog V4 | **Provenance** |
 | ESP32-P4 Waveshare | HS | Blog V4 | **Provenance** |
 | ESP32-S3/S2 | FS | — | **Not claimed** |
+
+---
+
+## How to use this document
+
+1. Update the snapshot date when truth changes.
+2. Move Planned → Implemented only when source lands.
+3. Move Implemented → Hardware-verified only when *this* tree is exercised on
+   named hardware with a log reference.
+4. `Roadmap.md` tracks direction; this file tracks what is true **now**.
+5. Follow [docs/DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md).
+6. If a release oversold something, **retract in CHANGELOG** — TheOrc-style.
+
+## Related truth docs
+
+| Doc | Role |
+|---|---|
+| [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) | Who writes code; trust rituals |
+| [docs/CLEAN_ROOM.md](docs/CLEAN_ROOM.md) | No librtlsdr source paste |
+| [docs/SILICON.md](docs/SILICON.md) | DS / cousins; what we refuse |
+| [docs/VISION.md](docs/VISION.md) | Direction (not all Implemented) |
+| [docs/TESTING.md](docs/TESTING.md) | Lab gear disclosure |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | PR rules |

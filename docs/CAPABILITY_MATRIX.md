@@ -1,6 +1,6 @@
 # Capability matrix — esp_rtl_sdr vs desktop librtlsdr-class drivers
 
-Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `Project_truth.md`.
+Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.md`.
 
 | # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.7.0 | Phase |
 |---|---|---|---|---|

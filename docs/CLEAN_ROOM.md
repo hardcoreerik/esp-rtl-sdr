@@ -31,8 +31,10 @@ tables as the first profile; it does not re-license third-party driver code.
 2. Record procedure, identity (VID/PID/serial/strings), and hashes.
 3. Implement only from that evidence.
 4. Validate on ESP32-P4 (or claimed host).
-5. Update `Project_truth.md` and `docs/CAPABILITY_MATRIX.md`.
+5. Update `PROJECT_TRUTH.md` and `docs/CAPABILITY_MATRIX.md` with evidence labels.
 6. Enable capability bits only when the path works.
+7. Do not treat AI-generated “remembered” register dumps as evidence — capture or public DS only
+   ([AI_DEVELOPMENT_DISCLOSURE.md](AI_DEVELOPMENT_DISCLOSURE.md)).
 
 ## Expected STALLs
 

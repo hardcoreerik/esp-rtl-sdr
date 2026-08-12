@@ -1,6 +1,6 @@
 # Roadmap — esp_rtl_sdr
 
-Evidence labels match `Project_truth.md`. Vision: `docs/VISION.md`.
+Evidence labels match `PROJECT_TRUTH.md`. Vision: `docs/VISION.md`.
 
 ---
 
@@ -95,7 +95,7 @@ Open: formal P4 soak logs for non-provenance rates.
 
 | Doc | Role |
 |---|---|
-| `Project_truth.md` | What is true **now** |
+| `PROJECT_TRUTH.md` | What is true **now** |
 | `Roadmap.md` | How we get there |
 | `docs/VISION.md` | Nervous-system product model |
 | `docs/SILICON.md` | DS / cousins / authority |

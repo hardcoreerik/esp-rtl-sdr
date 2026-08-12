@@ -32,7 +32,7 @@ tuner policy for one dongle class. The core host client stays shared.
 3. Note expected STALLs (if any) with indices.
 4. Implement profile module; wire into accept + start paths.
 5. Soak on ESP32-P4 HS host.
-6. Document in this file + `Project_truth.md`.
+6. Document in this file + `PROJECT_TRUTH.md`.
 
 ## Fail closed
 

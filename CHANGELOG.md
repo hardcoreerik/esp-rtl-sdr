@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added (open-source honesty / TheOrc-aligned)
+
+- `docs/AI_DEVELOPMENT_DISCLOSURE.md` — human-directed, AI-assisted; trust rituals
+- `docs/DOCUMENTATION_STANDARD.md` — accuracy-first docs (no planned-as-done)
+- `SECURITY.md` — vulnerability reporting
+- `CONTRIBUTING.md` — clean-room + truth PR checklist
+- `docs/README.md` — docs index
+- `PROJECT_TRUTH.md` rename (was `Project_truth.md`) + development honesty table
+- README credits + “where we are” honesty block
+
 ## 0.7.0 (2026-08-12)
 
 ### Added

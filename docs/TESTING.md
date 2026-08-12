@@ -49,6 +49,6 @@ we can validate LO, bandwidth, demod, and regressions without guessing.
 
 ## Related
 
-- `Project_truth.md` — host matrix
+- `PROJECT_TRUTH.md` — host matrix
 - `docs/VISION.md` — passport / health product goals
 - `docs/RATES.md` — rate windows

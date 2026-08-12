@@ -168,9 +168,12 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 /**
  * Hardware sample-rate windows (RTL2832U resampler + ecosystem practice).
  * Outside these, is_rate_supported / quantize reject.
- * Low band ~225–300 kHz; high band ~900 kHz–3.2 MHz. Gap is unstable.
+ *
+ * Low band: **> 225 kHz … 300 kHz** (desktop librtlsdr rejects rate <= 225000;
+ * at exactly 225000 the 28-bit ratio field masks to 0 and cannot be programmed).
+ * High band: 900 kHz … 3.2 MHz. Gap 300001–899999 is unstable / rejected.
  */
-#define ESP_RTL_SDR_RATE_LOW_MIN_HZ    225000u
+#define ESP_RTL_SDR_RATE_LOW_MIN_HZ    225001u
 #define ESP_RTL_SDR_RATE_LOW_MAX_HZ    300000u
 #define ESP_RTL_SDR_RATE_HIGH_MIN_HZ   900000u
 #define ESP_RTL_SDR_RATE_HIGH_MAX_HZ   3200000u

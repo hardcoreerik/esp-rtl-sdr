@@ -13,7 +13,7 @@ Programming: RTL2832U resampler
 
 | Window | Hz | Notes |
 |---|---|---|
-| Low | 225000 – 300000 | Historical RTL low band |
+| Low | **225001** – 300000 | Historical RTL low band; **225000 rejected** (ratio mask + desktop) |
 | High | 900000 – 3200000 | Primary SDR band |
 | Gap | 300001 – 899999 | **Rejected** (unstable ecosystem-wide) |
 | Vendor stable claim | ≤ 2560000 | Blog V4 datasheet “stable” |

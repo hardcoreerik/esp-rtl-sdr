@@ -110,10 +110,12 @@ bool esp_rtl_sdr_quantize_sample_rate(uint32_t requested_sps, uint32_t *out_exac
     if (!rate_in_hardware_window(requested_sps)) {
         return false;
     }
+    /* 28-bit resampler field (low 2 bits clear) — same mask family as ecosystem drivers. */
     uint32_t ratio =
         static_cast<uint32_t>((static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / requested_sps);
     ratio &= 0x0ffffffcu;
     if (ratio == 0) {
+        /* e.g. request 225000 → raw ratio 0x20000000 → mask zeroes the field */
         return false;
     }
     const uint32_t exact = static_cast<uint32_t>(
@@ -121,6 +123,7 @@ bool esp_rtl_sdr_quantize_sample_rate(uint32_t requested_sps, uint32_t *out_exac
     if (exact == 0) {
         return false;
     }
+    /* Exact programmed rate may differ from request (integer ratio); still accepted. */
     *out_exact_sps = exact;
     return true;
 }

@@ -119,16 +119,18 @@ static void test_rate_windows(void)
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1536000));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1200000));
 
-    /* Window edges */
+    /* Window edges (low min is 225001 — not 225000; ratio field / desktop parity) */
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MIN_HZ));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MAX_HZ));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MAX_HZ));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(225001));
 
     /* Rejects */
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(0));
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(225000)); /* desktop + ratio mask */
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MIN_HZ - 1));
-    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MAX_HZ + 1)); /* into gap */
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MAX_HZ + 1)); /* gap */
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(500000));
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ - 1));
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MAX_HZ + 1));

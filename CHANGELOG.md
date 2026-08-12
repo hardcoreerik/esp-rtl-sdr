@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- CI host tests: low-band min is **225001 Hz** (not 225000). Exact 225 kHz masks the
+  28-bit resampler ratio to 0 and matches desktop librtlsdr rejection of `rate <= 225000`.
+
 ### Tests / CI
 
 - Expanded host policy suite (window edges, quantize idempotence, config matrix, names, CAP off)

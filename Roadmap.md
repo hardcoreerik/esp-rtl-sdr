@@ -38,21 +38,22 @@ A stand-alone ESP-IDF component that:
 - [x] Blocking `read` from pull ring (sync-read equivalent)
 - [x] `start_hz(frequency_hz, sample_rate_sps)` convenience
 - [x] Capability matrix updated
-- [ ] Optional clearer device error name for non-V4 (`ERR_UNSUPPORTED_DEVICE`) — Phase 2 polish
+- [x] Clearer device error alias `ERR_UNSUPPORTED_DEVICE` (Phase 2 polish)
 - [ ] Hardware re-run of *this* tree on Tab5/Waveshare — still open
 
 **Exit:** API shape met; hardware re-soak tracked in Project_truth.
 
 ---
 
-## Phase 2 — Rates, ppm, multi-device
+## Phase 2 — Rates, ppm, multi-device (**complete in 0.6.0**)
 
-- [ ] Measure and allowlist additional SPS only if ≥95% effective on P4 HS
-- [ ] `set_freq_correction_ppm` (software LO offset first)
-- [ ] Enumerate / open by index or serial when multiple dongles present
-- [ ] Hardware log attached for each new rate
+- [x] Expand allowlist with documented evidence (`docs/RATES.md`)
+- [x] `set_freq_correction` / `get_freq_correction` (software LO offset)
+- [x] Enumerate / open by index or serial (`refresh_device_list`, `select_*`)
+- [ ] Per-rate P4 continuous soak log for non-provenance rates (→ Phase 5)
+- [ ] Hardware re-soak of this tree for ppm + multi-device paths
 
-**Exit:** Documented rate matrix; ppm usable for known crystal offset.
+**Exit:** Documented rate matrix; ppm usable for known crystal offset; multi-device API live.
 
 ---
 
@@ -84,6 +85,7 @@ A stand-alone ESP-IDF component that:
 
 - [ ] Unplug/replug recover to READY without reboot
 - [ ] Five-minute soak at 960k and 2.048M with drop/SPS report checked in or linked
+- [ ] Optional soak logs for formula rates (250k–3200k subset)
 - [ ] Optional IQ acquire mode (`CAP_IQ_ACQUIRE`) if apps need zero-copy hold
 - [ ] CI: build component + example on IDF 5.3+ (when available)
 
@@ -109,4 +111,5 @@ A stand-alone ESP-IDF component that:
 | `Project_truth.md` | What is true **now** |
 | `Roadmap.md` | How we get to parity |
 | `docs/CAPABILITY_MATRIX.md` | Row-by-row desktop comparison |
+| `docs/RATES.md` | Sample-rate allowlist + evidence |
 | `CHANGELOG.md` | Released deltas |

@@ -3,8 +3,8 @@
 **Authoritative current-state document.** When other docs disagree, this file
 wins for *what is true right now*.
 
-Snapshot date: **2026-08-11**  
-Version: **0.5.0** (stand-alone rename + Phase 1 desktop-shaped API)  
+Snapshot date: **2026-08-12**  
+Version: **0.6.0** (Phase 2: rates + ppm + multi-device)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**
 
@@ -20,6 +20,7 @@ Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**
 | **Planned** | Accepted roadmap work, not implemented |
 | **Deferred** | Intentionally out of current milestone |
 | **Provenance** | Measured under another project; tables copied here; re-soak open |
+| **Formula** | RTL ratio math programmed; continuous P4 soak not claimed |
 
 ---
 
@@ -46,11 +47,14 @@ It is **not**:
 | Continuous bulk IQ stream (multi-URB) | **Implemented** | Blog V4 profile tables |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0 |
 | Metrics (bytes, SPS, min/max/mean, drops) | **Implemented** | `get_metrics` |
-| Sample rates | **Implemented** | Allowlist: **960k, 1024k, 2048k** only |
+| Sample rates | **Implemented** | Allowlist: 250k, 256k, 960k, 1024k, 1800k, 2048k, 2400k, 3200k — see `docs/RATES.md` |
+| P4 continuous rate evidence | **Provenance** | 960k + 2048k under OrcSDR; others **Formula** |
 | Frequency | **Implemented** | CUSTOM_HZ + presets; `set/get_center_freq`; retune when streaming |
-| Sample rate set/get (allowlist) | **Implemented** | `set/get_sample_rate`; mid-stream rate change = BUSY (stop/start) |
-| Sync `read()` (blocking IQ pull) | **Implemented** | Pull ring fed by delivery task; works with or without event_cb |
+| Sample rate set/get (allowlist) | **Implemented** | `set/get_sample_rate`; mid-stream rate change = BUSY |
+| Sync `read()` (blocking IQ pull) | **Implemented** | Pull ring; `CAP_SYNC_READ` |
 | `start_hz(freq, rate)` convenience | **Implemented** | Phase 1 |
+| ppm correction (software LO offset) | **Implemented** | `set/get_freq_correction`; ±200 ppm; applied at tune |
+| Multi-device enumerate / select | **Implemented** | index + serial; max 8 candidates |
 | Blog V4 identity filter `0bda:2838` | **Implemented** | Product/mfg string checks in profile |
 | Dual-core USB / delivery split | **Implemented** | Core0 USB, Core1 delivery path |
 | Fail-closed / reentrancy rules | **Implemented** | Documented in `docs/API.md` |
@@ -58,13 +62,12 @@ It is **not**:
 | Waveshare P4 Blog V4 (same driver, unmodified) | **Provenance** | Second-board proof under OrcSDR Waveshare shell |
 | Re-verify from *this* stand-alone tree on hardware | **Planned** | Flash example or consumer app from `F:\Ai\ESP_RTL_SDR` |
 | Gain get/set / AGC modes | **Planned** | Roadmap Phase 3 — needs independent USB evidence |
-| ppm correction | **Planned** | Phase 2 (software LO offset first) |
 | Bias-T | **Planned** | CAP reserved until measured |
 | Direct sampling / HF | **Deferred** | CAP reserved; not claimed |
-| Arbitrary sample rates | **Deferred** | Only measured allowlist |
+| Arbitrary sample rates | **Deferred** | Only allowlist |
 | R820T2 / other tuner profiles | **Planned** | Architecture ready; tables not present |
 | Hot-plug recovery without reboot | **Planned** | Events exist; full recovery open |
-| Five-minute formal soak artifact in-repo | **Planned** | |
+| Five-minute formal soak artifact in-repo | **Planned** | Phase 5 |
 | librtlsdr ABI compatibility | **Deferred** | Not a goal; API is ESP-native |
 
 ---
@@ -75,9 +78,10 @@ It is **not**:
 |---|---|
 | OrcSDR component **0.4.1** | Historical name `rtl_sdr_v4_esp`; Blog V4 streaming + retune |
 | This repo **0.5.0** | Rename to `esp_rtl_sdr` + Phase 1 set/get freq/rate + sync `read` + `start_hz` |
+| This repo **0.6.0** | Phase 2: expanded rates + ppm + multi-device select |
 
-Breaking rename: consumers must switch includes and symbols. No shim in this
-repo (OrcSDR may add a shim later; **not done here**).
+Breaking rename (0.5.0): consumers must switch includes and symbols. No shim in
+this repo (OrcSDR may add a shim later; **not done here**).
 
 ---
 

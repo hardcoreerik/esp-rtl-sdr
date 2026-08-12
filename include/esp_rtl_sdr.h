@@ -84,7 +84,7 @@ extern "C" {
 
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
-#define ESP_RTL_SDR_VERSION_MINOR 5
+#define ESP_RTL_SDR_VERSION_MINOR 6
 #define ESP_RTL_SDR_VERSION_PATCH 0
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
@@ -108,7 +108,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.4.1". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.6.0". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */
@@ -119,7 +119,10 @@ const char *esp_rtl_sdr_get_version_string(void);
 #define ESP_RTL_SDR_ERR_BASE           0x12A00
 
 #define ESP_RTL_SDR_ERR_NO_DEVICE      (ESP_RTL_SDR_ERR_BASE + 1)
+/** Device present but not an accepted profile (legacy name NOT_V4). */
 #define ESP_RTL_SDR_ERR_NOT_V4         (ESP_RTL_SDR_ERR_BASE + 2)
+/** Preferred alias for NOT_V4 — unknown / unsupported dongle. */
+#define ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE ESP_RTL_SDR_ERR_NOT_V4
 #define ESP_RTL_SDR_ERR_BUSY           (ESP_RTL_SDR_ERR_BASE + 3)
 #define ESP_RTL_SDR_ERR_NOT_STREAMING  (ESP_RTL_SDR_ERR_BASE + 4)
 #define ESP_RTL_SDR_ERR_BAD_RATE       (ESP_RTL_SDR_ERR_BASE + 5)
@@ -134,6 +137,8 @@ const char *esp_rtl_sdr_get_version_string(void);
 #define ESP_RTL_SDR_ERR_REENTRANT      (ESP_RTL_SDR_ERR_BASE + 13)
 /** Device attached but init/claim not complete. */
 #define ESP_RTL_SDR_ERR_NOT_CLAIMED    (ESP_RTL_SDR_ERR_BASE + 14)
+/** Device index or serial selection out of range / not found. */
+#define ESP_RTL_SDR_ERR_BAD_DEVICE     (ESP_RTL_SDR_ERR_BASE + 15)
 
 /** Convert esp_err_t (including component codes) to a stable string. Never NULL. */
 const char *esp_rtl_sdr_err_to_name(esp_err_t err);
@@ -146,11 +151,25 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 #define ESP_RTL_SDR_USB_VID            0x0BDA
 #define ESP_RTL_SDR_USB_PID            0x2838
 
-/** Measured sustainable sample rate on Tab5 continuous path (Hz). */
-#define ESP_RTL_SDR_RATE_960K          960000u
-/** Allowlisted higher rates for future HS Ethernet apps (may require eth). */
+/**
+ * Allowlisted sample rates (Hz). Programming uses the RTL2832 ratio formula.
+ * See docs/RATES.md for evidence: which rates are P4-soaked vs formula-only.
+ */
+#define ESP_RTL_SDR_RATE_250K          250000u
+#define ESP_RTL_SDR_RATE_256K          256000u
+#define ESP_RTL_SDR_RATE_960K          960000u   /**< P4 continuous path (provenance) */
 #define ESP_RTL_SDR_RATE_1024K         1024000u
-#define ESP_RTL_SDR_RATE_2048K         2048000u
+#define ESP_RTL_SDR_RATE_1800K         1800000u
+#define ESP_RTL_SDR_RATE_2048K         2048000u  /**< P4 ADS-B path (provenance) */
+#define ESP_RTL_SDR_RATE_2400K         2400000u  /**< PC clean-room capture rate */
+#define ESP_RTL_SDR_RATE_3200K         3200000u
+
+/** ppm correction range for set_freq_correction (software LO offset). */
+#define ESP_RTL_SDR_PPM_MIN            (-200)
+#define ESP_RTL_SDR_PPM_MAX            (200)
+
+/** Max simultaneous candidate dongles tracked for multi-device APIs. */
+#define ESP_RTL_SDR_MAX_DEVICES        8
 
 /** Named preset LO frequencies (Hz) — keep in sync with implementation. */
 #define ESP_RTL_SDR_PRESET_KZEL_HZ     96100000u
@@ -229,6 +248,9 @@ typedef enum {
     ESP_RTL_SDR_CAP_BIAS_TEE = 1u << 5,     /**< reserved; not yet measured */
     ESP_RTL_SDR_CAP_DIRECT_SAMPLING = 1u << 6, /**< reserved; not claimed */
     ESP_RTL_SDR_CAP_IQ_ACQUIRE = 1u << 7,   /**< release_iq_block required */
+    ESP_RTL_SDR_CAP_FREQ_CORRECTION = 1u << 8, /**< software ppm LO offset */
+    ESP_RTL_SDR_CAP_MULTI_DEVICE = 1u << 9, /**< enumerate / select by index/serial */
+    ESP_RTL_SDR_CAP_SYNC_READ = 1u << 10,   /**< blocking read() pull ring */
 } esp_rtl_sdr_cap_t;
 
 typedef struct {
@@ -543,6 +565,50 @@ esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t
  */
 esp_err_t esp_rtl_sdr_start_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_hz,
                                uint32_t sample_rate_sps);
+
+/* -------------------------------------------------------------------------- */
+/* Phase 2 — ppm correction + multi-device                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Set crystal / LO correction in parts-per-million (software offset).
+ * Applied as: tune_hz = request_hz + request_hz * ppm / 1e6 (integer).
+ * Range: [ESP_RTL_SDR_PPM_MIN, ESP_RTL_SDR_PPM_MAX]. Default 0.
+ * Takes effect on next tune / retune / set_center_freq.
+ */
+esp_err_t esp_rtl_sdr_set_freq_correction(esp_rtl_sdr_handle_t handle, int ppm);
+
+/** Get current ppm correction. */
+esp_err_t esp_rtl_sdr_get_freq_correction(esp_rtl_sdr_handle_t handle, int *out_ppm);
+
+/**
+ * Rescan USB for accepted profile devices (Blog V4 identity today).
+ * Updates internal candidate list used by get_device_count / select_*.
+ * Does not close the currently open device unless it vanished.
+ */
+esp_err_t esp_rtl_sdr_refresh_device_list(esp_rtl_sdr_handle_t handle);
+
+/** Number of accepted candidates after last refresh (or install scan). */
+esp_err_t esp_rtl_sdr_get_device_count(esp_rtl_sdr_handle_t handle, size_t *out_count);
+
+/**
+ * Snapshot candidate info at index [0, count).
+ * Does not change which device is open.
+ */
+esp_err_t esp_rtl_sdr_get_device_at(esp_rtl_sdr_handle_t handle, size_t index,
+                                    esp_rtl_sdr_device_info_t *out_info);
+
+/**
+ * Select candidate by index for the next claim/start (and open now if idle).
+ * Must not be streaming. Returns ERR_BAD_DEVICE if index invalid.
+ */
+esp_err_t esp_rtl_sdr_select_device(esp_rtl_sdr_handle_t handle, size_t index);
+
+/**
+ * Select candidate by serial string (exact match, case-sensitive).
+ * Must not be streaming.
+ */
+esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const char *serial);
 
 #ifdef __cplusplus
 }

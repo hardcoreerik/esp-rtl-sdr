@@ -5,7 +5,7 @@
 Blog V4 (R828D) profile first · ESP32-P4 High-Speed · not a librtlsdr port
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.5.0-green)
+![Status](https://img.shields.io/badge/version-0.6.0-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
@@ -66,17 +66,20 @@ Smoke example: [`examples/p4_serial_smoke`](examples/p4_serial_smoke).
 | Feature | Status |
 |---|---|
 | Blog V4 `0bda:2838` stream | Implemented (profile tables) |
-| Rates 960k / 1024k / 2048k | Allowlisted |
+| Rates 250k…3200k allowlist | Implemented — see [`docs/RATES.md`](docs/RATES.md) |
 | Hot retune / set_center_freq | Implemented |
 | set/get sample rate | Implemented (mid-stream rate = stop/start) |
 | Sync `read()` IQ pull | Implemented |
+| ppm correction | Implemented (software LO offset) |
+| Multi-device select | Implemented (index / serial) |
 | Metrics | Implemented |
-| Gain / ppm / bias-T | Roadmap |
+| Gain / bias-T | Roadmap Phase 3 |
 | Any random RTL2832U | **Not claimed** — profiles only |
 
 ```c
 esp_rtl_sdr_set_sample_rate(sdr, ESP_RTL_SDR_RATE_960K);
 esp_rtl_sdr_set_center_freq(sdr, 100100000);
+esp_rtl_sdr_set_freq_correction(sdr, -12);  /* ppm */
 esp_rtl_sdr_start_hz(sdr, 0, 0);  /* uses preferred rate/freq */
 uint8_t buf[16384];
 size_t n = 0;
@@ -86,7 +89,8 @@ esp_rtl_sdr_read(sdr, buf, sizeof(buf), 1000, &n);
 Authoritative status: **[`Project_truth.md`](Project_truth.md)**.  
 Architecture: **[`architecture.md`](architecture.md)**.  
 Plan: **[`Roadmap.md`](Roadmap.md)**.  
-vs desktop drivers: **[`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md)**.
+vs desktop drivers: **[`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md)**.  
+Rates evidence: **[`docs/RATES.md`](docs/RATES.md)**.
 
 ---
 
@@ -99,6 +103,7 @@ vs desktop drivers: **[`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md)**
 | [Roadmap.md](Roadmap.md) | How we close librtlsdr-class gaps |
 | [docs/API.md](docs/API.md) | Full public API contract |
 | [docs/CAPABILITY_MATRIX.md](docs/CAPABILITY_MATRIX.md) | Side-by-side desktop comparison |
+| [docs/RATES.md](docs/RATES.md) | Sample-rate allowlist + evidence |
 | [docs/CLEAN_ROOM.md](docs/CLEAN_ROOM.md) | Clean-room rules |
 | [docs/PROFILES.md](docs/PROFILES.md) | Dongle profiles (Blog V4 first) |
 | [docs/PORTING.md](docs/PORTING.md) | Board BSP vs driver |

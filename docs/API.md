@@ -1,7 +1,7 @@
 # esp_rtl_sdr public API (best-in-class contract)
 
 **Header:** `include/esp_rtl_sdr.h`  
-**Version:** 0.5.0
+**Version:** 0.6.0
 
 This document is the human contract for a **professional, deterministic** driver API.
 The implementation must not break these rules as streaming and retune evolve.
@@ -74,7 +74,7 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 ### Stream (`stream_config_validate`)
 
 - `struct_size` match
-- `sample_rate_sps` allowlisted (`960k`, `1024k`, `2048k` for now)
+- `sample_rate_sps` allowlisted (see `docs/RATES.md`: 250k…3200k set)
 - `CUSTOM_HZ`: frequency in [24 MHz, 1766 MHz], quantized to 1 kHz
 - Named presets ignore `frequency_hz` (driver LO constants)
 - `max_bytes` even (IQ pairs) when non-zero
@@ -101,30 +101,49 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | Code | Meaning |
 |---|---|
 | `NO_DEVICE` | No Blog V4 attached |
-| `NOT_V4` | USB device present but identity mismatch |
+| `NOT_V4` / `UNSUPPORTED_DEVICE` | USB device present but identity mismatch |
+| `BAD_DEVICE` | Device index / serial selection invalid |
 | `BUSY` | Already streaming / stop in progress / concurrent uninstall |
 | `NOT_STREAMING` | retune without stream |
 | `BAD_RATE` / `BAD_FREQ` | Policy reject |
 | `USB` / `TIMEOUT` / `FAULT` | Hardware path |
-| `UNSUPPORTED` | Feature not built yet (extraction) |
+| `UNSUPPORTED` | Feature not built yet |
 | `STALE_HANDLE` | Use after uninstall / bad pointer |
 | `REENTRANT` | Lifecycle API called from event callback |
 | `NOT_CLAIMED` | Device present but not claimed (future) |
-| `NOT_READY` | Transient not-ready (future hotplug) |
+| `NOT_READY` | Transient not-ready (USB client not ready) |
 
 ---
 
-## Capabilities (0.5.0 binary)
+## Capabilities (0.6.0 binary)
 
 | Flag | Status |
 |---|---|
-| `METRICS` | On |
-| `CUSTOM_HZ` | On |
 | `STREAM` | On |
 | `RETUNE` | On; bulk drains before EP0 apply |
 | `HOTPLUG` | On; events implemented, unplug/replug recovery soak pending |
+| `METRICS` | On |
+| `CUSTOM_HZ` | On |
+| `FREQ_CORRECTION` | On; software ppm LO offset |
+| `MULTI_DEVICE` | On; enumerate + select by index/serial |
+| `SYNC_READ` | On; blocking `read()` pull ring |
 | `IQ_ACQUIRE` | Off until acquire mode ships |
 | `BIAS_TEE` / `DIRECT_SAMPLING` | Reserved off |
+
+---
+
+## Phase 1 / 2 ergonomics
+
+| Function | Behavior |
+|---|---|
+| `set/get_center_freq` | Preferred LO when idle; retune when streaming |
+| `set/get_sample_rate` | Preferred rate when idle; **BUSY** if streaming |
+| `read` | Blocking CU8 IQ from pull ring |
+| `start_hz` | Convenience start from freq + rate (0 = preferred) |
+| `set/get_freq_correction` | ppm in [-200, 200]; applied at next tune/retune; re-tunes if streaming |
+| `refresh_device_list` | Rescan USB for accepted profiles |
+| `get_device_count` / `get_device_at` | Candidate snapshot |
+| `select_device` / `select_device_serial` | Preferred device; open if idle; **BUSY** if streaming |
 
 Apps must:
 
@@ -199,10 +218,10 @@ Preserve these implemented invariants:
 - [x] Metrics use bounded synchronization
 - [x] `EVT_IQ_BLOCK` does not hold the API mutex across the app callback
 - [x] Retune drains bulk before the USB control sequence
-- [x] `CAP_STREAM | CAP_RETUNE` match working code paths
+- [x] `CAP_STREAM | CAP_RETUNE | CAP_FREQ_CORRECTION | CAP_MULTI_DEVICE | CAP_SYNC_READ` match working code paths
 - [x] Reentrancy guard rejects lifecycle calls from callbacks
 
-Hardware soak and recovery acceptance remain tracked in `PROJECT_STATUS.md`.
+Hardware soak and recovery acceptance remain tracked in `Project_truth.md`.
 
 ---
 

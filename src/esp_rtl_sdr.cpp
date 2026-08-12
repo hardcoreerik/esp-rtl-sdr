@@ -1,8 +1,8 @@
 /*
- * esp_rtl_sdr — Gate 2 streaming implementation (v0.4)
+ * esp_rtl_sdr — streaming implementation (v0.6)
  *
  * Clean-room USB Host client: multi-URB bulk IQ, dual-core delivery ring,
- * measured EP0 tables. Not a librtlsdr port.
+ * measured EP0 tables, ppm + multi-device. Not a librtlsdr port.
  *
  * Core 0: USB host lib + client/owner (events, EP0, URB submit/resubmit)
  * Core 1: IQ delivery task posts EVT_IQ_BLOCK (keep callback light!)
@@ -12,6 +12,7 @@
 #include "esp_rtl_sdr.h"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <iterator>
@@ -50,9 +51,15 @@ static constexpr char kMfg[] = "RTLSDRBlog";
 static constexpr char kProduct[] = "Blog V4";
 
 static const uint32_t kAllowRates[] = {
-    ESP_RTL_SDR_RATE_960K,
-    ESP_RTL_SDR_RATE_1024K,
-    ESP_RTL_SDR_RATE_2048K,
+    ESP_RTL_SDR_RATE_250K,  ESP_RTL_SDR_RATE_256K,  ESP_RTL_SDR_RATE_960K,
+    ESP_RTL_SDR_RATE_1024K, ESP_RTL_SDR_RATE_1800K, ESP_RTL_SDR_RATE_2048K,
+    ESP_RTL_SDR_RATE_2400K, ESP_RTL_SDR_RATE_3200K,
+};
+
+struct DeviceCandidate {
+    uint8_t addr = 0;
+    esp_rtl_sdr_device_info_t info{};
+    bool valid = false;
 };
 
 struct IqSlot {
@@ -120,6 +127,16 @@ struct esp_rtl_sdr_handle {
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
     uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
     uint32_t preferred_sample_rate_sps = ESP_RTL_SDR_RATE_960K;
+
+    /** Software LO correction (ppm). Applied at tune time only. */
+    int32_t freq_correction_ppm = 0;
+
+    /** Multi-device: candidates from last refresh; selection preferences. */
+    DeviceCandidate candidates[ESP_RTL_SDR_MAX_DEVICES]{};
+    size_t candidate_count = 0;
+    size_t preferred_device_index = 0;
+    char preferred_serial[32]{};
+    uint8_t open_addr = 0;
 
     /** Sync-read pull ring (CU8 bytes). Filled by delivery task. */
     uint8_t *pull_buf = nullptr;
@@ -259,8 +276,9 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err)
     case ESP_ERR_NO_MEM: return "ESP_ERR_NO_MEM";
     case ESP_ERR_TIMEOUT: return "ESP_ERR_TIMEOUT";
     case ESP_RTL_SDR_ERR_NO_DEVICE: return "ESP_RTL_SDR_ERR_NO_DEVICE";
-    case ESP_RTL_SDR_ERR_NOT_V4: return "ESP_RTL_SDR_ERR_NOT_V4";
+    case ESP_RTL_SDR_ERR_NOT_V4: return "ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE";
     case ESP_RTL_SDR_ERR_BUSY: return "ESP_RTL_SDR_ERR_BUSY";
+    case ESP_RTL_SDR_ERR_BAD_DEVICE: return "ESP_RTL_SDR_ERR_BAD_DEVICE";
     case ESP_RTL_SDR_ERR_NOT_STREAMING: return "ESP_RTL_SDR_ERR_NOT_STREAMING";
     case ESP_RTL_SDR_ERR_BAD_RATE: return "ESP_RTL_SDR_ERR_BAD_RATE";
     case ESP_RTL_SDR_ERR_BAD_FREQ: return "ESP_RTL_SDR_ERR_BAD_FREQ";
@@ -290,9 +308,10 @@ const char *esp_rtl_sdr_state_to_name(esp_rtl_sdr_state_t state)
 
 uint32_t esp_rtl_sdr_get_capabilities(void)
 {
-    return ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
-           ESP_RTL_SDR_CAP_METRICS | ESP_RTL_SDR_CAP_CUSTOM_HZ |
-           ESP_RTL_SDR_CAP_HOTPLUG;
+    return ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE | ESP_RTL_SDR_CAP_METRICS |
+           ESP_RTL_SDR_CAP_CUSTOM_HZ | ESP_RTL_SDR_CAP_HOTPLUG |
+           ESP_RTL_SDR_CAP_FREQ_CORRECTION | ESP_RTL_SDR_CAP_MULTI_DEVICE |
+           ESP_RTL_SDR_CAP_SYNC_READ;
 }
 
 bool esp_rtl_sdr_is_rate_supported(uint32_t sample_rate_sps)
@@ -472,6 +491,23 @@ static esp_err_t resolve_stream_frequency(const esp_rtl_sdr_stream_config_t *str
 /* Clean-room PLL pack (measured Tab5 path)                                   */
 /* -------------------------------------------------------------------------- */
 
+/** Apply software ppm: tune = f + f*ppm/1e6 (integer). User-facing freq unchanged. */
+static uint32_t apply_freq_correction_hz(uint32_t frequency_hz, int32_t ppm)
+{
+    if (ppm == 0) {
+        return frequency_hz;
+    }
+    const int64_t adj = (static_cast<int64_t>(frequency_hz) * ppm) / 1000000LL;
+    int64_t out = static_cast<int64_t>(frequency_hz) + adj;
+    if (out < static_cast<int64_t>(ESP_RTL_SDR_FREQ_MIN_HZ)) {
+        out = ESP_RTL_SDR_FREQ_MIN_HZ;
+    }
+    if (out > static_cast<int64_t>(ESP_RTL_SDR_FREQ_MAX_HZ)) {
+        out = ESP_RTL_SDR_FREQ_MAX_HZ;
+    }
+    return static_cast<uint32_t>(out);
+}
+
 static bool encode_r820_pll(uint32_t frequency_hz, uint8_t *r16_setup, uint8_t *r16_active,
                             uint8_t *r20, uint8_t *r21, uint8_t *r22)
 {
@@ -640,12 +676,16 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
 
 static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
 {
+    const uint32_t tune_hz =
+        apply_freq_correction_hz(frequency_hz, h != nullptr ? h->freq_correction_ppm : 0);
     uint8_t r16_setup = 0, r16_active = 0, r20 = 0, r21 = 0, r22 = 0;
-    if (!encode_r820_pll(frequency_hz, &r16_setup, &r16_active, &r20, &r21, &r22)) {
+    if (!encode_r820_pll(tune_hz, &r16_setup, &r16_active, &r20, &r21, &r22)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
-    ESP_LOGI(TAG, "tune %u Hz r16=%02x/%02x r20=%02x r21=%02x r22=%02x",
-             static_cast<unsigned>(frequency_hz), r16_setup, r16_active, r20, r21, r22);
+    ESP_LOGI(TAG, "tune request=%u Hz apply=%u Hz ppm=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x",
+             static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
+             h != nullptr ? static_cast<int>(h->freq_correction_ppm) : 0, r16_setup, r16_active,
+             r20, r21, r22);
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
         RtlControlRecord rec = kRtlFinalTuneTemplate[i];
         if (i == 3 || i == 7) {
@@ -1063,8 +1103,8 @@ static void str_desc_ascii(const usb_str_desc_t *d, char *out, size_t out_sz)
     out[n] = '\0';
 }
 
-static bool accept_v4(const usb_device_desc_t *dd, const usb_device_info_t *info,
-                      esp_rtl_sdr_device_info_t *out)
+static bool accept_blog_v4(const usb_device_desc_t *dd, const usb_device_info_t *info,
+                           esp_rtl_sdr_device_info_t *out)
 {
     if (dd->idVendor != kVid || dd->idProduct != kPid) {
         return false;
@@ -1086,38 +1126,157 @@ static bool accept_v4(const usb_device_desc_t *dd, const usb_device_info_t *info
     return true;
 }
 
-static void try_open_device(esp_rtl_sdr_handle *h, uint8_t addr)
+/** Probe address; if accepted profile, fill candidate and close unless keep_open. */
+static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate *out,
+                            bool keep_open)
 {
-    if (h->dev != nullptr) {
-        return;
+    if (h == nullptr || out == nullptr || h->client == nullptr) {
+        return false;
+    }
+    /* Already owning this address. */
+    if (h->dev != nullptr && h->open_addr == addr) {
+        out->addr = addr;
+        out->info = h->info;
+        out->valid = true;
+        return true;
     }
     usb_device_handle_t dev = nullptr;
     if (usb_host_device_open(h->client, addr, &dev) != ESP_OK) {
-        return;
+        return false;
     }
     const usb_device_desc_t *dd = nullptr;
     usb_device_info_t info{};
     if (usb_host_get_device_descriptor(dev, &dd) != ESP_OK ||
         usb_host_device_info(dev, &info) != ESP_OK) {
         usb_host_device_close(h->client, dev);
-        return;
+        return false;
     }
     esp_rtl_sdr_device_info_t di{};
-    if (!accept_v4(dd, &info, &di)) {
-        ESP_LOGW(TAG, "reject USB %04x:%04x", dd->idVendor, dd->idProduct);
+    if (!accept_blog_v4(dd, &info, &di)) {
         usb_host_device_close(h->client, dev);
+        return false;
+    }
+    out->addr = addr;
+    out->info = di;
+    out->valid = true;
+    if (keep_open && h->dev == nullptr) {
+        h->dev = dev;
+        h->open_addr = addr;
+        h->info = di;
+        return true;
+    }
+    usb_host_device_close(h->client, dev);
+    return true;
+}
+
+static void rebuild_candidate_list(esp_rtl_sdr_handle *h)
+{
+    h->candidate_count = 0;
+    for (auto &c : h->candidates) {
+        c = DeviceCandidate{};
+    }
+    uint8_t addrs[16];
+    int n = 0;
+    if (usb_host_device_addr_list_fill(sizeof(addrs), addrs, &n) != ESP_OK || n <= 0) {
         return;
     }
-    h->dev = dev;
-    h->info = di;
-    ESP_LOGI(TAG, "V4 open %s %s serial=%s hs=%d", di.manufacturer, di.product, di.serial,
-             static_cast<int>(di.high_speed));
+    for (int i = 0; i < n && h->candidate_count < ESP_RTL_SDR_MAX_DEVICES; ++i) {
+        DeviceCandidate cand{};
+        if (probe_candidate(h, addrs[i], &cand, false)) {
+            h->candidates[h->candidate_count++] = cand;
+        }
+    }
+}
+
+static bool serial_matches_preferred(const esp_rtl_sdr_handle *h, const char *serial)
+{
+    if (h->preferred_serial[0] == '\0') {
+        return true;
+    }
+    return serial != nullptr && std::strcmp(h->preferred_serial, serial) == 0;
+}
+
+static void open_selected_candidate(esp_rtl_sdr_handle *h)
+{
+    if (h->dev != nullptr || h->candidate_count == 0) {
+        return;
+    }
+    size_t idx = h->preferred_device_index;
+    if (h->preferred_serial[0] != '\0') {
+        bool found = false;
+        for (size_t i = 0; i < h->candidate_count; ++i) {
+            if (std::strcmp(h->candidates[i].info.serial, h->preferred_serial) == 0) {
+                idx = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ESP_LOGW(TAG, "preferred serial not found; no device open");
+            return;
+        }
+    }
+    if (idx >= h->candidate_count) {
+        idx = 0;
+    }
+    DeviceCandidate cand{};
+    if (!probe_candidate(h, h->candidates[idx].addr, &cand, true)) {
+        ESP_LOGW(TAG, "failed to open candidate index %u", static_cast<unsigned>(idx));
+        return;
+    }
+    h->preferred_device_index = idx;
+    ESP_LOGI(TAG, "open %s %s serial=%s hs=%d index=%u", cand.info.manufacturer,
+             cand.info.product, cand.info.serial, static_cast<int>(cand.info.high_speed),
+             static_cast<unsigned>(idx));
 
     esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
     void *ctx = h->cfg.event_ctx;
     if (cb) {
         emit_after_unlock(h, ESP_RTL_SDR_EVT_ENUMERATED, &h->info, cb, ctx);
         emit_after_unlock(h, ESP_RTL_SDR_EVT_READY, nullptr, cb, ctx);
+    }
+}
+
+static void try_open_device(esp_rtl_sdr_handle *h, uint8_t addr)
+{
+    if (h->dev != nullptr) {
+        return;
+    }
+    DeviceCandidate cand{};
+    if (!probe_candidate(h, addr, &cand, false)) {
+        ESP_LOGW(TAG, "reject USB addr=%u (not accepted profile)", static_cast<unsigned>(addr));
+        return;
+    }
+    /* Rebuild list and open preferred (may be this device or another). */
+    rebuild_candidate_list(h);
+    if (!serial_matches_preferred(h, cand.info.serial) && h->preferred_serial[0] != '\0') {
+        /* Not the preferred serial; leave closed unless no preference match later. */
+        open_selected_candidate(h);
+        return;
+    }
+    /* Prefer explicit index when serial unset. */
+    size_t match_idx = 0;
+    for (size_t i = 0; i < h->candidate_count; ++i) {
+        if (h->candidates[i].addr == addr) {
+            match_idx = i;
+            break;
+        }
+    }
+    if (h->preferred_serial[0] == '\0' && match_idx != h->preferred_device_index &&
+        h->candidate_count > 1) {
+        open_selected_candidate(h);
+        return;
+    }
+    if (probe_candidate(h, addr, &cand, true)) {
+        h->preferred_device_index = match_idx;
+        ESP_LOGI(TAG, "open %s %s serial=%s hs=%d", cand.info.manufacturer, cand.info.product,
+                 cand.info.serial, static_cast<int>(cand.info.high_speed));
+        esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
+        void *ctx = h->cfg.event_ctx;
+        if (cb) {
+            emit_after_unlock(h, ESP_RTL_SDR_EVT_ENUMERATED, &h->info, cb, ctx);
+            emit_after_unlock(h, ESP_RTL_SDR_EVT_READY, nullptr, cb, ctx);
+        }
     }
 }
 
@@ -1165,6 +1324,7 @@ static void client_task_fn(void *arg)
             if (h->dev != nullptr) {
                 usb_host_device_close(h->client, h->dev);
                 h->dev = nullptr;
+                h->open_addr = 0;
             }
             h->info.present = false;
             h->state = ESP_RTL_SDR_STATE_IDLE;
@@ -1220,17 +1380,9 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
         return ESP_ERR_NO_MEM;
     }
 
-    /* Scan already-attached devices */
-    uint8_t addrs[8];
-    int n = 0;
-    if (usb_host_device_addr_list_fill(sizeof(addrs), addrs, &n) == ESP_OK) {
-        for (int i = 0; i < n; ++i) {
-            try_open_device(h, addrs[i]);
-            if (h->dev != nullptr) {
-                break;
-            }
-        }
-    }
+    /* Scan already-attached devices and open preferred candidate. */
+    rebuild_candidate_list(h);
+    open_selected_candidate(h);
     return ESP_OK;
 }
 
@@ -1978,4 +2130,214 @@ esp_err_t esp_rtl_sdr_start_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_h
     st.sample_rate_sps = sample_rate_sps;
     /* Zeros filled from preferred inside start(). */
     return esp_rtl_sdr_start(handle, &st);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Phase 2 — ppm + multi-device                                               */
+/* -------------------------------------------------------------------------- */
+
+esp_err_t esp_rtl_sdr_set_freq_correction(esp_rtl_sdr_handle_t handle, int ppm)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if (ppm < ESP_RTL_SDR_PPM_MIN || ppm > ESP_RTL_SDR_PPM_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    bool streaming = false;
+    uint32_t freq = 0;
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        esp_err_t re = check_not_reentrant(handle);
+        if (re != ESP_OK) {
+            set_error_unlocked(handle, re);
+            return re;
+        }
+        handle->freq_correction_ppm = ppm;
+        streaming = handle->state == ESP_RTL_SDR_STATE_STREAMING && handle->streaming;
+        freq = handle->frequency_hz != 0 ? handle->frequency_hz : handle->preferred_frequency_hz;
+        set_error_unlocked(handle, ESP_OK);
+    }
+    /* Re-apply LO so correction takes effect immediately while streaming. */
+    if (streaming && freq != 0) {
+        return esp_rtl_sdr_retune_hz(handle, freq);
+    }
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_freq_correction(esp_rtl_sdr_handle_t handle, int *out_ppm)
+{
+    if (out_ppm == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_ppm = static_cast<int>(handle->freq_correction_ppm);
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_refresh_device_list(esp_rtl_sdr_handle_t handle)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    if (handle->client == nullptr) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_READY);
+        return ESP_RTL_SDR_ERR_NOT_READY;
+    }
+    rebuild_candidate_list(handle);
+    ESP_LOGI(TAG, "device list count=%u", static_cast<unsigned>(handle->candidate_count));
+    set_error_unlocked(handle, ESP_OK);
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_device_count(esp_rtl_sdr_handle_t handle, size_t *out_count)
+{
+    if (out_count == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_count = handle->candidate_count;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_device_at(esp_rtl_sdr_handle_t handle, size_t index,
+                                    esp_rtl_sdr_device_info_t *out_info)
+{
+    if (out_info == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    if (index >= handle->candidate_count || !handle->candidates[index].valid) {
+        return ESP_RTL_SDR_ERR_BAD_DEVICE;
+    }
+    *out_info = handle->candidates[index].info;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_select_device(esp_rtl_sdr_handle_t handle, size_t index)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    esp_err_t re = check_not_reentrant(handle);
+    if (re != ESP_OK) {
+        set_error_unlocked(handle, re);
+        return re;
+    }
+    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
+        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+        return ESP_RTL_SDR_ERR_BUSY;
+    }
+    rebuild_candidate_list(handle);
+    if (index >= handle->candidate_count) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_DEVICE);
+        return ESP_RTL_SDR_ERR_BAD_DEVICE;
+    }
+    handle->preferred_device_index = index;
+    handle->preferred_serial[0] = '\0';
+
+    if (handle->dev != nullptr && handle->open_addr == handle->candidates[index].addr) {
+        set_error_unlocked(handle, ESP_OK);
+        return ESP_OK;
+    }
+    if (handle->dev != nullptr) {
+        usb_host_device_close(handle->client, handle->dev);
+        handle->dev = nullptr;
+        handle->open_addr = 0;
+        handle->info.present = false;
+    }
+    open_selected_candidate(handle);
+    if (handle->dev == nullptr) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
+        return ESP_RTL_SDR_ERR_NO_DEVICE;
+    }
+    set_error_unlocked(handle, ESP_OK);
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const char *serial)
+{
+    if (serial == nullptr || serial[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    esp_err_t re = check_not_reentrant(handle);
+    if (re != ESP_OK) {
+        set_error_unlocked(handle, re);
+        return re;
+    }
+    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
+        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+        return ESP_RTL_SDR_ERR_BUSY;
+    }
+    rebuild_candidate_list(handle);
+    size_t idx = SIZE_MAX;
+    for (size_t i = 0; i < handle->candidate_count; ++i) {
+        if (std::strcmp(handle->candidates[i].info.serial, serial) == 0) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx == SIZE_MAX) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_DEVICE);
+        return ESP_RTL_SDR_ERR_BAD_DEVICE;
+    }
+    std::snprintf(handle->preferred_serial, sizeof(handle->preferred_serial), "%s", serial);
+    handle->preferred_device_index = idx;
+
+    if (handle->dev != nullptr &&
+        std::strcmp(handle->info.serial, serial) == 0) {
+        set_error_unlocked(handle, ESP_OK);
+        return ESP_OK;
+    }
+    if (handle->dev != nullptr) {
+        usb_host_device_close(handle->client, handle->dev);
+        handle->dev = nullptr;
+        handle->open_addr = 0;
+        handle->info.present = false;
+    }
+    open_selected_candidate(handle);
+    if (handle->dev == nullptr) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
+        return ESP_RTL_SDR_ERR_NO_DEVICE;
+    }
+    set_error_unlocked(handle, ESP_OK);
+    return ESP_OK;
 }

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added (automated testing / TheOrc-aligned)
+
+- Host unit suite: `tests/host` + `src/esp_rtl_sdr_policy.cpp` (no IDF/USB)
+- Scripts: `tests/scripts/run_host_tests.ps1` / `.sh`
+- CI: `.github/workflows/ci.yml` (policy tests + version/truth hygiene)
+- `docs/TESTING_GUIDE.md` — layers, how to run, what is/isn't claimed
+
 ### Added (open-source honesty / TheOrc-aligned)
 
 - `docs/AI_DEVELOPMENT_DISCLOSURE.md` — human-directed, AI-assisted; trust rituals

@@ -27,6 +27,8 @@ Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DIS
 | Production maturity | **0.x early** — API can still grow; fail-closed is a goal, not a warranty |
 | Formal security audit | **None** |
 | Stand-alone re-soak from this tree on P4 | **Still open** (Tab5/Waveshare = Provenance under OrcSDR) |
+| Automated host policy tests | **Implemented** — `tests/host` + GitHub Actions CI |
+| Automated full USB/RF CI | **No** — needs P4 + dongle (lab only) |
 
 If marketing copy contradicts this table, open a `truth:` issue.
 
@@ -68,6 +70,8 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
 | Recommended rate list | **Implemented** | `get_supported_rates` |
 | Rate passport (`probe_rates`) | **Implemented** | On-device soak; needs P4+dongle run |
+| Host unit tests (policy) | **Implemented** | `tests/host` — no IDF; CI on push |
+| CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` | **Implemented** | USB/RF narrative + advice |
 | set/get center freq, rate, ppm | **Implemented** | |

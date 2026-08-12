@@ -109,6 +109,8 @@ When a feature changes:
 3. Move Implemented → Hardware-verified only with a named log / run note.
 4. If a claim was oversold, **retract in CHANGELOG** rather than soft-edit quietly
    (TheOrc-style honesty).
+5. If pure policy behavior changes, update or add host tests under `tests/host`
+   and keep CI green ([TESTING_GUIDE.md](TESTING_GUIDE.md)).
 
 ---
 

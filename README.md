@@ -99,11 +99,17 @@ Smoke example: [`examples/p4_serial_smoke`](examples/p4_serial_smoke).
 | Evidence labels on claims | [PROJECT_TRUTH.md](PROJECT_TRUTH.md) |
 | AI-assisted development disclosed | [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) |
 | Docs must not mark planned as done | [docs/DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md) |
+| **Automated host tests + CI** | [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) · `.github/workflows/ci.yml` |
 | Clean-room rules | [docs/CLEAN_ROOM.md](docs/CLEAN_ROOM.md) |
 | Security contact (no public 0-days) | [SECURITY.md](SECURITY.md) |
 | How to contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Silicon / DS honesty | [docs/SILICON.md](docs/SILICON.md) |
 | Lab gear (Heltec ×2, Baofeng UV-5R, Flipper Zero) | [docs/TESTING.md](docs/TESTING.md) |
+
+```powershell
+# Run automated policy tests (no hardware, no ESP-IDF)
+powershell -ExecutionPolicy Bypass -File tests\scripts\run_host_tests.ps1
+```
 
 Retract oversell in [CHANGELOG.md](CHANGELOG.md) rather than rewriting history without a note.
 

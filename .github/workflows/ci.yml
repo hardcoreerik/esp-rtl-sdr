@@ -1,0 +1,52 @@
+# TheOrc-style: automated checks on every push / PR.
+# Host policy tests require only CMake + a C++17 compiler (no ESP-IDF, no hardware).
+
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  host-policy:
+    name: host policy unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build
+
+      - name: Configure & build host tests
+        working-directory: tests/host
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build
+
+      - name: Run host policy tests
+        working-directory: tests/host/build
+        run: ./esp_rtl_sdr_host_tests
+
+  truth-hygiene:
+    name: truth / version hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version macros match component metadata
+        run: |
+          set -e
+          MAJOR=$(grep -E 'ESP_RTL_SDR_VERSION_MAJOR' include/esp_rtl_sdr.h | head -1 | grep -oE '[0-9]+')
+          MINOR=$(grep -E 'ESP_RTL_SDR_VERSION_MINOR' include/esp_rtl_sdr.h | head -1 | grep -oE '[0-9]+')
+          PATCH=$(grep -E 'ESP_RTL_SDR_VERSION_PATCH' include/esp_rtl_sdr.h | head -1 | grep -oE '[0-9]+')
+          VER="${MAJOR}.${MINOR}.${PATCH}"
+          echo "header version=$VER"
+          grep -q "version: \"${VER}\"" idf_component.yml
+          grep -q "\"version\": \"${VER}\"" library.json
+          grep -q "version-0.7.0\|${VER}" README.md || grep -q "${VER}" README.md
+          test -f PROJECT_TRUTH.md
+          test -f docs/AI_DEVELOPMENT_DISCLOSURE.md
+          test -f SECURITY.md
+          echo "TRUTH_HYGIENE_OK"

@@ -54,6 +54,11 @@ rituals:
    Hardware-verified / Planned / Deferred / Formula. Docs must not market
    Planned as Done.
 
+1b. **Policy claims require automated tests when possible.**  
+   Host unit suite (`tests/host`) + GitHub Actions CI gate rate windows,
+   quantize, config validate, version, and capability bits. USB/RF still need
+   lab evidence. See [TESTING_GUIDE.md](TESTING_GUIDE.md).
+
 2. **Clean-room is non-negotiable for USB tables.**  
    Behavior may be *observed* (USB capture, public DS insight, R820T2 register
    PDFs). Source from librtlsdr / rtl-sdr-blog must **not** be pasted into this

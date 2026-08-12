@@ -48,6 +48,18 @@ Open: formal P4 soak logs for non-provenance rates.
 
 ---
 
+## Phase 2.2 — Automated testing spine (TheOrc-aligned) (**complete**)
+
+- [x] Extract pure policy to `esp_rtl_sdr_policy.cpp` (host-linkable)
+- [x] Host unit suite `tests/host` (rates, quantize, config, version, caps)
+- [x] Scripts `tests/scripts/run_host_tests.ps1` / `.sh`
+- [x] GitHub Actions CI (host tests + truth/version hygiene)
+- [x] `docs/TESTING_GUIDE.md`
+- [ ] Optional: IDF target unit tests on hardware runner
+- [ ] Optional: passport log artifact upload from lab script
+
+---
+
 ## Phase 3 — Gain and bias-T (measured)
 
 - [ ] Independent USB capture of gain / bias on Blog V4

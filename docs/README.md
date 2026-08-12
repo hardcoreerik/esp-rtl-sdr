@@ -27,6 +27,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [RATES.md](RATES.md) | Continuous rates + passport |
 | [API.md](API.md) | Public C API contract |
 | [CAPABILITY_MATRIX.md](CAPABILITY_MATRIX.md) | vs librtlsdr-class desktop |
+| [TESTING_GUIDE.md](TESTING_GUIDE.md) | Automated host tests + CI (TheOrc-style) |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles |
 | [PORTING.md](PORTING.md) | Board BSP vs driver |

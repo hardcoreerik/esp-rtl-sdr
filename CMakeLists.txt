@@ -4,7 +4,7 @@
 # Blog V4 profile on ESP32-P4. Other hosts/tuners only when measured.
 
 idf_component_register(
-    SRCS "src/esp_rtl_sdr.cpp"
+    SRCS "src/esp_rtl_sdr.cpp" "src/esp_rtl_sdr_policy.cpp"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "private"
     REQUIRES log esp_timer freertos usb

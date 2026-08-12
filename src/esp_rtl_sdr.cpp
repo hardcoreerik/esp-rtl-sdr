@@ -50,13 +50,6 @@ static constexpr uint16_t kPid = ESP_RTL_SDR_USB_PID;
 static constexpr char kMfg[] = "RTLSDRBlog";
 static constexpr char kProduct[] = "Blog V4";
 
-/** Recommended rates for get_supported_rates / passport defaults. */
-static const uint32_t kRecommendedRates[] = {
-    ESP_RTL_SDR_RATE_250K,  ESP_RTL_SDR_RATE_256K,  ESP_RTL_SDR_RATE_960K,
-    ESP_RTL_SDR_RATE_1024K, ESP_RTL_SDR_RATE_1800K, ESP_RTL_SDR_RATE_2048K,
-    ESP_RTL_SDR_RATE_2400K, ESP_RTL_SDR_RATE_2560K, ESP_RTL_SDR_RATE_3200K,
-};
-
 /** Extra high-band steps when passport recommended_only == false. */
 static const uint32_t kPassportExtraRates[] = {
     1200000u, 1536000u, 2000000u, 2800000u,
@@ -231,13 +224,6 @@ static uint32_t now_ms(void)
     return static_cast<uint32_t>(xTaskGetTickCount() * portTICK_PERIOD_MS);
 }
 
-static bool is_xfer_bytes_ok(size_t n)
-{
-    if (n < ESP_RTL_SDR_MIN_XFER_BYTES || n > ESP_RTL_SDR_MAX_XFER_BYTES) {
-        return false;
-    }
-    return (n % 512u) == 0;
-}
 
 static void emit_after_unlock(esp_rtl_sdr_handle *h,
                               esp_rtl_sdr_event_t ev,
@@ -263,258 +249,7 @@ static void emit_after_unlock(esp_rtl_sdr_handle *h,
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Version / errors / capabilities                                            */
-/* -------------------------------------------------------------------------- */
-
-uint32_t esp_rtl_sdr_get_version(void)
-{
-    return (static_cast<uint32_t>(ESP_RTL_SDR_VERSION_MAJOR) << 16) |
-           (static_cast<uint32_t>(ESP_RTL_SDR_VERSION_MINOR) << 8) |
-           static_cast<uint32_t>(ESP_RTL_SDR_VERSION_PATCH);
-}
-
-const char *esp_rtl_sdr_get_version_string(void)
-{
-    return ESP_RTL_SDR_VERSION_STRING;
-}
-
-const char *esp_rtl_sdr_err_to_name(esp_err_t err)
-{
-    switch (err) {
-    case ESP_OK: return "ESP_OK";
-    case ESP_ERR_INVALID_ARG: return "ESP_ERR_INVALID_ARG";
-    case ESP_ERR_INVALID_STATE: return "ESP_ERR_INVALID_STATE";
-    case ESP_ERR_INVALID_SIZE: return "ESP_ERR_INVALID_SIZE";
-    case ESP_ERR_NO_MEM: return "ESP_ERR_NO_MEM";
-    case ESP_ERR_TIMEOUT: return "ESP_ERR_TIMEOUT";
-    case ESP_RTL_SDR_ERR_NO_DEVICE: return "ESP_RTL_SDR_ERR_NO_DEVICE";
-    case ESP_RTL_SDR_ERR_NOT_V4: return "ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE";
-    case ESP_RTL_SDR_ERR_BUSY: return "ESP_RTL_SDR_ERR_BUSY";
-    case ESP_RTL_SDR_ERR_BAD_DEVICE: return "ESP_RTL_SDR_ERR_BAD_DEVICE";
-    case ESP_RTL_SDR_ERR_NOT_STREAMING: return "ESP_RTL_SDR_ERR_NOT_STREAMING";
-    case ESP_RTL_SDR_ERR_BAD_RATE: return "ESP_RTL_SDR_ERR_BAD_RATE";
-    case ESP_RTL_SDR_ERR_BAD_FREQ: return "ESP_RTL_SDR_ERR_BAD_FREQ";
-    case ESP_RTL_SDR_ERR_USB: return "ESP_RTL_SDR_ERR_USB";
-    case ESP_RTL_SDR_ERR_TIMEOUT: return "ESP_RTL_SDR_ERR_TIMEOUT";
-    case ESP_RTL_SDR_ERR_FAULT: return "ESP_RTL_SDR_ERR_FAULT";
-    case ESP_RTL_SDR_ERR_NOT_READY: return "ESP_RTL_SDR_ERR_NOT_READY";
-    case ESP_RTL_SDR_ERR_UNSUPPORTED: return "ESP_RTL_SDR_ERR_UNSUPPORTED";
-    case ESP_RTL_SDR_ERR_STALE_HANDLE: return "ESP_RTL_SDR_ERR_STALE_HANDLE";
-    case ESP_RTL_SDR_ERR_REENTRANT: return "ESP_RTL_SDR_ERR_REENTRANT";
-    case ESP_RTL_SDR_ERR_NOT_CLAIMED: return "ESP_RTL_SDR_ERR_NOT_CLAIMED";
-    default: return esp_err_to_name(err);
-    }
-}
-
-const char *esp_rtl_sdr_state_to_name(esp_rtl_sdr_state_t state)
-{
-    switch (state) {
-    case ESP_RTL_SDR_STATE_UNINSTALLED: return "UNINSTALLED";
-    case ESP_RTL_SDR_STATE_IDLE: return "IDLE";
-    case ESP_RTL_SDR_STATE_STREAMING: return "STREAMING";
-    case ESP_RTL_SDR_STATE_STOPPING: return "STOPPING";
-    case ESP_RTL_SDR_STATE_FAULT: return "FAULT";
-    default: return "UNKNOWN";
-    }
-}
-
-uint32_t esp_rtl_sdr_get_capabilities(void)
-{
-    return ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE | ESP_RTL_SDR_CAP_METRICS |
-           ESP_RTL_SDR_CAP_CUSTOM_HZ | ESP_RTL_SDR_CAP_HOTPLUG |
-           ESP_RTL_SDR_CAP_FREQ_CORRECTION | ESP_RTL_SDR_CAP_MULTI_DEVICE |
-           ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_CONTINUOUS_RATE |
-           ESP_RTL_SDR_CAP_NEED | ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT;
-}
-
-static bool rate_in_hardware_window(uint32_t sps)
-{
-    if (sps >= ESP_RTL_SDR_RATE_LOW_MIN_HZ && sps <= ESP_RTL_SDR_RATE_LOW_MAX_HZ) {
-        return true;
-    }
-    if (sps >= ESP_RTL_SDR_RATE_HIGH_MIN_HZ && sps <= ESP_RTL_SDR_RATE_HIGH_MAX_HZ) {
-        return true;
-    }
-    return false;
-}
-
-bool esp_rtl_sdr_quantize_sample_rate(uint32_t requested_sps, uint32_t *out_exact_sps)
-{
-    if (out_exact_sps == nullptr || requested_sps == 0) {
-        return false;
-    }
-    if (!rate_in_hardware_window(requested_sps)) {
-        return false;
-    }
-    uint32_t ratio =
-        static_cast<uint32_t>((static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / requested_sps);
-    ratio &= 0x0ffffffcu;
-    if (ratio == 0) {
-        return false;
-    }
-    const uint32_t exact = static_cast<uint32_t>(
-        (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / ratio);
-    if (exact == 0 || !rate_in_hardware_window(exact)) {
-        /* Exact may drift slightly; still accept if ratio valid and near request. */
-        if (exact == 0) {
-            return false;
-        }
-    }
-    *out_exact_sps = exact;
-    return true;
-}
-
-bool esp_rtl_sdr_is_rate_supported(uint32_t sample_rate_sps)
-{
-    uint32_t exact = 0;
-    return esp_rtl_sdr_quantize_sample_rate(sample_rate_sps, &exact);
-}
-
-esp_err_t esp_rtl_sdr_get_supported_rates(uint32_t *out_rates, size_t max_count,
-                                             size_t *out_count)
-{
-    const size_t total = sizeof(kRecommendedRates) / sizeof(kRecommendedRates[0]);
-    if (out_count == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (max_count == 0) {
-        *out_count = total;
-        return ESP_OK;
-    }
-    if (out_rates == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    const size_t n = (max_count < total) ? max_count : total;
-    for (size_t i = 0; i < n; ++i) {
-        out_rates[i] = kRecommendedRates[i];
-    }
-    *out_count = total;
-    return (max_count < total) ? ESP_ERR_INVALID_SIZE : ESP_OK;
-}
-
-bool esp_rtl_sdr_normalize_frequency(uint32_t in_hz, uint32_t *out_hz)
-{
-    if (out_hz == nullptr) {
-        return false;
-    }
-    if (in_hz < ESP_RTL_SDR_FREQ_MIN_HZ || in_hz > ESP_RTL_SDR_FREQ_MAX_HZ) {
-        return false;
-    }
-    uint32_t q = (in_hz / ESP_RTL_SDR_FREQ_QUANT_HZ) * ESP_RTL_SDR_FREQ_QUANT_HZ;
-    if (q < ESP_RTL_SDR_FREQ_MIN_HZ) {
-        q = ESP_RTL_SDR_FREQ_MIN_HZ;
-    }
-    if (q > ESP_RTL_SDR_FREQ_MAX_HZ) {
-        q = ESP_RTL_SDR_FREQ_MAX_HZ;
-    }
-    *out_hz = q;
-    return true;
-}
-
-esp_err_t esp_rtl_sdr_preset_frequency_hz(esp_rtl_sdr_preset_t preset, uint32_t *out_hz)
-{
-    if (out_hz == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    switch (preset) {
-    case ESP_RTL_SDR_PRESET_KZEL_96_1:
-        *out_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
-        return ESP_OK;
-    case ESP_RTL_SDR_PRESET_NOAA_162_4:
-        *out_hz = ESP_RTL_SDR_PRESET_NOAA_HZ;
-        return ESP_OK;
-    default:
-        return ESP_ERR_INVALID_ARG;
-    }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Config                                                                     */
-/* -------------------------------------------------------------------------- */
-
-void esp_rtl_sdr_config_default(esp_rtl_sdr_config_t *config)
-{
-    if (config == nullptr) {
-        return;
-    }
-    std::memset(config, 0, sizeof(*config));
-    config->struct_size = sizeof(esp_rtl_sdr_config_t);
-    config->host_library_already_installed = false;
-    config->transfer_bytes = ESP_RTL_SDR_DEFAULT_XFER_BYTES;
-    config->transfer_count = ESP_RTL_SDR_DEFAULT_XFER_COUNT;
-    config->control_timeout_ms = 1000;
-    config->usb_task_priority = 0;
-    config->usb_task_core_id = 0xFF;
-}
-
-void esp_rtl_sdr_stream_config_default(esp_rtl_sdr_stream_config_t *stream)
-{
-    if (stream == nullptr) {
-        return;
-    }
-    std::memset(stream, 0, sizeof(*stream));
-    stream->struct_size = sizeof(esp_rtl_sdr_stream_config_t);
-    stream->preset = ESP_RTL_SDR_PRESET_KZEL_96_1;
-    stream->frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
-    stream->sample_rate_sps = ESP_RTL_SDR_RATE_960K;
-}
-
-esp_err_t esp_rtl_sdr_config_validate(const esp_rtl_sdr_config_t *config)
-{
-    if (config == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (config->struct_size != sizeof(esp_rtl_sdr_config_t)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (!is_xfer_bytes_ok(config->transfer_bytes)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (config->transfer_count < ESP_RTL_SDR_MIN_XFER_COUNT ||
-        config->transfer_count > ESP_RTL_SDR_MAX_XFER_COUNT) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (config->control_timeout_ms == 0 ||
-        config->control_timeout_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (config->usb_task_core_id != 0xFF && config->usb_task_core_id > 1) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    return ESP_OK;
-}
-
-esp_err_t esp_rtl_sdr_stream_config_validate(const esp_rtl_sdr_stream_config_t *stream)
-{
-    if (stream == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (stream->struct_size != sizeof(esp_rtl_sdr_stream_config_t)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (stream->preset > ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    /* 0 = filled from preferred at start(); otherwise must be in-window. */
-    if (stream->sample_rate_sps != 0 &&
-        !esp_rtl_sdr_is_rate_supported(stream->sample_rate_sps)) {
-        return ESP_RTL_SDR_ERR_BAD_RATE;
-    }
-    if (stream->preset == ESP_RTL_SDR_PRESET_CUSTOM_HZ) {
-        uint32_t q = 0;
-        if (!esp_rtl_sdr_normalize_frequency(stream->frequency_hz, &q)) {
-            return ESP_RTL_SDR_ERR_BAD_FREQ;
-        }
-    }
-    if (stream->max_bytes != 0 && (stream->max_bytes % 2u) != 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (stream->timeout_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    return ESP_OK;
-}
+/* Pure policy (version, rates, config validate) lives in esp_rtl_sdr_policy.cpp */
 
 static esp_err_t resolve_stream_frequency(const esp_rtl_sdr_stream_config_t *stream,
                                           uint32_t *out_hz)
@@ -2587,19 +2322,6 @@ esp_err_t esp_rtl_sdr_get_health(esp_rtl_sdr_handle_t handle,
     return ESP_OK;
 }
 
-void esp_rtl_sdr_passport_opts_default(esp_rtl_sdr_passport_opts_t *opts)
-{
-    if (opts == nullptr) {
-        return;
-    }
-    std::memset(opts, 0, sizeof(*opts));
-    opts->struct_size = sizeof(*opts);
-    opts->frequency_hz = 0;
-    opts->dwell_ms = ESP_RTL_SDR_PASSPORT_DEFAULT_DWELL_MS;
-    opts->min_efficiency_pct = 95;
-    opts->recommended_only = true;
-}
-
 esp_err_t esp_rtl_sdr_get_rate_passport(esp_rtl_sdr_handle_t handle,
                                         esp_rtl_sdr_rate_passport_t *out_passport)
 {
@@ -2702,8 +2424,18 @@ esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
             candidates[n_cand++] = exact;
         }
     };
-    for (uint32_t r : kRecommendedRates) {
-        push_rate(r);
+    {
+        size_t rec_n = 0;
+        (void)esp_rtl_sdr_get_supported_rates(nullptr, 0, &rec_n);
+        uint32_t rec[ESP_RTL_SDR_PASSPORT_MAX_ENTRIES];
+        size_t written = 0;
+        if (rec_n > ESP_RTL_SDR_PASSPORT_MAX_ENTRIES) {
+            rec_n = ESP_RTL_SDR_PASSPORT_MAX_ENTRIES;
+        }
+        (void)esp_rtl_sdr_get_supported_rates(rec, rec_n, &written);
+        for (size_t i = 0; i < written && i < rec_n; ++i) {
+            push_rate(rec[i]);
+        }
     }
     if (!local_opts.recommended_only) {
         for (uint32_t r : kPassportExtraRates) {

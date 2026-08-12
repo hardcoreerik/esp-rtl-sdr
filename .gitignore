@@ -1,5 +1,6 @@
 .pio/
 build/
+tests/host/build/
 sdkconfig
 sdkconfig.old
 dependencies.lock

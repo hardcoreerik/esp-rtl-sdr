@@ -1,7 +1,7 @@
 # Test lab & RF fixtures
 
-Authoritative list of **bench gear available to this project** for driver and
-app validation. Update when gear changes.
+**Automated tests:** see [TESTING_GUIDE.md](TESTING_GUIDE.md) (host unit suite + CI).  
+This file lists **bench gear** for driver/app validation. Update when gear changes.
 
 ## Hosts (SDR under test)
 

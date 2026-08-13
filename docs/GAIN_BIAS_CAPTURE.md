@@ -30,6 +30,11 @@ Then implement only from those captures in this repo (clean-room).
 
 **Hobbyist desk is enough** for USB + multimeter + relative RF. See honest limits and
 TinySA step-by-step: **[LAB_HOBBYIST.md](LAB_HOBBYIST.md)**.
+
+**PC software setup (this maintainer desk):** **[PHASE3_PC_SETUP.md](PHASE3_PC_SETUP.md)**  
+Tools live under `C:\Tools\esp-rtl-sdr-lab\` (Wireshark, USBPcap, `rtl_biast`, SDR#/SDR++, Zadig).  
+For #1, plug the **Blog V4 into the PC**, not the ESP32-P4.
+
 ---
 
 ## Capture plan

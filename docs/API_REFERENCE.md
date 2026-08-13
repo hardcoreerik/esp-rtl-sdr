@@ -1,6 +1,6 @@
 # esp_rtl_sdr — API Reference
 
-> **Version tracked:** `0.7.5` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
+> **Version tracked:** `0.7.7` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
 > **Header of record:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
 > **Design contract (invariants, ABI growth):** [`API.md`](API.md)  
 > **What works on hardware right now:** [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) wins on any claim conflict.
@@ -296,7 +296,7 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | **Returns** | Bitmask of `esp_rtl_sdr_cap_t` for **this binary** |
 | **Notes** | No handle required. CAP bits track **implemented** paths only. |
 
-### Capability map (0.7.5)
+### Capability map (0.7.7)
 
 | Flag | Bit | Status | Meaning |
 |---|---|---|---|

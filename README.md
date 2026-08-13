@@ -3,7 +3,7 @@
 **Make an RTL-SDR Blog V4 a first-class peripheral on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.7.5-green)
+![Status](https://img.shields.io/badge/version-0.7.7-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
@@ -30,7 +30,8 @@ That means:
 
 - A **stable C API** you can put next to FreeRTOS tasks and UI code  
 - **Fail-closed** behavior (no “half-open USB” after a failed start)  
-- **Capability flags** so apps don’t assume gain/bias/HF that aren’t measured yet  
+- **Capability flags** so apps don’t assume gain/bias/HF without CAP bits  
+
 - **Health + metrics** (is USB starving? is the app too slow? RF clipping?)  
 - **Rate passport** — probe which sample rates this **host + stick** actually sustain  
 - **Intent presets** (`NEED_FM`, `NEED_ADSB`, …) so apps speak missions, not only registers  
@@ -56,7 +57,7 @@ On a P4, the **host USB and RAM path is the hard part**. We lean into that:
 | “Supports every RTL” marketing | **Fail closed** on unknown sticks; one measured profile first |
 | App figures out “is RF dead?” | **Health** narrative (USB / app / RF clip / weak) |
 
-We are **not** chasing full librtlsdr feature parity (gain/bias/HF CAP still open). We are chasing a driver that is **safe to live inside a real FreeRTOS product**.
+We are **not** chasing full librtlsdr feature parity (AGC / IF filter still open). We are chasing a driver that is **safe to live inside a real FreeRTOS product**.
 
 ---
 
@@ -208,9 +209,8 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `set/get_sample_rate` · `quantize_sample_rate` | Allowlisted windows → **exact** programmed SPS |
 | `is_rate_supported` · `get_supported_rates` | Policy / UI lists |
 | `set/get_freq_correction` | Software ppm LO offset (±200) |
-| `apply_need` | `NEED_FM` · `NEED_ADSB` · `NEED_WX` · `NEED_HF`* · `NEED_MAX_STABLE` · `NEED_LISTEN` |
-
-\*HF stores preferred LO; full upconverter CAP not claimed yet.
+| `apply_need` | `NEED_FM` · `NEED_ADSB` · `NEED_WX` · `NEED_HF` · `NEED_MAX_STABLE` · `NEED_LISTEN` |
+| HF LO map | RF &lt; 28.8 MHz → tuner RF+28.8 MHz (`CAP_HF_UPCONVERTER`, **0.7.7+**) |
 
 ### Data path
 
@@ -235,15 +235,16 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `refresh_device_list` · `get_device_count` · `get_device_at` | Candidates |
 | `select_device` · `select_device_serial` | Choose Blog V4 by index/serial |
 
-### Gain & bias (0.7.5 measured Blog V4)
+### Gain, bias & HF (0.7.5–0.7.7 Blog V4)
 
 | API | Today |
 |---|---|
 | `set/get_tuner_gain` · `get_tuner_gains` | Manual ladder 0.0…49.6 dB (CAP_GAIN); need claimed stream |
 | `set_tuner_gain_mode(MANUAL)` | OK; **AUTO** still unsupported |
 | `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
+| HF (0.7.7) | **500 kHz…1766 MHz**; RF&lt;28.8 MHz uses +28.8 MHz upconverter (`CAP_HF_UPCONVERTER`) |
 
-Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md). P4 re-soak of these paths still open.
+Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md). P4 RF soak of HF FE still open.
 
 ### Typical rates (macros)
 
@@ -286,11 +287,12 @@ install → IDLE
 
 | Works | Not yet |
 |---|---|
-| Blog V4 stream + retune + metrics on P4 (design + provenance) | Gain / bias hardware CAP |
+| Blog V4 stream + retune + metrics on P4 | Tuner AGC AUTO EP0 |
 | Continuous rates + passport API | “Any RTL2832U” |
-| Health + need presets | Full HF upconverter CAP |
-| CI: host tests + **P4 compile** of smoke app | Formal USB soak artifact from *this* repo only |
-| Clean-room tables | librtlsdr drop-in ABI |
+| Manual gain + bias CAP (0.7.5+) | Formal multi-hour soak artifact from *this* repo only |
+| HF upconverter CAP (0.7.7) | IF / channel filter EP0 |
+| CI: host tests + **P4 compile** of smoke app | librtlsdr drop-in ABI |
+| Clean-room tables | |
 
 Details: [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) · story: [`docs/DEVELOPMENT_NARRATIVE_0_7.md`](docs/DEVELOPMENT_NARRATIVE_0_7.md).
 

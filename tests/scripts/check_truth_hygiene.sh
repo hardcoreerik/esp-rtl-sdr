@@ -11,12 +11,24 @@ PATCH=$(grep -E '#define ESP_RTL_SDR_VERSION_PATCH' "$hdr" | head -1 | grep -oE 
 VER="${MAJOR}.${MINOR}.${PATCH}"
 echo "header version=$VER"
 
-grep -q "version: \"${VER}\"" idf_component.yml
-grep -q "\"version\": \"${VER}\"" library.json
-grep -q "${VER}" README.md
+grep -q "version: \"${VER}\"" idf_component.yml || {
+  echo "idf_component.yml missing version \"${VER}\""
+  exit 1
+}
+grep -q "\"version\": \"${VER}\"" library.json || {
+  echo "library.json missing version \"${VER}\""
+  exit 1
+}
+grep -q "${VER}" README.md || {
+  echo "README.md missing version string ${VER} (badge/docs lag header)"
+  exit 1
+}
 
 # PROJECT_TRUTH should mention same major.minor at least
-grep -qE "${MAJOR}\\.${MINOR}" PROJECT_TRUTH.md
+grep -qE "${MAJOR}\\.${MINOR}" PROJECT_TRUTH.md || {
+  echo "PROJECT_TRUTH.md missing ${MAJOR}.${MINOR}"
+  exit 1
+}
 
 # Required honesty docs
 for f in \

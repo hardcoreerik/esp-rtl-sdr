@@ -6,14 +6,14 @@ and cannot be truthfully closed with docs alone.
 
 | # | Review finding | Status after this work | Evidence |
 |---|---|---|---|
-| 1 | Gain / bias incomplete | **Tracked + procedure** — CAP still off until capture | [`GAIN_BIAS_CAPTURE.md`](GAIN_BIAS_CAPTURE.md), issue `phase-3` |
-| 2 | Narrow HW (P4 + V4 only) | **Documented as intentional scope** | [`SCOPE.md`](SCOPE.md) |
-| 3 | Single maintainer + AI | **Disclosed** (not “fixed” — truth) | AI disclosure, CONTRIBUTING |
-| 4 | Empty issues/PRs | **Seeded tracking issues** | GitHub Issues |
-| 5 | Limited soak evidence | **Procedure + template** — log still open | [`SOAK.md`](SOAK.md), `lab/` |
+| 1 | Gain / bias incomplete | **Tracked + procedure** — CAP still off until capture | [`GAIN_BIAS_CAPTURE.md`](GAIN_BIAS_CAPTURE.md), [#1](https://github.com/hardcoreerik/esp-rtl-sdr/issues/1) |
+| 2 | Narrow HW (P4 + V4 only) | **Documented as intentional scope** | [`SCOPE.md`](SCOPE.md), [#4](https://github.com/hardcoreerik/esp-rtl-sdr/issues/4) Deferred |
+| 3 | Single maintainer + AI | **Disclosed** (not “fixed” — truth) | AI disclosure, CONTRIBUTING, [#5](https://github.com/hardcoreerik/esp-rtl-sdr/issues/5) |
+| 4 | Empty issues/PRs | **Seeded tracking issues** | [#1](https://github.com/hardcoreerik/esp-rtl-sdr/issues/1)–[#5](https://github.com/hardcoreerik/esp-rtl-sdr/issues/5) |
+| 5 | Limited soak evidence | **Procedure + template** — log still open | [`SOAK.md`](SOAK.md), [#2](https://github.com/hardcoreerik/esp-rtl-sdr/issues/2) |
 | 6 | AGPL commercial friction | **Commercial process clarified** | [`LICENSING.md`](../LICENSING.md) |
-| 7 | API / docs gaps | **Closed in-tree** | [`API_REFERENCE.md`](API_REFERENCE.md), KCONFIG, EXAMPLES, TROUBLESHOOTING |
-| 8 | No releases / tags | **Tags existed**; **GitHub Release** published | `v0.7.3` release |
+| 7 | API / docs gaps | **Closed in-tree** | [`API_REFERENCE.md`](API_REFERENCE.md), KCONFIG, EXAMPLES, TROUBLESHOOTING, [#3](https://github.com/hardcoreerik/esp-rtl-sdr/issues/3) |
+| 8 | No releases / tags | **Tags existed**; **GitHub Release** published | [v0.7.3 Release](https://github.com/hardcoreerik/esp-rtl-sdr/releases/tag/v0.7.3) |
 | — | Magic numbers | **Documented** | [`RUNTIME_CONSTANTS.md`](RUNTIME_CONSTANTS.md) |
 | — | DMA speculation | **N/A** — IDF USB host owns DMA; not a driver bug | — |
 | — | S3 as P2 must-have | **Rejected as near-term priority** — Deferred with rationale | SCOPE + Roadmap |

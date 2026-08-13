@@ -25,8 +25,8 @@ This release pauses Phase 3 gain/bias **hardware** work for one hardening cut.
 | Item | Status |
 |---|---|
 | True async retune from callback (queue + owner drain) | **Done in 0.7.3** |
-| Delivery modes CALLBACK/READ/BOTH | Planned |
-| Lazy pull-ring (optional sync read) | Planned |
+| Delivery modes CALLBACK/READ/BOTH | **Done in 0.7.4** |
+| Lazy pull-ring (optional sync read) | **Done in 0.7.4** |
 | ESP-IDF P4 compile CI | **Done** in CI (`idf-p4-build`, IDF 5.3.2 + 5.4.1) |
 | Full atomics ownership model for all USB fields | Incremental |
 | Hardware soak from this tree | Lab |

@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-13**  
-Version: **0.7.3** (async retune from callback — not production-ready)  
+Version: **0.7.4** (delivery modes + lazy pull ring — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -82,6 +82,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Gain / bias public API | **Implemented (stubs)** | Returns UNSUPPORTED; CAP bits **off** |
 | set/get center freq, rate, ppm | **Implemented** | |
 | Sync `read()` | **Implemented** | |
+| Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
 | Multi-device select | **Implemented** | |
 | Blog V4 filter `0bda:2838` | **Implemented** | |
 | Dual-core USB/delivery | **Implemented** | |
@@ -104,6 +105,10 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.5.0** | Rename + Phase 1 freq/rate/read |
 | **0.6.0** | Phase 2: expanded rates list + ppm + multi-device |
 | **0.7.0** | Continuous rates + need + health + passport + docs (vision/silicon/lab) |
+| **0.7.1** | Host tests / CI spine expansion |
+| **0.7.2** | Runtime hardening (STARTING, join, ring transactional, Kconfig) |
+| **0.7.3** | True async retune from event callback + `EVT_RETUNED` |
+| **0.7.4** | Delivery modes BOTH/CALLBACK/READ + lazy pull ring |
 
 ---
 

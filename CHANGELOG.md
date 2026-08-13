@@ -2,14 +2,28 @@
 
 ## Unreleased
 
-### Docs / process (review gap closure)
+## 0.7.4 (2026-08-13)
 
-- **Full API reference:** `docs/API_REFERENCE.md` (parameters, returns, examples)
-- Kconfig, troubleshooting, examples, soak procedure + lab template
-- Intentional hardware scope (`docs/SCOPE.md`), runtime constants doc
-- Commercial licensing process expanded (`LICENSING.md`)
-- Review gap map: `docs/REVIEW_GAPS_2026-08.md`
-- GitHub Release for `v0.7.3` + tracking issues for open lab work
+### Added
+
+- **Delivery modes** (`config.delivery_mode`): `BOTH` (default) | `CALLBACK` | `READ`
+  - `CALLBACK`: `EVT_IQ_BLOCK` only — no large pull-ring allocation
+  - `READ`: blocking `read()` only — no `EVT_IQ_BLOCK`
+  - `BOTH`: previous behavior
+- **Lazy pull ring:** buffer allocated on first IQ push or first `read()` when mode uses read
+- Optional `config.pull_ring_bytes` (0 = auto; even, 1 KiB…1 MiB)
+- `CAP_DELIVERY_MODE` + pure helpers `delivery_mode_uses_callback_iq` / `_uses_read`
+- `read()` returns `ERR_UNSUPPORTED` in CALLBACK-only mode
+
+### Fixed (CodeRabbit on PR #6)
+
+- Serialize `ensure_pull_ring` on the handle lock; fail-closed teardown of partial rings
+  (no double-alloc race between delivery task and `read()`)
+
+### Docs / process (from 0.7.3 review gap work)
+
+- Full API reference, Kconfig/troubleshooting/examples, soak template, SCOPE, licensing
+- Legacy `struct_size` fallback for delivery fields documented; versioning table through 0.7.4
 
 ## 0.7.3 (2026-08-12)
 

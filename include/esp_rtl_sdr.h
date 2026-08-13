@@ -85,7 +85,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 3
+#define ESP_RTL_SDR_VERSION_PATCH 4
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -286,7 +286,22 @@ typedef enum {
     ESP_RTL_SDR_CAP_HEALTH = 1u << 13,      /**< get_health / EVT_HEALTH */
     ESP_RTL_SDR_CAP_PASSPORT = 1u << 14,    /**< on-device rate passport probe */
     ESP_RTL_SDR_CAP_GAIN = 1u << 15,        /**< tuner gain APIs (off until measured) */
+    ESP_RTL_SDR_CAP_DELIVERY_MODE = 1u << 16, /**< config.delivery_mode honored */
 } esp_rtl_sdr_cap_t;
+
+/**
+ * How IQ samples reach the app (0.7.4+).
+ * Other events (STARTED, ERROR, RETUNED, HEALTH, …) still use event_cb when set.
+ *
+ * BOTH (default): EVT_IQ_BLOCK + blocking read() pull ring.
+ * CALLBACK: EVT_IQ_BLOCK only — no pull-ring RAM until mode changes.
+ * READ: pull ring only — no EVT_IQ_BLOCK (saves callback cost).
+ */
+typedef enum {
+    ESP_RTL_SDR_DELIVERY_BOTH = 0,
+    ESP_RTL_SDR_DELIVERY_CALLBACK = 1,
+    ESP_RTL_SDR_DELIVERY_READ = 2,
+} esp_rtl_sdr_delivery_mode_t;
 
 /**
  * Intent presets — apps describe the mission; driver picks LO/rate defaults.
@@ -462,6 +477,17 @@ typedef struct {
     uint8_t usb_task_priority;
     /** Core affinity: 0 or 1, or 0xFF = no affinity. */
     uint8_t usb_task_core_id;
+    /**
+     * IQ delivery path (append-only field — older struct_size keeps BOTH).
+     * See esp_rtl_sdr_delivery_mode_t. Default BOTH.
+     */
+    esp_rtl_sdr_delivery_mode_t delivery_mode;
+    /**
+     * Optional pull-ring capacity in bytes (CU8). 0 = auto
+     * (~4× URB total, min ~192 KiB, max 512 KiB). Only allocated when the
+     * mode uses read() (lazy on first push/read).
+     */
+    size_t pull_ring_bytes;
 } esp_rtl_sdr_config_t;
 
 typedef struct {
@@ -537,6 +563,12 @@ esp_err_t esp_rtl_sdr_preset_frequency_hz(esp_rtl_sdr_preset_t preset,
 
 /** Capability bitmask for this binary (see esp_rtl_sdr_cap_t). */
 uint32_t esp_rtl_sdr_get_capabilities(void);
+
+/** True if mode emits EVT_IQ_BLOCK for bulk IQ. */
+bool esp_rtl_sdr_delivery_mode_uses_callback_iq(esp_rtl_sdr_delivery_mode_t mode);
+
+/** True if mode fills the sync-read pull ring (esp_rtl_sdr_read). */
+bool esp_rtl_sdr_delivery_mode_uses_read(esp_rtl_sdr_delivery_mode_t mode);
 
 /* -------------------------------------------------------------------------- */
 /* Lifecycle                                                                  */
@@ -681,13 +713,16 @@ esp_err_t esp_rtl_sdr_get_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t *out
 
 /**
  * Blocking pull of interleaved CU8 IQ bytes (sync-read equivalent).
- * Works while STREAMING whether or not an event callback is installed.
+ * Requires delivery_mode BOTH or READ (default BOTH). Returns
+ * ERR_UNSUPPORTED for CALLBACK-only mode.
+ * Works while STREAMING; pull ring is allocated lazily on first use when needed.
  * @param out_buf  Destination; must be non-NULL.
  * @param max_bytes  Capacity; should be even (odd truncated down).
  * @param timeout_ms  0 = return immediately with whatever is buffered.
  * @param out_bytes  Required; set to bytes copied (0 on timeout with empty buffer).
  * @return ESP_OK if any bytes copied, ERR_TIMEOUT if none within timeout while
- *         streaming, ERR_NOT_STREAMING if idle, other errors as usual.
+ *         streaming, ERR_NOT_STREAMING if idle, ERR_UNSUPPORTED if mode is
+ *         CALLBACK-only, other errors as usual.
  */
 esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t max_bytes,
                            uint32_t timeout_ms, size_t *out_bytes);

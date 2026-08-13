@@ -1,6 +1,6 @@
 # esp_rtl_sdr — API Reference
 
-> **Version tracked:** `0.7.3` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
+> **Version tracked:** `0.7.4` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
 > **Header of record:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
 > **Design contract (invariants, ABI growth):** [`API.md`](API.md)  
 > **What works on hardware right now:** [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) wins on any claim conflict.
@@ -296,7 +296,7 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | **Returns** | Bitmask of `esp_rtl_sdr_cap_t` for **this binary** |
 | **Notes** | No handle required. CAP bits track **implemented** paths only. |
 
-### Capability map (0.7.3)
+### Capability map (0.7.4)
 
 | Flag | Bit | Status | Meaning |
 |---|---|---|---|
@@ -316,6 +316,7 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | `ESP_RTL_SDR_CAP_HEALTH` | 13 | **On** | `get_health` / `EVT_HEALTH` |
 | `ESP_RTL_SDR_CAP_PASSPORT` | 14 | **On** | `probe_rates` |
 | `ESP_RTL_SDR_CAP_GAIN` | 15 | **Off** | Until Phase 3 capture |
+| `ESP_RTL_SDR_CAP_DELIVERY_MODE` | 16 | **On** | `config.delivery_mode` |
 
 ```c
 const uint32_t need = ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_SYNC_READ;
@@ -538,6 +539,34 @@ Payload of `EVT_ERROR`.
 | `iq_acquire_mode` | `false` | Ignored until CAP_IQ_ACQUIRE |
 | `usb_task_priority` | 0 = driver default | |
 | `usb_task_core_id` | 0xFF = no affinity | 0, 1, or 0xFF |
+| `delivery_mode` | `BOTH` | `BOTH` / `CALLBACK` / `READ` (0.7.4+) |
+| `pull_ring_bytes` | 0 = auto | Even, 1 KiB…1 MiB if set; lazy alloc when mode uses read |
+
+**Legacy `struct_size`:** If the app was compiled against a header that ends at
+`usb_task_core_id` (or any size that omits the new trailing fields),
+`install` / `config_validate` copy only `struct_size` bytes over defaults — so
+**`delivery_mode` stays `BOTH`** and **`pull_ring_bytes` stays `0` (auto)**. Apps
+need a current header (and full `struct_size`) to select CALLBACK/READ or a
+custom pull size.
+
+### Delivery modes (0.7.4)
+
+| Mode | `EVT_IQ_BLOCK` | `read()` | Pull-ring RAM |
+|---|---|---|---|
+| `DELIVERY_BOTH` (default) | Yes | Yes | Lazy on first IQ or `read` |
+| `DELIVERY_CALLBACK` | Yes | `ERR_UNSUPPORTED` | **Never** |
+| `DELIVERY_READ` | No | Yes | Lazy on first IQ or `read` |
+
+Other events (`STARTED`, `RETUNED`, `HEALTH`, `ERROR`, …) still use `event_cb` when set.
+
+```c
+cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_CALLBACK; /* no pull ring */
+/* or */
+cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_READ;     /* no IQ callbacks */
+cfg.pull_ring_bytes = 256 * 1024;                  /* optional size */
+```
+
+Helpers: `esp_rtl_sdr_delivery_mode_uses_callback_iq()` / `_uses_read()`.
 
 ### `esp_rtl_sdr_stream_config_t`
 

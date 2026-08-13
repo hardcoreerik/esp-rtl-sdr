@@ -40,7 +40,18 @@ uint32_t esp_rtl_sdr_get_capabilities(void)
            ESP_RTL_SDR_CAP_CUSTOM_HZ | ESP_RTL_SDR_CAP_HOTPLUG |
            ESP_RTL_SDR_CAP_FREQ_CORRECTION | ESP_RTL_SDR_CAP_MULTI_DEVICE |
            ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_CONTINUOUS_RATE |
-           ESP_RTL_SDR_CAP_NEED | ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT;
+           ESP_RTL_SDR_CAP_NEED | ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT |
+           ESP_RTL_SDR_CAP_DELIVERY_MODE;
+}
+
+bool esp_rtl_sdr_delivery_mode_uses_callback_iq(esp_rtl_sdr_delivery_mode_t mode)
+{
+    return mode == ESP_RTL_SDR_DELIVERY_BOTH || mode == ESP_RTL_SDR_DELIVERY_CALLBACK;
+}
+
+bool esp_rtl_sdr_delivery_mode_uses_read(esp_rtl_sdr_delivery_mode_t mode)
+{
+    return mode == ESP_RTL_SDR_DELIVERY_BOTH || mode == ESP_RTL_SDR_DELIVERY_READ;
 }
 
 const char *esp_rtl_sdr_state_to_name(esp_rtl_sdr_state_t state)
@@ -227,6 +238,8 @@ void esp_rtl_sdr_config_default(esp_rtl_sdr_config_t *config)
     config->control_timeout_ms = 1000;
     config->usb_task_priority = 0;
     config->usb_task_core_id = 0xFF;
+    config->delivery_mode = ESP_RTL_SDR_DELIVERY_BOTH;
+    config->pull_ring_bytes = 0;
 }
 
 void esp_rtl_sdr_stream_config_default(esp_rtl_sdr_stream_config_t *stream)
@@ -274,6 +287,16 @@ esp_err_t esp_rtl_sdr_config_validate(const esp_rtl_sdr_config_t *config)
     }
     if (local.usb_task_core_id != 0xFF && local.usb_task_core_id > 1) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (local.delivery_mode > ESP_RTL_SDR_DELIVERY_READ) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    /* pull_ring_bytes 0 = auto; else must be even and within a sane bound */
+    if (local.pull_ring_bytes != 0) {
+        if ((local.pull_ring_bytes % 2u) != 0 || local.pull_ring_bytes < 1024u ||
+            local.pull_ring_bytes > (1024u * 1024u)) {
+            return ESP_ERR_INVALID_ARG;
+        }
     }
     return ESP_OK;
 }

@@ -798,39 +798,95 @@ static void pull_ring_reset(esp_rtl_sdr_handle *h)
     }
 }
 
+/** Tear down pull ring under handle lock (or during uninstall). Fail-closed. */
+static void destroy_pull_ring_unlocked(esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr) {
+        return;
+    }
+    if (h->pull_buf != nullptr) {
+        free(h->pull_buf);
+        h->pull_buf = nullptr;
+    }
+    h->pull_cap = h->pull_r = h->pull_w = h->pull_count = 0;
+    if (h->pull_mux != nullptr) {
+        vSemaphoreDelete(h->pull_mux);
+        h->pull_mux = nullptr;
+    }
+    if (h->pull_sem != nullptr) {
+        vSemaphoreDelete(h->pull_sem);
+        h->pull_sem = nullptr;
+    }
+}
+
+/**
+ * Lazy pull-ring init. Serialized on the handle API lock so delivery_task and
+ * esp_rtl_sdr_read cannot race a double-alloc or leave a half-initialized ring.
+ */
 static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
 {
-    if (h->pull_buf != nullptr && h->pull_cap > 0) {
+    if (h == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    HandleLock lk(h);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+
+    if (h->pull_buf != nullptr && h->pull_cap > 0 && h->pull_mux != nullptr &&
+        h->pull_sem != nullptr) {
         return ESP_OK;
     }
-    /* ~0.2 s at 960 kS/s CU8 (192 KiB), or 4× URB total, cap 512 KiB. */
-    size_t need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
-    if (need < 96000u * 2u) {
-        need = 96000u * 2u;
+    /* Incomplete prior attempt must not satisfy a false success path. */
+    if (h->pull_buf != nullptr || h->pull_mux != nullptr || h->pull_sem != nullptr ||
+        h->pull_cap != 0) {
+        destroy_pull_ring_unlocked(h);
     }
-    if (need > 512u * 1024u) {
-        need = 512u * 1024u;
+
+    size_t need = h->cfg.pull_ring_bytes;
+    if (need == 0) {
+        /* ~0.2 s at 960 kS/s CU8 (192 KiB), or 4× URB total, cap 512 KiB. */
+        need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
+        if (need < 96000u * 2u) {
+            need = 96000u * 2u;
+        }
+        if (need > 512u * 1024u) {
+            need = 512u * 1024u;
+        }
     }
-    h->pull_buf = static_cast<uint8_t *>(
+    need &= ~size_t{1};
+    if (need < 2u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t *buf = static_cast<uint8_t *>(
         heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (h->pull_buf == nullptr) {
-        h->pull_buf =
-            static_cast<uint8_t *>(heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (buf == nullptr) {
+        buf = static_cast<uint8_t *>(heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     }
-    if (h->pull_buf == nullptr) {
+    if (buf == nullptr) {
         return ESP_ERR_NO_MEM;
     }
+
+    SemaphoreHandle_t mux = xSemaphoreCreateMutex();
+    SemaphoreHandle_t sem = xSemaphoreCreateBinary();
+    if (mux == nullptr || sem == nullptr) {
+        if (mux != nullptr) {
+            vSemaphoreDelete(mux);
+        }
+        if (sem != nullptr) {
+            vSemaphoreDelete(sem);
+        }
+        free(buf);
+        return ESP_ERR_NO_MEM;
+    }
+
+    /* Publish fully-formed ring only after all pieces exist. */
+    h->pull_buf = buf;
     h->pull_cap = need;
     h->pull_r = h->pull_w = h->pull_count = 0;
-    if (h->pull_mux == nullptr) {
-        h->pull_mux = xSemaphoreCreateMutex();
-    }
-    if (h->pull_sem == nullptr) {
-        h->pull_sem = xSemaphoreCreateBinary();
-    }
-    if (h->pull_mux == nullptr || h->pull_sem == nullptr) {
-        return ESP_ERR_NO_MEM;
-    }
+    h->pull_mux = mux;
+    h->pull_sem = sem;
     return ESP_OK;
 }
 
@@ -865,11 +921,9 @@ static void delivery_task_fn(void *arg)
         block.sample_rate_sps = slot->sample_rate_sps;
         block.host_timestamp_us = slot->host_timestamp_us;
 
-        /* Always feed sync-read ring so read() works with or without event_cb. */
-        pull_ring_push(h, slot->data, slot->bytes);
-
         esp_rtl_sdr_event_cb_t cb = nullptr;
         void *ctx = nullptr;
+        esp_rtl_sdr_delivery_mode_t mode = ESP_RTL_SDR_DELIVERY_BOTH;
         bool emit_health = false;
         esp_rtl_sdr_health_info_t health{};
         {
@@ -877,6 +931,7 @@ static void delivery_task_fn(void *arg)
             if (lk.ok()) {
                 cb = h->cfg.event_cb;
                 ctx = h->cfg.event_ctx;
+                mode = h->cfg.delivery_mode;
                 h->health_emit_blocks++;
                 if (cb != nullptr && h->streaming) {
                     fill_health_info(h, &health);
@@ -890,8 +945,24 @@ static void delivery_task_fn(void *arg)
                 }
             }
         }
+
+        /* Lazy pull ring: allocate only when mode uses read() and IQ arrives. */
+        if (esp_rtl_sdr_delivery_mode_uses_read(mode)) {
+            if (ensure_pull_ring(h) == ESP_OK) {
+                pull_ring_push(h, slot->data, slot->bytes);
+            } else {
+                HandleLock lk(h, kQueryLockTicks);
+                if (lk.ok()) {
+                    h->metrics.consumer_drops +=
+                        static_cast<uint32_t>(slot->bytes > 0 ? slot->bytes : 1);
+                }
+            }
+        }
+
         if (cb != nullptr) {
-            emit_after_unlock(h, ESP_RTL_SDR_EVT_IQ_BLOCK, &block, cb, ctx);
+            if (esp_rtl_sdr_delivery_mode_uses_callback_iq(mode)) {
+                emit_after_unlock(h, ESP_RTL_SDR_EVT_IQ_BLOCK, &block, cb, ctx);
+            }
             if (emit_health) {
                 emit_after_unlock(h, ESP_RTL_SDR_EVT_HEALTH, &health, cb, ctx);
             }
@@ -1453,9 +1524,7 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         handle->ctrl_xfer = nullptr;
     }
     destroy_iq_ring(handle);
-    free(handle->pull_buf);
-    handle->pull_buf = nullptr;
-    handle->pull_cap = handle->pull_count = handle->pull_r = handle->pull_w = 0;
+    destroy_pull_ring_unlocked(handle);
 
     HandleLock lk(handle, kUninstallLockTicks);
     handle->magic = 0;
@@ -1471,14 +1540,6 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     }
     if (handle->bulk_done_sem) {
         vSemaphoreDelete(handle->bulk_done_sem);
-    }
-    if (handle->pull_mux) {
-        vSemaphoreDelete(handle->pull_mux);
-        handle->pull_mux = nullptr;
-    }
-    if (handle->pull_sem) {
-        vSemaphoreDelete(handle->pull_sem);
-        handle->pull_sem = nullptr;
     }
     if (lock) {
         (void)xSemaphoreTake(lock, 0);
@@ -1723,11 +1784,12 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (ret != ESP_OK) {
             break;
         }
-        ret = ensure_pull_ring(handle);
-        if (ret != ESP_OK) {
-            break;
+        /* Pull ring is lazy: allocated on first IQ push or first read() when mode
+         * uses READ/BOTH. CALLBACK-only never allocates the large pull buffer. */
+        if (esp_rtl_sdr_delivery_mode_uses_read(handle->cfg.delivery_mode) &&
+            handle->pull_buf != nullptr) {
+            pull_ring_reset(handle);
         }
-        pull_ring_reset(handle);
         ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
                               static_cast<uint32_t>(handle->cfg.transfer_bytes));
         if (ret != ESP_OK) {
@@ -2034,6 +2096,29 @@ esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t
         if (handle->state != ESP_RTL_SDR_STATE_STREAMING || !handle->streaming) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_STREAMING);
             return ESP_RTL_SDR_ERR_NOT_STREAMING;
+        }
+        if (!esp_rtl_sdr_delivery_mode_uses_read(handle->cfg.delivery_mode)) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+            return ESP_RTL_SDR_ERR_UNSUPPORTED;
+        }
+    }
+
+    /* Lazy allocate pull ring on first read if IQ has not filled it yet. */
+    {
+        esp_err_t pr = ensure_pull_ring(handle);
+        if (pr != ESP_OK) {
+            HandleLock lk(handle, kQueryLockTicks);
+            if (lk.ok()) {
+                set_error_unlocked(handle, pr);
+            }
+            return pr;
+        }
+    }
+
+    {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
         }
         if (handle->pull_buf == nullptr || handle->pull_mux == nullptr) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_READY);

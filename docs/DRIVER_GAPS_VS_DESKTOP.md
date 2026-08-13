@@ -22,7 +22,7 @@ Labels:
 | Tuner AGC (auto) | Yes | **UNSUPPORTED** | **Driver** — need AGC EP0 capture |
 | IF / channel filter (tuner) | Often via gain stages + IF filter | **No** — only software LPF after IQ | **Driver/HW** — R828D IF/filter regs not measured as CAP |
 | Bias-T | Yes | **Measured SYS EP0** | Optional multimeter DC claim still open |
-| Direct sampling / HF | Forks | **Not claimed** | **Driver/HW** |
+| Direct sampling / HF | Forks | **HF upconverter CAP 0.7.7** (not direct sampling) | — soak RF |
 | Offset tuning | Common | **No API** | **Driver** (policy + EP0 if needed) |
 | Bandwidth / sample rate | Many rates | Continuous windows + quantize | App wires UI; driver OK |
 | PPM / freq correction | Yes | Software ppm API | App: not on Waveshare web yet |
@@ -35,6 +35,8 @@ Labels:
 2. **AUTO gain** — CAP_GAIN is manual only; `set_tuner_gain_mode(AUTO)` fails closed.
 3. **Gain under bias / mid-stream** — improved by async bulk-pause EP0 (0.7.6); still not multimeter-certified bias DC.
 4. **No stereo / RDS path in driver** — pure app/DSP (or future IQ streaming for host demod).
+5. **HF / shortwave upconverter CAP** — **0.7.7 on**: RF &lt; 28.8 MHz maps to tuner LO
+   RF+28.8e6 + triplexer HF FE. Direct sampling still not claimed. P4 RF soak open.
 
 ---
 

@@ -85,7 +85,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 6
+#define ESP_RTL_SDR_VERSION_PATCH 7
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -200,9 +200,18 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 #define ESP_RTL_SDR_PRESET_KZEL_HZ     96100000u
 #define ESP_RTL_SDR_PRESET_NOAA_HZ     162400000u
 
-/** Frequency policy (Hz) for CUSTOM_HZ until calibrated wider bands are proven. */
-#define ESP_RTL_SDR_FREQ_MIN_HZ        24000000u
+/**
+ * Frequency policy (Hz) — Blog V4 full advertised span (public DS / product page).
+ * Below HF_UPCONV_LO_HZ the driver programs the R828D at RF+28.8 MHz (built-in
+ * SA612 upconverter) and selects the HF triplexer input.
+ */
+#define ESP_RTL_SDR_FREQ_MIN_HZ        500000u
 #define ESP_RTL_SDR_FREQ_MAX_HZ        1766000000u
+/** Built-in HF upconverter LO (Blog V4 public: SA612 @ 28.8 MHz). */
+#define ESP_RTL_SDR_HF_UPCONV_LO_HZ    28800000u
+/** Triplexer band edges (public V4 product page): HF | VHF | UHF+. */
+#define ESP_RTL_SDR_BAND_VHF_MIN_HZ    28800000u
+#define ESP_RTL_SDR_BAND_UHF_MIN_HZ    250000000u
 /** Quantization applied by retune_hz / start (Hz). */
 #define ESP_RTL_SDR_FREQ_QUANT_HZ      1000u
 
@@ -287,6 +296,8 @@ typedef enum {
     ESP_RTL_SDR_CAP_PASSPORT = 1u << 14,    /**< on-device rate passport probe */
     ESP_RTL_SDR_CAP_GAIN = 1u << 15,        /**< measured Blog V4 manual gain (0.7.5+) */
     ESP_RTL_SDR_CAP_DELIVERY_MODE = 1u << 16, /**< config.delivery_mode honored */
+    /** Blog V4 HF path: RF&lt;28.8 MHz → tuner LO RF+28.8e6 + triplexer HF input (0.7.7+). */
+    ESP_RTL_SDR_CAP_HF_UPCONVERTER = 1u << 17,
 } esp_rtl_sdr_cap_t;
 
 /**
@@ -311,7 +322,7 @@ typedef enum {
     ESP_RTL_SDR_NEED_FM = 0,         /**< broadcast FM-class: 960k @ preferred LO */
     ESP_RTL_SDR_NEED_ADSB = 1,       /**< 1090 MHz, 2.048 MSPS */
     ESP_RTL_SDR_NEED_WX = 2,         /**< NOAA WX 162.400 MHz, 960k */
-    ESP_RTL_SDR_NEED_HF = 3,         /**< HF intent (V4 upconverter path; LO stored, CAP open) */
+    ESP_RTL_SDR_NEED_HF = 3,         /**< HF intent — WWV 10 MHz default; CAP_HF_UPCONVERTER */
     ESP_RTL_SDR_NEED_MAX_STABLE = 4, /**< passport best_stable, else 2.048M */
     ESP_RTL_SDR_NEED_LISTEN = 5,     /**< lowest-drop default: 960k, keep LO */
 } esp_rtl_sdr_need_t;
@@ -551,8 +562,21 @@ esp_err_t esp_rtl_sdr_get_supported_rates(uint32_t *out_rates,
 /**
  * Clamp and quantize frequency to driver policy.
  * Returns false if out of absolute range or out_hz is NULL.
+ * Range: FREQ_MIN_HZ (500 kHz) … FREQ_MAX_HZ (with CAP_HF_UPCONVERTER).
  */
 bool esp_rtl_sdr_normalize_frequency(uint32_t in_hz, uint32_t *out_hz);
+
+/**
+ * True if RF is in the Blog V4 HF upconverter band (RF < 28.8 MHz).
+ * Public product page: SA612 LO 28.8 MHz; software adds the offset.
+ */
+bool esp_rtl_sdr_frequency_uses_hf_upconverter(uint32_t rf_hz);
+
+/**
+ * Map user RF (Hz) to R828D tune frequency (Hz).
+ * HF band: RF + HF_UPCONV_LO_HZ; otherwise RF unchanged (then IF offset applied in PLL).
+ */
+uint32_t esp_rtl_sdr_tuner_frequency_hz(uint32_t rf_hz);
 
 /**
  * Resolve preset LO in Hz. For CUSTOM_HZ returns ESP_ERR_INVALID_ARG

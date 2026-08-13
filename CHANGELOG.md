@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.7.7 (2026-08-13)
+
+### Added — Blog V4 HF upconverter CAP
+
+- **`CAP_HF_UPCONVERTER`**: full advertised span **500 kHz … 1766 MHz**
+- User RF **&lt; 28.8 MHz** programs R828D at **RF + 28.8 MHz** (public V4 SA612 path)
+- Triplexer band FE after every tune/retune: HF / VHF / UHF (UHF keeps prior measured block)
+- Helpers: `esp_rtl_sdr_frequency_uses_hf_upconverter()`, `esp_rtl_sdr_tuner_frequency_hz()`
+- `NEED_HF` default LO = WWV **10.000 MHz** (was LO-only placeholder)
+- Post-gain band filter refresh (does not clobber reg05 gain ladder)
+
+### Evidence
+
+- Offset + band edges: **public** RTL-SDR Blog V4 product page / datasheet (not GPL source)
+- IR EP0 envelope: measured Blog V4 profile (`0x0074`/`0x0610`); HF reg05 family from init captures
+
 ## 0.7.6 (2026-08-13)
 
 ### Fixed

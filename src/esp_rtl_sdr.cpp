@@ -309,16 +309,21 @@ static esp_err_t resolve_stream_frequency(const esp_rtl_sdr_stream_config_t *str
 /* Clean-room PLL pack (measured Tab5 path)                                   */
 /* -------------------------------------------------------------------------- */
 
-/** Apply software ppm: tune = f + f*ppm/1e6 (integer). User-facing freq unchanged. */
-static uint32_t apply_freq_correction_hz(uint32_t frequency_hz, int32_t ppm)
+/**
+ * Apply software ppm on the *tuner* LO (after HF upconverter map).
+ * Clamps to programmable R828D range (above HF LO floor when offset applied).
+ */
+static uint32_t apply_freq_correction_hz(uint32_t tuner_hz, int32_t ppm)
 {
     if (ppm == 0) {
-        return frequency_hz;
+        return tuner_hz;
     }
-    const int64_t adj = (static_cast<int64_t>(frequency_hz) * ppm) / 1000000LL;
-    int64_t out = static_cast<int64_t>(frequency_hz) + adj;
-    if (out < static_cast<int64_t>(ESP_RTL_SDR_FREQ_MIN_HZ)) {
-        out = ESP_RTL_SDR_FREQ_MIN_HZ;
+    const int64_t adj = (static_cast<int64_t>(tuner_hz) * ppm) / 1000000LL;
+    int64_t out = static_cast<int64_t>(tuner_hz) + adj;
+    /* Tuner never programs below ~24 MHz native; HF path already added 28.8 MHz. */
+    constexpr int64_t kTunerMin = 24000000;
+    if (out < kTunerMin) {
+        out = kTunerMin;
     }
     if (out > static_cast<int64_t>(ESP_RTL_SDR_FREQ_MAX_HZ)) {
         out = ESP_RTL_SDR_FREQ_MAX_HZ;
@@ -496,18 +501,26 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
     return ESP_OK;
 }
 
+/**
+ * Program R828D PLL for *user RF* frequency_hz.
+ * Blog V4 HF (public): RF < 28.8 MHz is upconverted by 28.8 MHz before the tuner.
+ * User-facing metrics keep RF; only the PLL pack uses tuner_hz.
+ */
 static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
 {
+    const uint32_t tuner_base = esp_rtl_sdr_tuner_frequency_hz(frequency_hz);
     const uint32_t tune_hz =
-        apply_freq_correction_hz(frequency_hz, h != nullptr ? h->freq_correction_ppm : 0);
+        apply_freq_correction_hz(tuner_base, h != nullptr ? h->freq_correction_ppm : 0);
     uint8_t r16_setup = 0, r16_active = 0, r20 = 0, r21 = 0, r22 = 0;
     if (!encode_r820_pll(tune_hz, &r16_setup, &r16_active, &r20, &r21, &r22)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
-    ESP_LOGI(TAG, "tune request=%u Hz apply=%u Hz ppm=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x",
+    const bool hf = esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz);
+    ESP_LOGI(TAG,
+             "tune rf=%u Hz tuner=%u Hz ppm=%d hf_upconv=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x",
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
-             h != nullptr ? static_cast<int>(h->freq_correction_ppm) : 0, r16_setup, r16_active,
-             r20, r21, r22);
+             h != nullptr ? static_cast<int>(h->freq_correction_ppm) : 0, hf ? 1 : 0, r16_setup,
+             r16_active, r20, r21, r22);
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
         RtlControlRecord rec = kRtlFinalTuneTemplate[i];
         if (i == 3 || i == 7) {
@@ -533,6 +546,24 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     return ESP_OK;
 }
 
+/**
+ * R828D triplexer input / band FE.
+ * EP0 style: measured Blog V4 IR writes (0x0074/0x0610).
+ * UHF block: existing measured path (ADS-B class).
+ * HF / VHF: same IR envelope; reg values from measured init transitions
+ * (0xa3 / 0xe3 / 0x83 families observed in kRtlInitTransfers).
+ */
+static esp_err_t run_records(esp_rtl_sdr_handle *h, const RtlControlRecord *tab, size_t n)
+{
+    for (size_t i = 0; i < n; ++i) {
+        esp_err_t err = run_record(h, tab[i], false);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    return ESP_OK;
+}
+
 static esp_err_t run_uhf_frontend(esp_rtl_sdr_handle *h)
 {
     constexpr RtlControlRecord kUhf[] = {
@@ -542,13 +573,85 @@ static esp_err_t run_uhf_frontend(esp_rtl_sdr_handle *h)
         {0x0074, 0x0610, 0x40, 2, {0x05, 0x83}},
         {0x0074, 0x0610, 0x40, 2, {0x0c, 0x6b}},
     };
-    for (const auto &record : kUhf) {
-        esp_err_t err = run_record(h, record, false);
-        if (err != ESP_OK) {
-            return err;
-        }
+    return run_records(h, kUhf, std::size(kUhf));
+}
+
+/**
+ * HF triplexer path.
+ * Full path writes reg05=0xa3 (measured init mid-transition family).
+ * filters_only skips reg05 so CAP_GAIN ladder is not clobbered after gain EP0.
+ */
+static esp_err_t run_hf_frontend(esp_rtl_sdr_handle *h, bool filters_only)
+{
+    constexpr RtlControlRecord kHfFull[] = {
+        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
+        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
+        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x00}},
+        {0x0074, 0x0610, 0x40, 2, {0x05, 0xa3}},
+        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
+    };
+    constexpr RtlControlRecord kHfFilt[] = {
+        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
+        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
+        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x00}},
+        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
+    };
+    return filters_only ? run_records(h, kHfFilt, std::size(kHfFilt))
+                        : run_records(h, kHfFull, std::size(kHfFull));
+}
+
+/** VHF restore after HF/UHF (measured init tail family, reg05=0xe3). */
+static esp_err_t run_vhf_frontend(esp_rtl_sdr_handle *h, bool filters_only)
+{
+    constexpr RtlControlRecord kVhfFull[] = {
+        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
+        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
+        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x34}},
+        {0x0074, 0x0610, 0x40, 2, {0x05, 0xe3}},
+        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
+    };
+    constexpr RtlControlRecord kVhfFilt[] = {
+        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
+        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
+        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x34}},
+        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
+    };
+    return filters_only ? run_records(h, kVhfFilt, std::size(kVhfFilt))
+                        : run_records(h, kVhfFull, std::size(kVhfFull));
+}
+
+/** Select triplexer band for user RF (not tuner LO). */
+static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz)
+{
+    if (rf_hz < ESP_RTL_SDR_BAND_VHF_MIN_HZ) {
+        ESP_LOGI(TAG, "band FE HF rf=%u", static_cast<unsigned>(rf_hz));
+        return run_hf_frontend(h, false);
     }
-    return ESP_OK;
+    if (rf_hz >= ESP_RTL_SDR_BAND_UHF_MIN_HZ) {
+        ESP_LOGI(TAG, "band FE UHF rf=%u", static_cast<unsigned>(rf_hz));
+        return run_uhf_frontend(h);
+    }
+    ESP_LOGI(TAG, "band FE VHF rf=%u", static_cast<unsigned>(rf_hz));
+    return run_vhf_frontend(h, false);
+}
+
+/** After gain EP0: refresh band filters without clobbering reg05 gain ladder. */
+static esp_err_t run_band_frontend_after_gain(esp_rtl_sdr_handle *h, uint32_t rf_hz)
+{
+    if (rf_hz < ESP_RTL_SDR_BAND_VHF_MIN_HZ) {
+        return run_hf_frontend(h, true);
+    }
+    if (rf_hz >= ESP_RTL_SDR_BAND_UHF_MIN_HZ) {
+        /* UHF measured path includes reg05 — skip full rewrite; filters only. */
+        constexpr RtlControlRecord kUhfFilt[] = {
+            {0x0074, 0x0610, 0x40, 2, {0x17, 0x28}},
+            {0x0074, 0x0610, 0x40, 2, {0x1a, 0x68}},
+            {0x0074, 0x0610, 0x40, 2, {0x1b, 0x00}},
+            {0x0074, 0x0610, 0x40, 2, {0x0c, 0x6b}},
+        };
+        return run_records(h, kUhfFilt, std::size(kUhfFilt));
+    }
+    return run_vhf_frontend(h, true);
 }
 
 static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
@@ -726,13 +829,18 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 
     esp_err_t err = run_tune(h, tune_hz);
     if (err == ESP_OK) {
+        err = run_band_frontend(h, tune_hz);
+    }
+    if (err == ESP_OK) {
         h->frequency_hz = tune_hz;
         h->metrics.frequency_hz = tune_hz;
         h->preferred_frequency_hz = tune_hz;
         if (h->pending_retune_hz == tune_hz) {
             h->pending_retune_hz = 0;
         }
-        ESP_LOGI(TAG, "hot retune applied %u Hz", static_cast<unsigned>(tune_hz));
+        ESP_LOGI(TAG, "hot retune applied rf=%u Hz tuner=%u Hz",
+                 static_cast<unsigned>(tune_hz),
+                 static_cast<unsigned>(esp_rtl_sdr_tuner_frequency_hz(tune_hz)));
     } else {
         ESP_LOGW(TAG, "hot retune EP0 failed: %s (keep LO)", esp_rtl_sdr_err_to_name(err));
         if (h->pending_retune_hz == tune_hz) {
@@ -1808,11 +1916,9 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (ret != ESP_OK) {
             break;
         }
-        if (freq >= 300000000u) {
-            ret = run_uhf_frontend(handle);
-            if (ret != ESP_OK) {
-                break;
-            }
+        ret = run_band_frontend(handle, freq);
+        if (ret != ESP_OK) {
+            break;
         }
 
         ret = ensure_ring(handle, handle->cfg.transfer_bytes);
@@ -2469,7 +2575,7 @@ esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const ch
 /* -------------------------------------------------------------------------- */
 
 static constexpr uint32_t kAdsbHz = 1090000000u;
-static constexpr uint32_t kHfDefaultHz = 7100000u;
+static constexpr uint32_t kHfDefaultHz = 10000000u; /* WWV 10 MHz — native HF via upconverter */
 
 static void fill_health_info(const esp_rtl_sdr_handle *h, esp_rtl_sdr_health_info_t *out)
 {
@@ -2602,28 +2708,21 @@ esp_err_t esp_rtl_sdr_apply_need(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_need_t
 
     if (freq != 0) {
         uint32_t q = 0;
-        if (need == ESP_RTL_SDR_NEED_HF) {
-            handle->preferred_frequency_hz = freq;
-        } else if (!esp_rtl_sdr_normalize_frequency(freq, &q)) {
+        if (!esp_rtl_sdr_normalize_frequency(freq, &q)) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_FREQ);
             return ESP_RTL_SDR_ERR_BAD_FREQ;
-        } else {
-            handle->preferred_frequency_hz = q;
         }
+        handle->preferred_frequency_hz = q;
     }
     handle->preferred_sample_rate_sps = exact;
     handle->sample_rate_sps = exact;
     handle->metrics.sample_rate_sps = exact;
     handle->metrics.frequency_hz = handle->preferred_frequency_hz;
 
-    if (need == ESP_RTL_SDR_NEED_HF) {
-        ESP_LOGW(TAG, "NEED_HF: preferred LO=%u (upconverter CAP still open)",
-                 static_cast<unsigned>(handle->preferred_frequency_hz));
-    } else {
-        ESP_LOGI(TAG, "apply_need=%d freq=%u rate=%u", static_cast<int>(need),
-                 static_cast<unsigned>(handle->preferred_frequency_hz),
-                 static_cast<unsigned>(exact));
-    }
+    ESP_LOGI(TAG, "apply_need=%d freq=%u rate=%u hf=%d", static_cast<int>(need),
+             static_cast<unsigned>(handle->preferred_frequency_hz),
+             static_cast<unsigned>(exact),
+             esp_rtl_sdr_frequency_uses_hf_upconverter(handle->preferred_frequency_hz) ? 1 : 0);
     set_error_unlocked(handle, ESP_OK);
     return ESP_OK;
 }
@@ -2963,6 +3062,8 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
             h->gain_tenth_db = applied;
             h->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
             ESP_LOGI(TAG, "tuner gain applied %d (0.1 dB) [async]", applied);
+            /* Keep triplexer path after reg05 gain writes. */
+            (void)run_band_frontend_after_gain(h, h->frequency_hz);
         } else {
             ESP_LOGW(TAG, "tuner gain EP0 failed req=%d: %s", gain_t,
                      esp_rtl_sdr_err_to_name(gerr));

@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-13**  
-Version: **0.7.6** (async gain/bias EP0 + measured CAP — not production-ready)  
+Version: **0.7.7** (HF upconverter CAP + async gain/bias — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -89,7 +89,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |
 | Gain / bias-T hardware | **Implemented** (tables from PC USBPcap) | Lab 2026-08-12; **not** yet Hardware-verified from *this* tree on P4; no multimeter DC |
-| HF upconverter path CAP | **Planned** | NEED_HF stores LO only today |
+| HF upconverter path CAP | **Implemented (0.7.7)** | RF&lt;28.8 MHz → tuner RF+28.8e6; CAP_HF_UPCONVERTER; FE soak open |
 | R828D stage gain / input / notches | **Planned** | |
 | Adaptive USB URB | **Planned** | |
 | Beacon ppm learn | **Planned** | |

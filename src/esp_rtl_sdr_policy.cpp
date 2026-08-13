@@ -36,13 +36,15 @@ const char *esp_rtl_sdr_get_version_string(void)
 
 uint32_t esp_rtl_sdr_get_capabilities(void)
 {
-    /* MEASURED_2026_08_12: CAP_GAIN + CAP_BIAS_TEE from lab USBPcap (Blog V4). */
+    /* MEASURED_2026_08_12: CAP_GAIN + CAP_BIAS_TEE from lab USBPcap (Blog V4).
+     * 0.7.7: CAP_HF_UPCONVERTER — public V4 HF path (RF+28.8e6) + measured band FE. */
     return ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE | ESP_RTL_SDR_CAP_METRICS |
            ESP_RTL_SDR_CAP_CUSTOM_HZ | ESP_RTL_SDR_CAP_HOTPLUG |
            ESP_RTL_SDR_CAP_FREQ_CORRECTION | ESP_RTL_SDR_CAP_MULTI_DEVICE |
            ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_CONTINUOUS_RATE |
            ESP_RTL_SDR_CAP_NEED | ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT |
-           ESP_RTL_SDR_CAP_DELIVERY_MODE | ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_BIAS_TEE;
+           ESP_RTL_SDR_CAP_DELIVERY_MODE | ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_BIAS_TEE |
+           ESP_RTL_SDR_CAP_HF_UPCONVERTER;
 }
 
 bool esp_rtl_sdr_delivery_mode_uses_callback_iq(esp_rtl_sdr_delivery_mode_t mode)
@@ -187,6 +189,20 @@ bool esp_rtl_sdr_normalize_frequency(uint32_t in_hz, uint32_t *out_hz)
     }
     *out_hz = q;
     return true;
+}
+
+bool esp_rtl_sdr_frequency_uses_hf_upconverter(uint32_t rf_hz)
+{
+    return rf_hz > 0 && rf_hz < ESP_RTL_SDR_HF_UPCONV_LO_HZ;
+}
+
+uint32_t esp_rtl_sdr_tuner_frequency_hz(uint32_t rf_hz)
+{
+    if (esp_rtl_sdr_frequency_uses_hf_upconverter(rf_hz)) {
+        /* Public Blog V4: HF is mixed up by 28.8 MHz before the R828D. */
+        return rf_hz + ESP_RTL_SDR_HF_UPCONV_LO_HZ;
+    }
+    return rf_hz;
 }
 
 esp_err_t esp_rtl_sdr_preset_frequency_hz(esp_rtl_sdr_preset_t preset, uint32_t *out_hz)

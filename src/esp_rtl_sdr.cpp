@@ -803,14 +803,18 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
     if (h->pull_buf != nullptr && h->pull_cap > 0) {
         return ESP_OK;
     }
-    /* ~0.2 s at 960 kS/s CU8 (192 KiB), or 4× URB total, cap 512 KiB. */
-    size_t need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
-    if (need < 96000u * 2u) {
-        need = 96000u * 2u;
+    size_t need = h->cfg.pull_ring_bytes;
+    if (need == 0) {
+        /* ~0.2 s at 960 kS/s CU8 (192 KiB), or 4× URB total, cap 512 KiB. */
+        need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
+        if (need < 96000u * 2u) {
+            need = 96000u * 2u;
+        }
+        if (need > 512u * 1024u) {
+            need = 512u * 1024u;
+        }
     }
-    if (need > 512u * 1024u) {
-        need = 512u * 1024u;
-    }
+    need &= ~size_t{1};
     h->pull_buf = static_cast<uint8_t *>(
         heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (h->pull_buf == nullptr) {
@@ -865,11 +869,9 @@ static void delivery_task_fn(void *arg)
         block.sample_rate_sps = slot->sample_rate_sps;
         block.host_timestamp_us = slot->host_timestamp_us;
 
-        /* Always feed sync-read ring so read() works with or without event_cb. */
-        pull_ring_push(h, slot->data, slot->bytes);
-
         esp_rtl_sdr_event_cb_t cb = nullptr;
         void *ctx = nullptr;
+        esp_rtl_sdr_delivery_mode_t mode = ESP_RTL_SDR_DELIVERY_BOTH;
         bool emit_health = false;
         esp_rtl_sdr_health_info_t health{};
         {
@@ -877,6 +879,7 @@ static void delivery_task_fn(void *arg)
             if (lk.ok()) {
                 cb = h->cfg.event_cb;
                 ctx = h->cfg.event_ctx;
+                mode = h->cfg.delivery_mode;
                 h->health_emit_blocks++;
                 if (cb != nullptr && h->streaming) {
                     fill_health_info(h, &health);
@@ -890,8 +893,24 @@ static void delivery_task_fn(void *arg)
                 }
             }
         }
+
+        /* Lazy pull ring: allocate only when mode uses read() and IQ arrives. */
+        if (esp_rtl_sdr_delivery_mode_uses_read(mode)) {
+            if (ensure_pull_ring(h) == ESP_OK) {
+                pull_ring_push(h, slot->data, slot->bytes);
+            } else {
+                HandleLock lk(h, kQueryLockTicks);
+                if (lk.ok()) {
+                    h->metrics.consumer_drops +=
+                        static_cast<uint32_t>(slot->bytes > 0 ? slot->bytes : 1);
+                }
+            }
+        }
+
         if (cb != nullptr) {
-            emit_after_unlock(h, ESP_RTL_SDR_EVT_IQ_BLOCK, &block, cb, ctx);
+            if (esp_rtl_sdr_delivery_mode_uses_callback_iq(mode)) {
+                emit_after_unlock(h, ESP_RTL_SDR_EVT_IQ_BLOCK, &block, cb, ctx);
+            }
             if (emit_health) {
                 emit_after_unlock(h, ESP_RTL_SDR_EVT_HEALTH, &health, cb, ctx);
             }
@@ -1723,11 +1742,12 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (ret != ESP_OK) {
             break;
         }
-        ret = ensure_pull_ring(handle);
-        if (ret != ESP_OK) {
-            break;
+        /* Pull ring is lazy: allocated on first IQ push or first read() when mode
+         * uses READ/BOTH. CALLBACK-only never allocates the large pull buffer. */
+        if (esp_rtl_sdr_delivery_mode_uses_read(handle->cfg.delivery_mode) &&
+            handle->pull_buf != nullptr) {
+            pull_ring_reset(handle);
         }
-        pull_ring_reset(handle);
         ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
                               static_cast<uint32_t>(handle->cfg.transfer_bytes));
         if (ret != ESP_OK) {
@@ -2034,6 +2054,29 @@ esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t
         if (handle->state != ESP_RTL_SDR_STATE_STREAMING || !handle->streaming) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_STREAMING);
             return ESP_RTL_SDR_ERR_NOT_STREAMING;
+        }
+        if (!esp_rtl_sdr_delivery_mode_uses_read(handle->cfg.delivery_mode)) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+            return ESP_RTL_SDR_ERR_UNSUPPORTED;
+        }
+    }
+
+    /* Lazy allocate pull ring on first read if IQ has not filled it yet. */
+    {
+        esp_err_t pr = ensure_pull_ring(handle);
+        if (pr != ESP_OK) {
+            HandleLock lk(handle, kQueryLockTicks);
+            if (lk.ok()) {
+                set_error_unlocked(handle, pr);
+            }
+            return pr;
+        }
+    }
+
+    {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
         }
         if (handle->pull_buf == nullptr || handle->pull_mux == nullptr) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_READY);

@@ -109,13 +109,15 @@ void example_wx(esp_rtl_sdr_handle_t sdr)
 
 ---
 
-## 5. Sync pull only (no event callback)
+## 5. Sync pull only (READ delivery mode)
 
 ```c
 void example_sync_read(void)
 {
     esp_rtl_sdr_config_t cfg;
-    esp_rtl_sdr_config_default(&cfg); /* event_cb = NULL */
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_READ; /* no EVT_IQ_BLOCK; lazy pull ring */
+    /* event_cb may still receive STARTED / ERROR / HEALTH if set */
 
     esp_rtl_sdr_handle_t sdr = NULL;
     ESP_ERROR_CHECK(esp_rtl_sdr_install(&cfg, &sdr));

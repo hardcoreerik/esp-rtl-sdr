@@ -7,17 +7,25 @@ and how apps can influence them.
 
 ---
 
-## IQ pull ring
+## IQ delivery ring (USB → delivery task)
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `kRingDepth` | **6** | Number of IQ slots in the internal free/filled queues for `read()` / delivery |
+| `kRingDepth` | **6** | Number of IQ slots in free/filled queues between bulk and delivery |
 
 **Why 6:** Matches multi-URB pipeline depth class of default `transfer_count` (6).
-Deep enough to absorb brief consumer jitter without unbounded RAM.
 
-**App control:** Not Kconfig yet. Tune **URB** geometry via config /
-[`KCONFIG.md`](KCONFIG.md) first; watch `consumer_drops`.
+## Sync-read pull ring (0.7.4 lazy)
+
+| Item | Behavior |
+|---|---|
+| When allocated | First IQ push or first `read()` if `delivery_mode` is BOTH or READ |
+| Never allocated | `DELIVERY_CALLBACK` |
+| Default size | ~4× URB total, min ~192 KiB, max 512 KiB |
+| Override | `config.pull_ring_bytes` (even, 1 KiB…1 MiB) |
+
+**App control:** Prefer `DELIVERY_CALLBACK` if you never call `read()` (saves RAM).
+Tune URB geometry via [`KCONFIG.md`](KCONFIG.md); watch `consumer_drops`.
 
 ---
 
@@ -61,6 +69,7 @@ Making delivery core configurable is **Planned** if products need it.
 |---|---|---|
 | `ESP_RTL_SDR_DEFAULT_XFER_BYTES` | 16384 | Also Kconfig |
 | `ESP_RTL_SDR_DEFAULT_XFER_COUNT` | 6 | Also Kconfig |
+| `config.delivery_mode` | BOTH | See API_REFERENCE delivery modes |
 | `ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS` | 3000 | `stop(…, 0)` |
 | `ESP_RTL_SDR_PASSPORT_DEFAULT_DWELL_MS` | 1500 | Passport |
 | Rate / freq windows | see header | [`RATES.md`](RATES.md) |

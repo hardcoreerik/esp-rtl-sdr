@@ -94,7 +94,8 @@ static void test_capabilities(void)
                              ESP_RTL_SDR_CAP_HOTPLUG | ESP_RTL_SDR_CAP_FREQ_CORRECTION |
                              ESP_RTL_SDR_CAP_MULTI_DEVICE | ESP_RTL_SDR_CAP_SYNC_READ |
                              ESP_RTL_SDR_CAP_CONTINUOUS_RATE | ESP_RTL_SDR_CAP_NEED |
-                             ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT;
+                             ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT |
+                             ESP_RTL_SDR_CAP_DELIVERY_MODE;
     EXPECT_EQ_U(c & need_on, need_on);
 
     /* Phase 3 / reserved — must stay off until measured */
@@ -306,6 +307,35 @@ static void test_config_validate(void)
     cfg.usb_task_core_id = 0xFF;
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
 
+    esp_rtl_sdr_config_default(&cfg);
+    EXPECT_EQ_U((unsigned)cfg.delivery_mode, (unsigned)ESP_RTL_SDR_DELIVERY_BOTH);
+    EXPECT_EQ_U(cfg.pull_ring_bytes, 0);
+    cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_CALLBACK;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+    cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_READ;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+    cfg.delivery_mode = static_cast<esp_rtl_sdr_delivery_mode_t>(99);
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.pull_ring_bytes = 4096;
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_OK);
+    cfg.pull_ring_bytes = 1001; /* odd */
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+    cfg.pull_ring_bytes = 512; /* too small */
+    EXPECT_EQ_I(esp_rtl_sdr_config_validate(&cfg), ESP_ERR_INVALID_ARG);
+
+    /* Old struct_size: trailing delivery fields default to BOTH / 0 */
+    esp_rtl_sdr_config_default(&cfg);
+    cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_READ;
+    cfg.pull_ring_bytes = 8192;
+    {
+        esp_rtl_sdr_config_t old = cfg;
+        old.struct_size =
+            offsetof(esp_rtl_sdr_config_t, usb_task_core_id) + sizeof(uint8_t);
+        EXPECT_EQ_I(esp_rtl_sdr_config_validate(&old), ESP_OK);
+    }
+
     EXPECT_EQ_I(esp_rtl_sdr_config_validate(nullptr), ESP_ERR_INVALID_ARG);
     esp_rtl_sdr_config_default(nullptr); /* no crash */
 
@@ -382,6 +412,16 @@ static void test_passport_opts(void)
     esp_rtl_sdr_passport_opts_default(nullptr); /* no crash */
 }
 
+static void test_delivery_mode_helpers(void)
+{
+    EXPECT_TRUE(esp_rtl_sdr_delivery_mode_uses_callback_iq(ESP_RTL_SDR_DELIVERY_BOTH));
+    EXPECT_TRUE(esp_rtl_sdr_delivery_mode_uses_read(ESP_RTL_SDR_DELIVERY_BOTH));
+    EXPECT_TRUE(esp_rtl_sdr_delivery_mode_uses_callback_iq(ESP_RTL_SDR_DELIVERY_CALLBACK));
+    EXPECT_TRUE(!esp_rtl_sdr_delivery_mode_uses_read(ESP_RTL_SDR_DELIVERY_CALLBACK));
+    EXPECT_TRUE(!esp_rtl_sdr_delivery_mode_uses_callback_iq(ESP_RTL_SDR_DELIVERY_READ));
+    EXPECT_TRUE(esp_rtl_sdr_delivery_mode_uses_read(ESP_RTL_SDR_DELIVERY_READ));
+}
+
 static void test_usb_identity_constants(void)
 {
     EXPECT_EQ_U(ESP_RTL_SDR_USB_VID, 0x0BDAu);
@@ -408,6 +448,7 @@ int main(void)
     std::printf("esp_rtl_sdr host policy tests (%s)\n", esp_rtl_sdr_get_version_string());
     test_version();
     test_capabilities();
+    test_delivery_mode_helpers();
     test_rate_windows();
     test_recommended_rates();
     test_frequency();

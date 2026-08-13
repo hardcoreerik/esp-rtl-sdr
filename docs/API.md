@@ -1,7 +1,7 @@
 # esp_rtl_sdr public API — design contract
 
 **Header:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
-**Version:** 0.7.3  
+**Version:** 0.7.4  
 **Full parameter / return / example reference:** [`API_REFERENCE.md`](API_REFERENCE.md)
 
 This document is the **design contract** (invariants, threading, ABI growth).  
@@ -118,7 +118,7 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 
 ---
 
-## Capabilities (0.7.3 binary)
+## Capabilities (0.7.4 binary)
 
 | Flag | Status |
 |---|---|
@@ -134,6 +134,7 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | `NEED` | On; `apply_need` |
 | `HEALTH` | On; `get_health` |
 | `PASSPORT` | On; `probe_rates` |
+| `DELIVERY_MODE` | On; `config.delivery_mode` BOTH/CALLBACK/READ |
 | `IQ_ACQUIRE` | Off |
 | `GAIN` | Off until measured capture |
 | `BIAS_TEE` / `DIRECT_SAMPLING` | Reserved off |

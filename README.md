@@ -69,7 +69,8 @@ We are **not** chasing full librtlsdr feature parity (gain/bias/HF CAP still ope
 | **Tooling** | ESP-IDF **≥ 5.3** with `esp32p4` support |
 | **Antenna** | For RF; compile/smoke works without RF |
 
-**Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, random eBay RTL sticks, production warranty.
+**Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, random eBay RTL sticks, production warranty.  
+**Why that is intentional:** [`docs/SCOPE.md`](docs/SCOPE.md).
 
 ---
 
@@ -309,6 +310,11 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 | [PROJECT_TRUTH.md](PROJECT_TRUTH.md) | What is true **now** |
 | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | Full API reference (params / returns / examples) |
 | [docs/API.md](docs/API.md) | Design contract (invariants) |
+| [docs/EXAMPLES.md](docs/EXAMPLES.md) | Usage recipes |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common failures |
+| [docs/KCONFIG.md](docs/KCONFIG.md) | menuconfig |
+| [docs/SCOPE.md](docs/SCOPE.md) | Why P4 + Blog V4 only (for now) |
+| [docs/SOAK.md](docs/SOAK.md) | Hardware soak procedure |
 | [docs/VISION.md](docs/VISION.md) | Product direction |
 | [architecture.md](architecture.md) | Layering & threading |
 | [docs/RATES.md](docs/RATES.md) | Rate windows + passport |
@@ -317,7 +323,7 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 | [docs/README.md](docs/README.md) | Full index |
 | [CHANGELOG.md](CHANGELOG.md) | Releases |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PRs / clean-room |
-| [LICENSING.md](LICENSING.md) | AGPL + commercial |
+| [LICENSING.md](LICENSING.md) | AGPL + commercial process |
 
 ---
 

@@ -22,11 +22,19 @@ When docs disagree, PROJECT_TRUTH wins.
 
 | Doc | Purpose |
 |---|---|
+| [API_REFERENCE.md](API_REFERENCE.md) | **Full API reference** — params, returns, examples |
+| [API.md](API.md) | Design contract (invariants, threading, ABI) |
+| [EXAMPLES.md](EXAMPLES.md) | Usage recipes (FM/ADS-B/WX/sync/passport) |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common failures |
+| [KCONFIG.md](KCONFIG.md) | menuconfig options |
+| [SCOPE.md](SCOPE.md) | Intentional HW scope (P4 + Blog V4) |
+| [SOAK.md](SOAK.md) | Hardware soak procedure |
+| [lab/SOAK_LOG_TEMPLATE.md](lab/SOAK_LOG_TEMPLATE.md) | Fill-in soak log |
+| [RUNTIME_CONSTANTS.md](RUNTIME_CONSTANTS.md) | Ring depth, cores, health period |
+| [REVIEW_GAPS_2026-08.md](REVIEW_GAPS_2026-08.md) | External review → actions |
 | [VISION.md](VISION.md) | Dongle nervous system (direction) |
 | [SILICON.md](SILICON.md) | RTL2832U / cousins / authority order |
 | [RATES.md](RATES.md) | Continuous rates + passport |
-| [API_REFERENCE.md](API_REFERENCE.md) | **Full API reference** — params, returns, examples |
-| [API.md](API.md) | Design contract (invariants, threading, ABI) |
 | [CAPABILITY_MATRIX.md](CAPABILITY_MATRIX.md) | vs librtlsdr-class desktop |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | Automated host tests + CI (TheOrc-style) |
 | [LAB_HOBBYIST.md](LAB_HOBBYIST.md) | Honest desk lab + TinySA Ultra how-to |

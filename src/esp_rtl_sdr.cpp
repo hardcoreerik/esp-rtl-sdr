@@ -38,9 +38,10 @@ static constexpr TickType_t kQueryLockTicks = pdMS_TO_TICKS(50);
 static constexpr TickType_t kApiLockTicks = portMAX_DELAY;
 static constexpr TickType_t kUninstallLockTicks = pdMS_TO_TICKS(2000);
 static constexpr size_t kCtrlXferBytes = 64 + sizeof(usb_setup_packet_t);
-static constexpr size_t kRingDepth = 6;
-static constexpr int kUsbCore = 0;
-static constexpr int kDeliveryCore = 1;
+/* Named runtime constants — see docs/RUNTIME_CONSTANTS.md (not Kconfig yet). */
+static constexpr size_t kRingDepth = 6;       /* IQ free/filled queue depth */
+static constexpr int kUsbCore = 0;            /* default USB owner core (P4) */
+static constexpr int kDeliveryCore = 1;       /* IQ event delivery core */
 static constexpr UBaseType_t kUsbPrio = 20;
 static constexpr UBaseType_t kClientPrio = 19;
 /* Delivery only posts IQ; app audio task should be >= this and graphics much lower. */
@@ -835,7 +836,8 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
 
 static void fill_health_info(const esp_rtl_sdr_handle *h, esp_rtl_sdr_health_info_t *out);
 
-/** Emit EVT_HEALTH on overall change, or every kHealthPeriodBlocks while streaming. */
+/** Emit EVT_HEALTH on overall change, or every N IQ blocks while streaming.
+ *  See docs/RUNTIME_CONSTANTS.md — apps may poll get_health() at any rate. */
 static constexpr uint32_t kHealthPeriodBlocks = 48;
 
 static void delivery_task_fn(void *arg)

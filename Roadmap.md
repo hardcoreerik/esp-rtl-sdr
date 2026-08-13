@@ -64,9 +64,33 @@ Review-driven (pause Phase 3 hardware for one release):
 - [x] ESP-IDF P4 compile CI (`idf-p4-build` on 5.3.2 + 5.4.1)
 - [x] True async retune from callback (queue + delivery apply + EVT_RETUNED)
 - [ ] Delivery CALLBACK/READ/BOTH + lazy pull ring
-- [ ] Lab soak evidence from this tree
+- [ ] Lab soak evidence from this tree (procedure ready: `docs/SOAK.md`)
 
 See `docs/HARDENING_0_7_2.md`.
+
+---
+
+## Phase 2.4 — Review gap closure (docs / process) (**complete in tree**)
+
+External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
+
+- [x] Full `docs/API_REFERENCE.md` (params, returns, examples)
+- [x] Kconfig user doc, troubleshooting, examples recipes
+- [x] Intentional scope doc (P4 + Blog V4 first)
+- [x] Soak procedure + `docs/lab/SOAK_LOG_TEMPLATE.md`
+- [x] Runtime constants documented (ring/cores/health period)
+- [x] Commercial licensing process clarified
+- [x] GitHub Release + tracking issues
+- [ ] Phase 3 gain/bias CAP (lab capture — not closable by docs)
+- [ ] Filled soak log from this tree (lab run)
+
+---
+
+## Phase 3 — Gain / bias (next hardware)
+
+- [ ] USB capture per `docs/GAIN_BIAS_CAPTURE.md`
+- [ ] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only after measured sequences
+- [ ] Update PROJECT_TRUTH to Hardware-verified for those paths
 
 ---
 

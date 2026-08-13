@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Docs / process (review gap closure)
+
+- **Full API reference:** `docs/API_REFERENCE.md` (parameters, returns, examples)
+- Kconfig, troubleshooting, examples, soak procedure + lab template
+- Intentional hardware scope (`docs/SCOPE.md`), runtime constants doc
+- Commercial licensing process expanded (`LICENSING.md`)
+- Review gap map: `docs/REVIEW_GAPS_2026-08.md`
+- GitHub Release for `v0.7.3` + tracking issues for open lab work
+
 ## 0.7.3 (2026-08-12)
 
 ### Changed
@@ -17,8 +28,6 @@
 ### CI (carry-forward)
 
 - ESP-IDF P4 compile gate for smoke example (5.3.2 + 5.4.1)
-
-## Unreleased
 
 ## 0.7.2 (2026-08-12)
 

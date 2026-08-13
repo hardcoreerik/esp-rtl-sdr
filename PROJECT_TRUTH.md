@@ -6,13 +6,15 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-08-12**  
+Snapshot date: **2026-08-13**  
 Version: **0.7.3** (async retune from callback — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
 [docs/DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md) ·
 [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+
+**Review gap map (2026-08 external review):** [docs/REVIEW_GAPS_2026-08.md](docs/REVIEW_GAPS_2026-08.md)
 
 ---
 
@@ -26,7 +28,10 @@ Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DIS
 | librtlsdr port? | **No** — clean-room measured Blog V4 path; different API |
 | Production maturity | **0.x early** — API can still grow; fail-closed is a goal, not a warranty |
 | Formal security audit | **None** |
-| Stand-alone re-soak from this tree on P4 | **Still open** (Tab5/Waveshare = Provenance under OrcSDR) |
+| Stand-alone re-soak from this tree on P4 | **Still open** — procedure/template ready ([docs/SOAK.md](docs/SOAK.md)); filled log not yet in tree |
+| Full API reference (params/returns/examples) | **Implemented** — [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
+| Intentional hardware scope documented | **Implemented** — [docs/SCOPE.md](docs/SCOPE.md) |
+| Git tags + GitHub Release for 0.7.3 | **Implemented** — tags `v0.5.0`…`v0.7.3`; GitHub Releases |
 
 If marketing copy contradicts this table, open a `truth:` issue.
 

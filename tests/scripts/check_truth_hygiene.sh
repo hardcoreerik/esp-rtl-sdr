@@ -29,7 +29,15 @@ for f in \
   docs/LAB_HOBBYIST.md \
   docs/CLEAN_ROOM.md \
   docs/API.md \
-  docs/API_REFERENCE.md
+  docs/API_REFERENCE.md \
+  docs/SCOPE.md \
+  docs/SOAK.md \
+  docs/KCONFIG.md \
+  docs/TROUBLESHOOTING.md \
+  docs/EXAMPLES.md \
+  docs/RUNTIME_CONSTANTS.md \
+  docs/lab/SOAK_LOG_TEMPLATE.md \
+  docs/REVIEW_GAPS_2026-08.md
 do
   test -f "$f" || { echo "missing $f"; exit 1; }
 done

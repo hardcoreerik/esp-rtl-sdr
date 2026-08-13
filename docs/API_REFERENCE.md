@@ -542,6 +542,13 @@ Payload of `EVT_ERROR`.
 | `delivery_mode` | `BOTH` | `BOTH` / `CALLBACK` / `READ` (0.7.4+) |
 | `pull_ring_bytes` | 0 = auto | Even, 1 KiB…1 MiB if set; lazy alloc when mode uses read |
 
+**Legacy `struct_size`:** If the app was compiled against a header that ends at
+`usb_task_core_id` (or any size that omits the new trailing fields),
+`install` / `config_validate` copy only `struct_size` bytes over defaults — so
+**`delivery_mode` stays `BOTH`** and **`pull_ring_bytes` stays `0` (auto)**. Apps
+need a current header (and full `struct_size`) to select CALLBACK/READ or a
+custom pull size.
+
 ### Delivery modes (0.7.4)
 
 | Mode | `EVT_IQ_BLOCK` | `read()` | Pull-ring RAM |

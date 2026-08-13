@@ -798,11 +798,51 @@ static void pull_ring_reset(esp_rtl_sdr_handle *h)
     }
 }
 
+/** Tear down pull ring under handle lock (or during uninstall). Fail-closed. */
+static void destroy_pull_ring_unlocked(esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr) {
+        return;
+    }
+    if (h->pull_buf != nullptr) {
+        free(h->pull_buf);
+        h->pull_buf = nullptr;
+    }
+    h->pull_cap = h->pull_r = h->pull_w = h->pull_count = 0;
+    if (h->pull_mux != nullptr) {
+        vSemaphoreDelete(h->pull_mux);
+        h->pull_mux = nullptr;
+    }
+    if (h->pull_sem != nullptr) {
+        vSemaphoreDelete(h->pull_sem);
+        h->pull_sem = nullptr;
+    }
+}
+
+/**
+ * Lazy pull-ring init. Serialized on the handle API lock so delivery_task and
+ * esp_rtl_sdr_read cannot race a double-alloc or leave a half-initialized ring.
+ */
 static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
 {
-    if (h->pull_buf != nullptr && h->pull_cap > 0) {
+    if (h == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    HandleLock lk(h);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+
+    if (h->pull_buf != nullptr && h->pull_cap > 0 && h->pull_mux != nullptr &&
+        h->pull_sem != nullptr) {
         return ESP_OK;
     }
+    /* Incomplete prior attempt must not satisfy a false success path. */
+    if (h->pull_buf != nullptr || h->pull_mux != nullptr || h->pull_sem != nullptr ||
+        h->pull_cap != 0) {
+        destroy_pull_ring_unlocked(h);
+    }
+
     size_t need = h->cfg.pull_ring_bytes;
     if (need == 0) {
         /* ~0.2 s at 960 kS/s CU8 (192 KiB), or 4× URB total, cap 512 KiB. */
@@ -815,26 +855,38 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
         }
     }
     need &= ~size_t{1};
-    h->pull_buf = static_cast<uint8_t *>(
-        heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (h->pull_buf == nullptr) {
-        h->pull_buf =
-            static_cast<uint8_t *>(heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (need < 2u) {
+        return ESP_ERR_INVALID_ARG;
     }
-    if (h->pull_buf == nullptr) {
+
+    uint8_t *buf = static_cast<uint8_t *>(
+        heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (buf == nullptr) {
+        buf = static_cast<uint8_t *>(heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+    if (buf == nullptr) {
         return ESP_ERR_NO_MEM;
     }
+
+    SemaphoreHandle_t mux = xSemaphoreCreateMutex();
+    SemaphoreHandle_t sem = xSemaphoreCreateBinary();
+    if (mux == nullptr || sem == nullptr) {
+        if (mux != nullptr) {
+            vSemaphoreDelete(mux);
+        }
+        if (sem != nullptr) {
+            vSemaphoreDelete(sem);
+        }
+        free(buf);
+        return ESP_ERR_NO_MEM;
+    }
+
+    /* Publish fully-formed ring only after all pieces exist. */
+    h->pull_buf = buf;
     h->pull_cap = need;
     h->pull_r = h->pull_w = h->pull_count = 0;
-    if (h->pull_mux == nullptr) {
-        h->pull_mux = xSemaphoreCreateMutex();
-    }
-    if (h->pull_sem == nullptr) {
-        h->pull_sem = xSemaphoreCreateBinary();
-    }
-    if (h->pull_mux == nullptr || h->pull_sem == nullptr) {
-        return ESP_ERR_NO_MEM;
-    }
+    h->pull_mux = mux;
+    h->pull_sem = sem;
     return ESP_OK;
 }
 
@@ -1472,9 +1524,7 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         handle->ctrl_xfer = nullptr;
     }
     destroy_iq_ring(handle);
-    free(handle->pull_buf);
-    handle->pull_buf = nullptr;
-    handle->pull_cap = handle->pull_count = handle->pull_r = handle->pull_w = 0;
+    destroy_pull_ring_unlocked(handle);
 
     HandleLock lk(handle, kUninstallLockTicks);
     handle->magic = 0;
@@ -1490,14 +1540,6 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     }
     if (handle->bulk_done_sem) {
         vSemaphoreDelete(handle->bulk_done_sem);
-    }
-    if (handle->pull_mux) {
-        vSemaphoreDelete(handle->pull_mux);
-        handle->pull_mux = nullptr;
-    }
-    if (handle->pull_sem) {
-        vSemaphoreDelete(handle->pull_sem);
-        handle->pull_sem = nullptr;
     }
     if (lock) {
         (void)xSemaphoreTake(lock, 0);

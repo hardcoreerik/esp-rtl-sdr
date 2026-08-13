@@ -105,6 +105,10 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.5.0** | Rename + Phase 1 freq/rate/read |
 | **0.6.0** | Phase 2: expanded rates list + ppm + multi-device |
 | **0.7.0** | Continuous rates + need + health + passport + docs (vision/silicon/lab) |
+| **0.7.1** | Host tests / CI spine expansion |
+| **0.7.2** | Runtime hardening (STARTING, join, ring transactional, Kconfig) |
+| **0.7.3** | True async retune from event callback + `EVT_RETUNED` |
+| **0.7.4** | Delivery modes BOTH/CALLBACK/READ + lazy pull ring |
 
 ---
 

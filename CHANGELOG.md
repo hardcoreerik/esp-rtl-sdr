@@ -15,9 +15,15 @@
 - `CAP_DELIVERY_MODE` + pure helpers `delivery_mode_uses_callback_iq` / `_uses_read`
 - `read()` returns `ERR_UNSUPPORTED` in CALLBACK-only mode
 
+### Fixed (CodeRabbit on PR #6)
+
+- Serialize `ensure_pull_ring` on the handle lock; fail-closed teardown of partial rings
+  (no double-alloc race between delivery task and `read()`)
+
 ### Docs / process (from 0.7.3 review gap work)
 
 - Full API reference, Kconfig/troubleshooting/examples, soak template, SCOPE, licensing
+- Legacy `struct_size` fallback for delivery fields documented; versioning table through 0.7.4
 
 ## 0.7.3 (2026-08-12)
 

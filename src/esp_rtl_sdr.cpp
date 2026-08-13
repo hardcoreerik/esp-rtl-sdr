@@ -30,6 +30,7 @@
 #include "usb/usb_host.h"
 
 #include "transfers_blog_v4.hpp"
+#include "measured_gain_bias_v4.hpp"
 
 static const char *TAG = "esp_rtl_sdr";
 
@@ -2823,8 +2824,46 @@ esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
 }
 
 /* -------------------------------------------------------------------------- */
-/* Phase 3 — gain / bias (fail-closed stubs until measured)                   */
+/* Phase 3 — gain / bias (clean-room measured Blog V4 2026-08-12)             */
 /* -------------------------------------------------------------------------- */
+
+static esp_err_t apply_measured_v4_gain(esp_rtl_sdr_handle *h, int tenth_db, int *applied_tenth)
+{
+    const size_t idx = measured_v4_nearest_gain_index(tenth_db);
+    const MeasuredV4GainStep &st = kMeasuredV4GainSteps[idx];
+    const RtlControlRecord w05 = measured_v4_ir_reg_write(0x05, st.reg05);
+    const RtlControlRecord w07 = measured_v4_ir_reg_write(0x07, st.reg07);
+    const RtlControlRecord w0c = measured_v4_ir_reg_write(0x0c, kMeasuredV4GainReg0c);
+    esp_err_t err = run_record(h, w05, false);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = run_record(h, w07, false);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = run_record(h, w0c, false);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (applied_tenth != nullptr) {
+        *applied_tenth = st.tenth_db;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t apply_measured_v4_bias(esp_rtl_sdr_handle *h, bool enable)
+{
+    const RtlControlRecord *tab = enable ? kMeasuredV4BiasOn : kMeasuredV4BiasOff;
+    const size_t n = enable ? kMeasuredV4BiasOnCount : kMeasuredV4BiasOffCount;
+    for (size_t i = 0; i < n; ++i) {
+        const esp_err_t err = run_record(h, tab[i], false);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    return ESP_OK;
+}
 
 esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t mode)
@@ -2840,9 +2879,13 @@ esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
         return ESP_RTL_SDR_ERR_TIMEOUT;
     }
     handle->gain_mode = mode;
-    /* CAP_GAIN not set until clean-room capture — store preference only. */
-    set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
-    return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    /* AUTO AGC EP0 not in 2026-08-12 capture set — manual path only. */
+    if (mode == ESP_RTL_SDR_GAIN_MODE_AUTO) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
+    set_error_unlocked(handle, ESP_OK);
+    return ESP_OK;
 }
 
 esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
@@ -2867,14 +2910,37 @@ esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
+    if (check_not_reentrant(handle) != ESP_OK) {
+        return ESP_RTL_SDR_ERR_REENTRANT;
+    }
+
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        if (!handle->iface_claimed || handle->dev == nullptr) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_CLAIMED);
+            return ESP_RTL_SDR_ERR_NOT_CLAIMED;
+        }
+        handle->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
+    }
+
+    int applied = 0;
+    const esp_err_t err = apply_measured_v4_gain(handle, gain_tenth_db, &applied);
+
     HandleLock lk(handle);
     if (!lk.ok()) {
-        return ESP_RTL_SDR_ERR_TIMEOUT;
+        return (err == ESP_OK) ? ESP_RTL_SDR_ERR_TIMEOUT : err;
     }
-    handle->gain_tenth_db = gain_tenth_db;
-    handle->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
-    set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
-    return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    if (err == ESP_OK) {
+        handle->gain_tenth_db = applied;
+        set_error_unlocked(handle, ESP_OK);
+        ESP_LOGI(TAG, "tuner gain applied %d (0.1 dB) [measured V4 table]", applied);
+    } else {
+        set_error_unlocked(handle, err);
+    }
+    return err;
 }
 
 esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_tenth_db)
@@ -2896,17 +2962,22 @@ esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_
 esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gains_tenth_db,
                                       size_t max_count, size_t *out_count)
 {
-    (void)handle;
-    (void)out_gains_tenth_db;
-    (void)max_count;
     if (out_count == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
-    /* Empty list until CAP_GAIN — not an error for size-query style APIs. */
-    *out_count = 0;
+    *out_count = kMeasuredV4GainStepCount;
+    if (out_gains_tenth_db == nullptr || max_count == 0) {
+        return ESP_OK; /* size query */
+    }
+    const size_t n =
+        (max_count < kMeasuredV4GainStepCount) ? max_count : kMeasuredV4GainStepCount;
+    for (size_t i = 0; i < n; ++i) {
+        out_gains_tenth_db[i] = kMeasuredV4GainSteps[i].tenth_db;
+    }
+    *out_count = n;
     return ESP_OK;
 }
 
@@ -2915,13 +2986,35 @@ esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
+    if (check_not_reentrant(handle) != ESP_OK) {
+        return ESP_RTL_SDR_ERR_REENTRANT;
+    }
+
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        if (!handle->iface_claimed || handle->dev == nullptr) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_CLAIMED);
+            return ESP_RTL_SDR_ERR_NOT_CLAIMED;
+        }
+        handle->bias_tee_want = enable;
+    }
+
+    const esp_err_t err = apply_measured_v4_bias(handle, enable);
+
     HandleLock lk(handle);
     if (!lk.ok()) {
-        return ESP_RTL_SDR_ERR_TIMEOUT;
+        return (err == ESP_OK) ? ESP_RTL_SDR_ERR_TIMEOUT : err;
     }
-    handle->bias_tee_want = enable;
-    set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
-    return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    if (err == ESP_OK) {
+        set_error_unlocked(handle, ESP_OK);
+        ESP_LOGI(TAG, "bias-T %s [measured V4 SYS sequence]", enable ? "ON" : "OFF");
+    } else {
+        set_error_unlocked(handle, err);
+    }
+    return err;
 }
 
 esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable)

@@ -165,8 +165,8 @@ Automated review of the capture shows **clusters of USB control activity every f
 | Full manual gain ladder captured | **Done** (pcap + video + dB list) |
 | Multimeter bias voltage | **Skipped** (no meter on hand) |
 | TinySA relative RF check | **Not required** for this report |
-| Driver can set gain/bias on ESP32 | **Not yet** |
-| CAP_GAIN / CAP_BIAS_TEE enabled | **Not yet** (still correctly off) |
+| Driver can set gain/bias on ESP32 | **Implemented in 0.7.5** from these captures (P4 re-soak still open) |
+| CAP_GAIN / CAP_BIAS_TEE enabled | **On in 0.7.5** (`MEASURED_2026_08_12`) |
 
 ---
 
@@ -249,7 +249,7 @@ We spent a real evening **measuring** how a Blog V4 does gain and bias on USB, i
 - A **video** of the dB values,  
 - And a **written dB list** from 0.0 through 49.6.
 
-That is the hard, honest foundation for Phase 3. The ESP driver still needs those bytes implemented and tested before anyone should trust “gain” or “bias-T” in production firmware.
+**0.7.5** turns those measurements into driver tables (`private/measured_gain_bias_v4.hpp`) and enables **CAP_GAIN** / **CAP_BIAS_TEE** for **manual** gain and bias-T when the stick is claimed (after `start`). AUTO AGC is still unsupported. Treat as **lab-measured, not production-certified** until P4 re-soak and optional multimeter DC are logged.
 
 ---
 

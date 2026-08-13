@@ -52,17 +52,16 @@ grep -qE "${MAJOR}\\.${MINOR}" docs/API.md || {
   exit 1
 }
 
-# CAP_GAIN / CAP_BIAS must not be advertised as on in get_capabilities source
-if grep -n 'ESP_RTL_SDR_CAP_GAIN' src/esp_rtl_sdr_policy.cpp | grep -v '//' ; then
-  # If GAIN appears in return bitmask, fail — should stay off until measured
-  if grep -E 'return .*ESP_RTL_SDR_CAP_GAIN' src/esp_rtl_sdr_policy.cpp; then
-    echo "CAP_GAIN must not be enabled in get_capabilities until measured"
+# CAP_GAIN / CAP_BIAS may only appear in get_capabilities with MEASURED marker + tables
+if grep -E 'ESP_RTL_SDR_CAP_GAIN|ESP_RTL_SDR_CAP_BIAS_TEE' src/esp_rtl_sdr_policy.cpp | grep -v '//' >/dev/null; then
+  if ! grep -q 'MEASURED_2026_08_12' src/esp_rtl_sdr_policy.cpp; then
+    echo "CAP_GAIN/BIAS enabled without MEASURED_2026_08_12 marker in policy"
     exit 1
   fi
-fi
-if grep -E 'return .*ESP_RTL_SDR_CAP_BIAS_TEE' src/esp_rtl_sdr_policy.cpp; then
-  echo "CAP_BIAS_TEE must not be enabled until measured"
-  exit 1
+  if ! test -f private/measured_gain_bias_v4.hpp; then
+    echo "missing private/measured_gain_bias_v4.hpp for CAP_GAIN/BIAS"
+    exit 1
+  fi
 fi
 
 # Host test sources present

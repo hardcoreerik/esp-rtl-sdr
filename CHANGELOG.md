@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.7.5 (2026-08-13)
+
+### Added — Phase 3 measured gain / bias (Blog V4)
+
+- Clean-room tables from lab USBPcap (`private/measured_gain_bias_v4.hpp`)
+  - Bias ON/OFF SYS sequence (`0x3004/3003/3001/3000` @ `0x0210`)
+  - Manual gain ladder 0.0…49.6 dB via IR `0x0074`/`0x0610` pairs `{0x05,val}`, `{0x07,val}`, `{0x0c,0x68}`
+- `set_tuner_gain` / `get_tuner_gains` / `set_bias_tee` apply measured EP0 when interface claimed
+- **CAP_GAIN** and **CAP_BIAS_TEE** enabled (`MEASURED_2026_08_12`)
+- AUTO gain mode still `ERR_UNSUPPORTED` (AGC path not in this capture set)
+- Evidence report: `docs/PHASE3_CAPTURE_REPORT.md`
+
+### Notes
+
+- Multimeter SMA DC not recorded — bias electrical claim remains capture-level
+- P4 re-soak of new CAP paths still open (lab)
+
 ## 0.7.4 (2026-08-13)
 
 ### Added

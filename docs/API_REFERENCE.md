@@ -1,6 +1,6 @@
 # esp_rtl_sdr — API Reference
 
-> **Version tracked:** `0.7.4` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
+> **Version tracked:** `0.7.5` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
 > **Header of record:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
 > **Design contract (invariants, ABI growth):** [`API.md`](API.md)  
 > **What works on hardware right now:** [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) wins on any claim conflict.
@@ -296,7 +296,7 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | **Returns** | Bitmask of `esp_rtl_sdr_cap_t` for **this binary** |
 | **Notes** | No handle required. CAP bits track **implemented** paths only. |
 
-### Capability map (0.7.4)
+### Capability map (0.7.5)
 
 | Flag | Bit | Status | Meaning |
 |---|---|---|---|
@@ -315,8 +315,9 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | `ESP_RTL_SDR_CAP_NEED` | 12 | **On** | `apply_need` |
 | `ESP_RTL_SDR_CAP_HEALTH` | 13 | **On** | `get_health` / `EVT_HEALTH` |
 | `ESP_RTL_SDR_CAP_PASSPORT` | 14 | **On** | `probe_rates` |
-| `ESP_RTL_SDR_CAP_GAIN` | 15 | **Off** | Until Phase 3 capture |
+| `ESP_RTL_SDR_CAP_GAIN` | 15 | **On** | Measured Blog V4 manual ladder (0.0…49.6 dB) |
 | `ESP_RTL_SDR_CAP_DELIVERY_MODE` | 16 | **On** | `config.delivery_mode` |
+| `ESP_RTL_SDR_CAP_BIAS_TEE` | 5 | **On** | Measured SYS bias sequence |
 
 ```c
 const uint32_t need = ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_SYNC_READ;

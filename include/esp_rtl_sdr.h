@@ -85,7 +85,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 4
+#define ESP_RTL_SDR_VERSION_PATCH 5
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -826,34 +826,35 @@ typedef enum {
 } esp_rtl_sdr_gain_mode_t;
 
 /**
- * Set tuner gain mode. Currently always ESP_RTL_SDR_ERR_UNSUPPORTED
- * (CAP_GAIN not enabled). Prefer checking get_capabilities() first.
+ * Set tuner gain mode. MANUAL is supported (measured Blog V4). AUTO returns
+ * ERR_UNSUPPORTED until AGC EP0 is captured. Requires CAP_GAIN.
  */
 esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t mode);
 
-/** Get last requested gain mode (default AUTO). Valid even when CAP_GAIN off. */
+/** Get last requested gain mode (default AUTO). */
 esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t *out_mode);
 
 /**
- * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). ERR_UNSUPPORTED until measured.
+ * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). Applies nearest measured
+ * Blog V4 step (0.0…49.6 dB ladder). Requires claimed interface (after start).
  */
 esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth_db);
 
-/** Last requested manual gain (tenths dB); 0 if never set. */
+/** Last applied / requested manual gain (tenths dB); 0 if never set. */
 esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_tenth_db);
 
 /**
- * Copy supported manual gains (tenths dB). Until CAP_GAIN: *out_count=0, ESP_OK
- * if buffers valid (empty list = not available).
+ * Copy measured manual gains (tenths dB). Size-query: max_count==0 sets *out_count
+ * to full ladder length (28 steps for Blog V4 measured table).
  */
 esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gains_tenth_db,
                                       size_t max_count, size_t *out_count);
 
 /**
- * Bias-T enable. ERR_UNSUPPORTED until CAP_BIAS_TEE (measured Blog V4 GPIO path).
- * get still reports last requested preference.
+ * Bias-T enable via measured Blog V4 SYS EP0 (lab 2026-08-12).
+ * Requires claimed interface (after start). Multimeter DC not yet recorded.
  */
 esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable);
 esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable);

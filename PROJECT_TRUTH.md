@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-13**  
-Version: **0.7.4** (delivery modes + lazy pull ring — not production-ready)  
+Version: **0.7.5** (measured Blog V4 gain/bias CAP — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -79,7 +79,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
-| Gain / bias public API | **Implemented (stubs)** | Returns UNSUPPORTED; CAP bits **off** |
+| Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; AUTO AGC still unsupported; P4 re-soak open |
 | set/get center freq, rate, ppm | **Implemented** | |
 | Sync `read()` | **Implemented** | |
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
@@ -88,7 +88,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |
-| Gain / bias-T hardware | **Planned** | Phase 3 — needs capture (GAIN_BIAS_CAPTURE.md) |
+| Gain / bias-T hardware | **Implemented** (tables from PC USBPcap) | Lab 2026-08-12; **not** yet Hardware-verified from *this* tree on P4; no multimeter DC |
 | HF upconverter path CAP | **Planned** | NEED_HF stores LO only today |
 | R828D stage gain / input / notches | **Planned** | |
 | Adaptive USB URB | **Planned** | |
@@ -109,6 +109,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.2** | Runtime hardening (STARTING, join, ring transactional, Kconfig) |
 | **0.7.3** | True async retune from event callback + `EVT_RETUNED` |
 | **0.7.4** | Delivery modes BOTH/CALLBACK/READ + lazy pull ring |
+| **0.7.5** | Measured Blog V4 gain ladder + bias-T SYS EP0; CAP_GAIN/BIAS on |
 
 ---
 

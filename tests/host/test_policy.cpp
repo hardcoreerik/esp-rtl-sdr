@@ -98,9 +98,10 @@ static void test_capabilities(void)
                              ESP_RTL_SDR_CAP_DELIVERY_MODE;
     EXPECT_EQ_U(c & need_on, need_on);
 
-    /* Phase 3 / reserved — must stay off until measured */
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
-    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_GAIN) == 0);
+    /* Measured Blog V4 lab 2026-08-12 — CAP_GAIN / CAP_BIAS_TEE on */
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_BIAS_TEE) != 0);
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_GAIN) != 0);
+    /* Still reserved */
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_DIRECT_SAMPLING) == 0);
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_IQ_ACQUIRE) == 0);
 }

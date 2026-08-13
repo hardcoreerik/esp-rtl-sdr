@@ -3,7 +3,7 @@
 **Make an RTL-SDR Blog V4 a first-class peripheral on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.7.4-green)
+![Status](https://img.shields.io/badge/version-0.7.5-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
@@ -235,14 +235,15 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `refresh_device_list` · `get_device_count` · `get_device_at` | Candidates |
 | `select_device` · `select_device_serial` | Choose Blog V4 by index/serial |
 
-### Stubs (API present, hardware **not** — CAP off)
+### Gain & bias (0.7.5 measured Blog V4)
 
 | API | Today |
 |---|---|
-| `set/get_tuner_gain*` · `get_tuner_gains` | `ERR_UNSUPPORTED` until capture |
-| `set/get_bias_tee` | Same |
+| `set/get_tuner_gain` · `get_tuner_gains` | Manual ladder 0.0…49.6 dB (CAP_GAIN); need claimed stream |
+| `set_tuner_gain_mode(MANUAL)` | OK; **AUTO** still unsupported |
+| `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
 
-Capture plan: [`docs/GAIN_BIAS_CAPTURE.md`](docs/GAIN_BIAS_CAPTURE.md).
+Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md). P4 re-soak of these paths still open.
 
 ### Typical rates (macros)
 

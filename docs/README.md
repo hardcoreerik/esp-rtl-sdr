@@ -43,6 +43,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [GAIN_BIAS_CAPTURE.md](GAIN_BIAS_CAPTURE.md) | Phase 3 clean-room capture procedure |
 | [PHASE3_PC_SETUP.md](PHASE3_PC_SETUP.md) | Windows PC tool install / PATH / session recipe |
 | [HANDOFF_PHASE3_GAIN_BIAS.md](HANDOFF_PHASE3_GAIN_BIAS.md) | Full handoff + plan to finish issue #1 (gain/bias CAP) |
+| [PHASE3_CAPTURE_REPORT.md](PHASE3_CAPTURE_REPORT.md) | Plain-English report: bias+gain lab captures and why they matter |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles |
 | [PORTING.md](PORTING.md) | Board BSP vs driver |

@@ -27,10 +27,22 @@ for f in \
   docs/DOCUMENTATION_STANDARD.md \
   docs/TESTING_GUIDE.md \
   docs/LAB_HOBBYIST.md \
-  docs/CLEAN_ROOM.md
+  docs/CLEAN_ROOM.md \
+  docs/API.md \
+  docs/API_REFERENCE.md
 do
   test -f "$f" || { echo "missing $f"; exit 1; }
 done
+
+# API reference must track header major.minor (detailed ref, not marketing)
+grep -qE "${MAJOR}\\.${MINOR}" docs/API_REFERENCE.md || {
+  echo "docs/API_REFERENCE.md missing version ${MAJOR}.${MINOR}"
+  exit 1
+}
+grep -qE "${MAJOR}\\.${MINOR}" docs/API.md || {
+  echo "docs/API.md missing version ${MAJOR}.${MINOR}"
+  exit 1
+}
 
 # CAP_GAIN / CAP_BIAS must not be advertised as on in get_capabilities source
 if grep -n 'ESP_RTL_SDR_CAP_GAIN' src/esp_rtl_sdr_policy.cpp | grep -v '//' ; then

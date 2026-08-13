@@ -182,7 +182,8 @@ if (!(caps & ESP_RTL_SDR_CAP_GAIN)) {
 }
 ```
 
-Full contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h`](include/esp_rtl_sdr.h).
+**Full API reference (params, returns, examples):** [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)  
+Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h`](include/esp_rtl_sdr.h).
 
 ---
 
@@ -306,7 +307,8 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 | Doc | Purpose |
 |---|---|
 | [PROJECT_TRUTH.md](PROJECT_TRUTH.md) | What is true **now** |
-| [docs/API.md](docs/API.md) | Full API contract |
+| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | Full API reference (params / returns / examples) |
+| [docs/API.md](docs/API.md) | Design contract (invariants) |
 | [docs/VISION.md](docs/VISION.md) | Product direction |
 | [architecture.md](architecture.md) | Layering & threading |
 | [docs/RATES.md](docs/RATES.md) | Rate windows + passport |

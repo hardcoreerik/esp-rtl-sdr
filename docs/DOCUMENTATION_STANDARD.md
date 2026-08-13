@@ -97,6 +97,18 @@ Bump together when releasing:
 - `CHANGELOG.md`
 - `PROJECT_TRUTH.md` snapshot date and version line
 - README version badge
+- `docs/API.md` and `docs/API_REFERENCE.md` version stamps
+
+## API documentation layers (do not merge)
+
+| Doc | Role | Drift control |
+|---|---|---|
+| `include/esp_rtl_sdr.h` | Signatures + brief Doxygen-style comments | Source of truth for types |
+| `docs/API_REFERENCE.md` | Full params, returns, threading, examples | Must mention header major.minor; CI greps it |
+| `docs/API.md` | Design contract only (invariants, ABI) | Links to reference; no second copy of every param |
+| `README.md` | Landing / how-to map | Links only — no full reference |
+
+When a public function changes semantics: update **header + API_REFERENCE** in the same change; adjust PROJECT_TRUTH if a claim moved.
 
 ---
 

@@ -1,10 +1,12 @@
-# esp_rtl_sdr public API (best-in-class contract)
+# esp_rtl_sdr public API — design contract
 
-**Header:** `include/esp_rtl_sdr.h`  
-**Version:** 0.7.0
+**Header:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
+**Version:** 0.7.3  
+**Full parameter / return / example reference:** [`API_REFERENCE.md`](API_REFERENCE.md)
 
-This document is the human contract for a **professional, deterministic** driver API.
-The implementation must not break these rules as streaming and retune evolve.
+This document is the **design contract** (invariants, threading, ABI growth).  
+For every function’s parameters, return semantics, and copy-paste examples, use
+**[`API_REFERENCE.md`](API_REFERENCE.md)** — that is the detailed reference.
 
 ---
 
@@ -44,7 +46,8 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 | `uninstall(NULL)` | `ESP_OK` |
 | `uninstall` twice | second → `STALE_HANDLE` |
 | `start` while STREAMING | `ERR_BUSY` |
-| `start` / `stop` / `retune` / `reset` from event callback | `ERR_REENTRANT` |
+| `start` / `stop` / `reset` / `probe_rates` from event callback | `ERR_REENTRANT` |
+| `retune_hz` / `set_center_freq` from event callback | **Allowed** — queues async apply (0.7.3+); later `EVT_RETUNED` |
 | `get_*` with NULL/stale handle | safe; no crash |
 | failed `start` | handle remains **IDLE**; no interface claim |
 
@@ -53,8 +56,8 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 ## Threading
 
 1. Public API is serialized per handle (mutex).
-2. Event callbacks must not call `install` / `uninstall` / `start` / `stop` / `retune` / `reset` on the same handle (`ERR_REENTRANT`).
-3. Callbacks **may** call `get_state`, `get_metrics`, `get_device_info`, `get_last_error`, `release_iq_block`.
+2. Event callbacks must not call `install` / `uninstall` / `start` / `stop` / `reset` / `probe_rates` on the same handle (`ERR_REENTRANT`).
+3. Callbacks **may** call `get_state`, `get_metrics`, `get_device_info`, `get_last_error`, `release_iq_block`, and **`retune_hz` / `set_center_freq`** (async queue).
 4. IQ payload pointers are **borrowed** until the callback returns (unless acquire mode + `release_iq_block` when CAP_IQ_ACQUIRE is set).
 5. Never invoke API from a USB completion ISR.
 6. Do not call other APIs concurrent with `uninstall` on the same handle (single owner task).
@@ -115,7 +118,7 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 
 ---
 
-## Capabilities (0.7.0 binary)
+## Capabilities (0.7.3 binary)
 
 | Flag | Status |
 |---|---|
@@ -132,6 +135,7 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | `HEALTH` | On; `get_health` |
 | `PASSPORT` | On; `probe_rates` |
 | `IQ_ACQUIRE` | Off |
+| `GAIN` | Off until measured capture |
 | `BIAS_TEE` / `DIRECT_SAMPLING` | Reserved off |
 
 ---

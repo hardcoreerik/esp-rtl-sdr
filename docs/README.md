@@ -25,7 +25,8 @@ When docs disagree, PROJECT_TRUTH wins.
 | [VISION.md](VISION.md) | Dongle nervous system (direction) |
 | [SILICON.md](SILICON.md) | RTL2832U / cousins / authority order |
 | [RATES.md](RATES.md) | Continuous rates + passport |
-| [API.md](API.md) | Public C API contract |
+| [API_REFERENCE.md](API_REFERENCE.md) | **Full API reference** — params, returns, examples |
+| [API.md](API.md) | Design contract (invariants, threading, ABI) |
 | [CAPABILITY_MATRIX.md](CAPABILITY_MATRIX.md) | vs librtlsdr-class desktop |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | Automated host tests + CI (TheOrc-style) |
 | [LAB_HOBBYIST.md](LAB_HOBBYIST.md) | Honest desk lab + TinySA Ultra how-to |

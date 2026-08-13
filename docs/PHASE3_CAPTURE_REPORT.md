@@ -12,7 +12,7 @@ This report is for **humans**. It explains what we did, why it matters, what we 
 
 ## In one paragraph
 
-To make **gain** and **bias-T** work honestly inside our ESP32 driver, we cannot guess or copy someone else’s driver source. We had to **watch the real USB traffic** while a known desktop program turned bias on/off and stepped the tuner gain on a real Blog V4. That traffic is now saved as Wireshark captures, with notes and a screen video of the gain slider. The driver still does **not** control gain/bias on the ESP32 yet — the next job is to **read those captures** and teach the driver the same sequences, then turn on the capability flags only when it actually works.
+To make **gain** and **bias-T** work honestly inside our ESP32 driver, we cannot guess or copy someone else’s driver source. We had to **watch the real USB traffic** while a known desktop program turned bias on/off and stepped the tuner gain on a real Blog V4. That traffic is saved as Wireshark captures, with notes and a screen video of the gain slider. **v0.7.5** decoded those captures into clean-room tables and enables **CAP_GAIN** / **CAP_BIAS_TEE** for manual gain and bias-T after `start`. Still open: P4 re-soak of the ESP USB path, optional multimeter DC, and AUTO AGC.
 
 ---
 
@@ -27,13 +27,7 @@ To make **gain** and **bias-T** work honestly inside our ESP32 driver, we cannot
 
 ### What was wrong before this lab session
 
-Our open-source driver **already streams I/Q** from a Blog V4 on ESP32-P4, retunes, measures health, etc. For gain and bias we only had **empty shells**:
-
-- The functions exist (`set_tuner_gain`, `set_bias_tee`, …).
-- They return **“not supported”**.
-- Capability flags **CAP_GAIN** and **CAP_BIAS_TEE** stay **off**.
-
-We did that **on purpose**. Shipping fake “gain works” without measuring USB would be dishonest and could brick trust in the project.
+Before this lab, gain/bias were **empty shells** (return “not supported”, CAP off). That was intentional: no fake CAP without USB evidence. After capture + decode, **0.7.5** wires measured EP0 and turns CAP on for the implemented paths.
 
 ### Why USB capture (not just “look at librtlsdr”)
 

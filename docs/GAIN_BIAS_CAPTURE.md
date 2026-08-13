@@ -1,7 +1,9 @@
 # Gain & bias-T capture procedure (Phase 3)
 
-> **Status:** CAP_GAIN and CAP_BIAS_TEE are **off**. Public APIs exist but return
-> `ESP_RTL_SDR_ERR_UNSUPPORTED` until this procedure produces measured evidence.
+> **Status (0.7.5+):** CAP_GAIN and CAP_BIAS_TEE are **on** for Blog V4 manual gain
+> and bias-T, from clean-room USBPcap tables in `private/measured_gain_bias_v4.hpp`.
+> AUTO AGC remains unsupported. P4 re-soak of the ESP path is still open.
+> This document is the **capture procedure** for new profiles / re-measurement.
 > Do **not** paste librtlsdr / rtl-sdr-blog tables.
 
 ---
@@ -86,11 +88,12 @@ only when this tree drives the same EP0 and P4 stream still works.
 | Host tests | Still pass; optional new policy tests |
 | Lab RF | Baofeng/Flipper show health clip/weak respond to gain |
 
-Until then:
+**0.7.5 Blog V4 path** already meets the gate for **manual** gain + bias-T CAP bits.
+Re-run this procedure for new dongles/profiles or when re-measuring.
 
 ```c
-if (!(esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_GAIN)) {
-    /* do not call set_tuner_gain expecting hardware effect */
+if (esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_GAIN) {
+    /* after start: set_tuner_gain_mode(MANUAL) + set_tuner_gain(tenths) */
 }
 ```
 
@@ -100,6 +103,4 @@ if (!(esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_GAIN)) {
 
 - Copying gain tables from librtlsdr source  
 - Enabling CAP_GAIN because “desktop does it” without our capture  
-- Claiming bias-T works after only storing a software preference  
-
-API surface today stores preferences and returns **UNSUPPORTED** — honest scaffolding only.
+- Claiming bias-T DC works after only USB EP0 success (need multimeter for electrical claim)

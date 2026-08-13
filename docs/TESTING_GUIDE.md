@@ -74,7 +74,7 @@ Driver body: `src/esp_rtl_sdr.cpp` (not host-linked).
 Workflow: `.github/workflows/ci.yml`
 
 1. **host-policy** — Ubuntu + Windows matrix; `-Werror` on Linux; `ctest` + direct run  
-2. **truth-hygiene** — `tests/scripts/check_truth_hygiene.sh` (versions, required docs, CAP_GAIN/BIAS not enabled)  
+2. **truth-hygiene** — `tests/scripts/check_truth_hygiene.sh` (versions, required docs, CAP_GAIN/BIAS only with MEASURED marker + tables)  
 3. **idf-p4-build** — `examples/p4_serial_smoke` with `idf.py set-target esp32p4` + `build` on ESP-IDF **v5.3.2** and **v5.4.1** (compile only; no flash/RF)  
 4. **ci-ok** — aggregate gate  
 

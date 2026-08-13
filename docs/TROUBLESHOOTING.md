@@ -38,7 +38,7 @@ Truth of claims: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 |---|---|---|
 | Overruns climb | `metrics.overruns`, `HEALTH_USB_STARVING` | Lower SPS; raise `transfer_count`/`bytes`; free Core 0 load |
 | Consumer drops | `consumer_drops`, `HEALTH_APP_TOO_SLOW` | Faster callback / larger app ring; use `read` on dedicated task |
-| RF clipping | `HEALTH_RF_CLIPPING`, high sample max | Attenuate; **gain CAP still off** until Phase 3 |
+| RF clipping | `HEALTH_RF_CLIPPING`, high sample max | Attenuate; lower `set_tuner_gain` (manual ladder 0.0…49.6 dB) |
 | RF weak | `HEALTH_RF_WEAK` | Antenna; expect no gain API yet |
 | Effective SPS << programmed | `efficiency` in health | Passport `probe_rates`; pick `NEED_MAX_STABLE` |
 
@@ -65,10 +65,16 @@ Truth of claims: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 
 ## Gain / bias “not working”
 
-**Expected on 0.7.x.** `set_tuner_gain*` / `set_bias_tee` return `ERR_UNSUPPORTED`;
-`CAP_GAIN` / `CAP_BIAS_TEE` are **off** until clean-room capture lands.
+**0.7.5+:** CAP_GAIN / CAP_BIAS_TEE are **on** (measured Blog V4).
 
-See [`GAIN_BIAS_CAPTURE.md`](GAIN_BIAS_CAPTURE.md) and the tracking issue labeled `phase-3`.
+| Symptom | Check |
+|---|---|
+| `ERR_NOT_CLAIMED` | Call after successful `start` (interface must be claimed) |
+| `ERR_UNSUPPORTED` on `set_tuner_gain_mode(AUTO)` | Expected — AUTO AGC EP0 not captured |
+| Gain/bias no RF/DC effect on P4 | P4 re-soak still open; PC capture tables may need re-verify on host |
+| Multimeter shows 0 V with bias ON | SMA DC not lab-certified yet; confirm EP0 path + supply |
+
+See [`PHASE3_CAPTURE_REPORT.md`](PHASE3_CAPTURE_REPORT.md), [`GAIN_BIAS_CAPTURE.md`](GAIN_BIAS_CAPTURE.md).
 
 ---
 

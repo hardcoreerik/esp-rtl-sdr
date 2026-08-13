@@ -50,7 +50,7 @@ Best-in-class API docs (Stripe, ESP-IDF, libusb) share one pattern:
 13. [Center frequency, rate, sync read](#13-center-frequency-rate-sync-read)
 14. [PPM & multi-device](#14-ppm--multi-device)
 15. [Intent, health, passport](#15-intent-health-passport)
-16. [Gain & bias (stubs)](#16-gain--bias-stubs)
+16. [Gain & bias (measured V4)](#16-gain--bias-measured-v4)
 17. [Events catalog](#17-events-catalog)
 18. [Recipes](#18-recipes)
 19. [Symbol index](#19-symbol-index)
@@ -139,7 +139,7 @@ Config / stream / health / passport structs start with `size_t struct_size`.
 ```c
 uint32_t caps = esp_rtl_sdr_get_capabilities();
 if (!(caps & ESP_RTL_SDR_CAP_GAIN)) {
-    /* set_tuner_gain will return ERR_UNSUPPORTED — do not expect RF effect */
+    /* unexpected on 0.7.5+ Blog V4 builds */
 }
 ```
 
@@ -259,7 +259,7 @@ Any in-window rate is quantized to an exact RTL2832 ratio (`quantize_sample_rate
 | `ESP_RTL_SDR_ERR_TIMEOUT` | Control or stop / read timed out | Retry or increase timeout |
 | `ESP_RTL_SDR_ERR_FAULT` | Handle in FAULT | `reset` or `uninstall` |
 | `ESP_RTL_SDR_ERR_NOT_READY` | Client not ready yet | Brief wait / retry |
-| `ESP_RTL_SDR_ERR_UNSUPPORTED` | CAP off (gain/bias) or path not built | Check capabilities |
+| `ESP_RTL_SDR_ERR_UNSUPPORTED` | AUTO gain mode, wrong delivery mode, or path not built | Check capabilities / mode |
 | `ESP_RTL_SDR_ERR_STALE_HANDLE` | Use after uninstall | Clear pointer |
 | `ESP_RTL_SDR_ERR_REENTRANT` | Forbidden API from event callback | Defer to app task |
 | `ESP_RTL_SDR_ERR_NOT_CLAIMED` | Present but not claimed | Start / claim path |
@@ -305,7 +305,7 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | `ESP_RTL_SDR_CAP_HOTPLUG` | 2 | **On** | Disconnect / reconnect events |
 | `ESP_RTL_SDR_CAP_METRICS` | 3 | **On** | `get_metrics` |
 | `ESP_RTL_SDR_CAP_CUSTOM_HZ` | 4 | **On** | `PRESET_CUSTOM_HZ` |
-| `ESP_RTL_SDR_CAP_BIAS_TEE` | 5 | **Off** | Until measured |
+| `ESP_RTL_SDR_CAP_BIAS_TEE` | 5 | **On** | Measured SYS bias ON/OFF (Blog V4) |
 | `ESP_RTL_SDR_CAP_DIRECT_SAMPLING` | 6 | **Off** | Not claimed |
 | `ESP_RTL_SDR_CAP_IQ_ACQUIRE` | 7 | **Off** | Borrow mode only |
 | `ESP_RTL_SDR_CAP_FREQ_CORRECTION` | 8 | **On** | Software ppm |
@@ -317,7 +317,6 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | `ESP_RTL_SDR_CAP_PASSPORT` | 14 | **On** | `probe_rates` |
 | `ESP_RTL_SDR_CAP_GAIN` | 15 | **On** | Measured Blog V4 manual ladder (0.0…49.6 dB) |
 | `ESP_RTL_SDR_CAP_DELIVERY_MODE` | 16 | **On** | `config.delivery_mode` |
-| `ESP_RTL_SDR_CAP_BIAS_TEE` | 5 | **On** | Measured SYS bias sequence |
 
 ```c
 const uint32_t need = ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_SYNC_READ;
@@ -595,7 +594,7 @@ typedef void (*esp_rtl_sdr_event_cb_t)(esp_rtl_sdr_event_t event,
 
 See [Events catalog](#17-events-catalog).
 
-### Gain mode (stub surface)
+### Gain mode
 
 ```c
 typedef enum {
@@ -1209,26 +1208,30 @@ Copy last passport. `valid == false` if never probed successfully.
 
 ---
 
-## 16. Gain & bias (stubs)
+## 16. Gain & bias (measured V4)
 
-These exist so apps can compile against a stable surface. **Hardware effect is not claimed** until CAP bits flip after clean-room capture ([`GAIN_BIAS_CAPTURE.md`](GAIN_BIAS_CAPTURE.md)).
+Clean-room tables from lab USBPcap (`private/measured_gain_bias_v4.hpp`). CAP bits on
+since **0.7.5** (`MEASURED_2026_08_12`). Needs a claimed interface (`start` succeeded).
+P4 re-soak and multimeter DC are still lab-open — see [`PHASE3_CAPTURE_REPORT.md`](PHASE3_CAPTURE_REPORT.md).
 
-| Function | Today |
+| Function | Behavior |
 |---|---|
-| `set_tuner_gain_mode` | Always `ERR_UNSUPPORTED` |
-| `get_tuner_gain_mode` | Returns last requested (default AUTO) — OK even with CAP off |
-| `set_tuner_gain` | `ERR_UNSUPPORTED` (tenths of dB, e.g. 496 = 49.6 dB) |
-| `get_tuner_gain` | Last requested; 0 if never set |
-| `get_tuner_gains` | `*out_count = 0`, `ESP_OK` if buffers valid |
-| `set_bias_tee` | `ERR_UNSUPPORTED` |
+| `set_tuner_gain_mode(MANUAL)` | OK (selects manual path) |
+| `set_tuner_gain_mode(AUTO)` | `ERR_UNSUPPORTED` — AGC EP0 not in capture set |
+| `get_tuner_gain_mode` | Last mode |
+| `set_tuner_gain` | Nearest measured step (tenths dB); writes IR `{0x05,0x07,0x0c}` |
+| `get_tuner_gain` | Last applied step (0 if never set) |
+| `get_tuner_gains` | 28 steps: 0…496 tenths dB (0.0…49.6 dB) |
+| `set_bias_tee` | SYS sequence `3004/3003/3001/3000` (ON: 3001=0x19, OFF: 0x18) |
 | `get_bias_tee` | Last requested preference |
 
 ```c
 if (esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_GAIN) {
     ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain_mode(sdr, ESP_RTL_SDR_GAIN_MODE_MANUAL));
-    ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain(sdr, 400));
-} else {
-    /* expected path on 0.7.x */
+    ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain(sdr, 400)); /* ~40.2 dB nearest */
+}
+if (esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_BIAS_TEE) {
+    ESP_ERROR_CHECK(esp_rtl_sdr_set_bias_tee(sdr, true));
 }
 ```
 

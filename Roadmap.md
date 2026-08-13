@@ -88,9 +88,9 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 
 ## Phase 3 — Gain / bias (next hardware)
 
-- [ ] USB capture per `docs/GAIN_BIAS_CAPTURE.md`
-- [ ] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only after measured sequences
-- [ ] Update PROJECT_TRUTH to Hardware-verified for those paths
+- [x] USB capture per `docs/GAIN_BIAS_CAPTURE.md` (lab 2026-08-12)
+- [x] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only after measured sequences (0.7.5)
+- [ ] Update PROJECT_TRUTH to Hardware-verified after P4 re-soak
 
 ---
 
@@ -109,13 +109,16 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 ## Phase 3 — Gain and bias-T (measured)
 
 - [x] Public fail-closed API surface + capture procedure (`docs/GAIN_BIAS_CAPTURE.md`)
-- [ ] Independent USB capture of gain / bias on Blog V4
-- [ ] Wire EP0 from capture into profile; `set_*` applies hardware
-- [ ] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only when implemented
-- [ ] Never paste librtlsdr gain tables
+- [x] Independent USB capture of gain / bias on Blog V4 (PC USBPcap)
+- [x] Wire EP0 from capture into profile; `set_*` applies hardware (0.7.5)
+- [x] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only when measured tables wired
+- [x] Never paste librtlsdr gain tables (clean-room `measured_gain_bias_v4.hpp`)
+- [ ] P4 re-soak: `set_tuner_gain` / `set_bias_tee` on ESP host path
+- [ ] Optional multimeter SMA DC for bias-T
+- [ ] AUTO AGC capture (still unsupported)
 - [ ] Lab: Baofeng / Flipper for clip vs weak health correlation
 
-**Exit:** Gain and bias work on Blog V4 with recorded procedure.
+**Exit:** Gain and bias work on Blog V4 with recorded procedure (+ P4 soak).
 
 ---
 

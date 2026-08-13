@@ -14,6 +14,9 @@
  * Encoding matches existing Blog V4 profile style (RtlControlRecord):
  *   IR/demod block: wValue=0x0074, wIndex=0x0610, data[0]=reg, data[1]=value
  *   SYS block:      wValue=0x30xx, wIndex=0x0210, data[0]=value
+ *
+ * Re-validated from decode TSV payloads: all 28 (reg05,reg07) pairs present;
+ * bias ON/OFF clusters match kMeasuredV4BiasOn/Off exactly (3001 0x19 vs 0x18).
  */
 
 #include <cstddef>

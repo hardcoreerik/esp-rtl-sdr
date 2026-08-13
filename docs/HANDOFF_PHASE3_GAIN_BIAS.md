@@ -7,7 +7,10 @@
 **Version in tree:** **0.7.4** (tag `v0.7.4` released)  
 **Tracking issue:** https://github.com/hardcoreerik/esp-rtl-sdr/issues/1  
 
-**Primary goal of next work:** Complete **Phase 3** so `CAP_GAIN` and `CAP_BIAS_TEE` can be enabled honestly — measured USB evidence first, then clean-room implementation, never librtlsdr paste.
+> **Superseded for implementation:** tables + CAP shipped in **v0.7.5**. Remaining:
+> P4 re-soak, optional multimeter DC, AUTO AGC. Keep this file as capture/runbook history.
+
+**Primary goal of next work (historical):** Complete **Phase 3** so `CAP_GAIN` and `CAP_BIAS_TEE` can be enabled honestly — measured USB evidence first, then clean-room implementation, never librtlsdr paste.
 
 ---
 

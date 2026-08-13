@@ -130,6 +130,15 @@ struct esp_rtl_sdr_handle {
     volatile uint32_t pending_retune_hz = 0;
     /** True while apply_pending_retune() runs (delivery or app task). */
     volatile bool retune_busy = false;
+    /**
+     * Sideband EP0 (gain/bias) queued for delivery task — keeps app/HTTP
+     * responsive. Applied in one bulk-pause window (never concurrent with retune).
+     */
+    volatile bool pending_gain = false;
+    volatile int pending_gain_tenth = 0;
+    volatile bool pending_bias = false;
+    volatile bool pending_bias_enable = false;
+    volatile bool ep0_sideband_busy = false;
 
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
     uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
@@ -387,7 +396,7 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
     xSemaphoreTake(h->ctrl_mutex, portMAX_DELAY);
 
     esp_err_t final_err = ESP_FAIL;
-    for (int attempt = 0; attempt < 2; ++attempt) {
+    for (int attempt = 0; attempt < 3; ++attempt) {
         usb_transfer_t *x = h->ctrl_xfer;
         auto *setup = reinterpret_cast<usb_setup_packet_t *>(x->data_buffer);
         setup->bmRequestType = bm;
@@ -428,8 +437,8 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
                 final_err = ESP_OK;
                 break;
             }
-            /* V4 EP0 STALL: yield for USBH recovery; retry once */
-            vTaskDelay(pdMS_TO_TICKS(20));
+            /* V4 EP0 STALL: recover then retry (common after bulk pause / SYS writes). */
+            vTaskDelay(pdMS_TO_TICKS(attempt == 0 ? 25 : 50));
             continue;
         }
         final_err = ESP_RTL_SDR_ERR_USB;
@@ -631,6 +640,55 @@ static void bulk_cb(usb_transfer_t *xfer)
     }
 }
 
+/** Pause bulk IN and drain live URBs so EP0 is safe (retune / gain / bias). */
+static void bulk_pause_and_drain(esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr || !h->streaming) {
+        return;
+    }
+    h->pause_resubmit = true;
+    const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(800);
+    while (h->live_urbs > 0 && xTaskGetTickCount() < deadline) {
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+    if (h->live_urbs > 0 && h->dev != nullptr) {
+        usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        const TickType_t d2 = xTaskGetTickCount() + pdMS_TO_TICKS(300);
+        while (h->live_urbs > 0 && xTaskGetTickCount() < d2) {
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+        h->live_urbs = 0;
+    }
+}
+
+/** Resume multi-URB bulk IN after a paused EP0 window. */
+static void bulk_resume(esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr) {
+        return;
+    }
+    h->pause_resubmit = false;
+    if (!h->streaming || h->bulk == nullptr) {
+        return;
+    }
+    h->live_urbs = 0;
+    for (uint32_t i = 0; i < h->bulk_num; ++i) {
+        if (h->bulk[i] == nullptr) {
+            continue;
+        }
+        h->bulk[i]->device_handle = h->dev;
+        h->bulk[i]->bEndpointAddress = ESP_RTL_SDR_BULK_EP_IN;
+        h->bulk[i]->num_bytes = h->bulk_len;
+        h->bulk[i]->callback = bulk_cb;
+        h->bulk[i]->context = h;
+        if (usb_host_transfer_submit(h->bulk[i]) == ESP_OK) {
+            h->live_urbs++;
+        }
+    }
+}
+
 /**
  * Drain outstanding bulks (no resubmit), apply LO, resubmit.
  * Must NOT run on the USB client/host lib tasks (blocks; does EP0).
@@ -651,23 +709,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     }
     h->retune_busy = true;
 
-    h->pause_resubmit = true;
-
-    /* Wait until all live URBs complete without resubmit (safe EP0 window). */
-    const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(800);
-    while (h->live_urbs > 0 && xTaskGetTickCount() < deadline) {
-        vTaskDelay(pdMS_TO_TICKS(2));
-    }
-    if (h->live_urbs > 0 && h->dev != nullptr) {
-        usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        const TickType_t d2 = xTaskGetTickCount() + pdMS_TO_TICKS(300);
-        while (h->live_urbs > 0 && xTaskGetTickCount() < d2) {
-            vTaskDelay(pdMS_TO_TICKS(2));
-        }
-        h->live_urbs = 0;
-    }
+    bulk_pause_and_drain(h);
 
     if (!h->streaming) {
         h->pause_resubmit = false;
@@ -698,24 +740,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         }
     }
 
-    /* Resume multi-URB stream */
-    h->pause_resubmit = false;
-    if (h->streaming && h->bulk != nullptr) {
-        h->live_urbs = 0;
-        for (uint32_t i = 0; i < h->bulk_num; ++i) {
-            if (h->bulk[i] == nullptr) {
-                continue;
-            }
-            h->bulk[i]->device_handle = h->dev;
-            h->bulk[i]->bEndpointAddress = ESP_RTL_SDR_BULK_EP_IN;
-            h->bulk[i]->num_bytes = h->bulk_len;
-            h->bulk[i]->callback = bulk_cb;
-            h->bulk[i]->context = h;
-            if (usb_host_transfer_submit(h->bulk[i]) == ESP_OK) {
-                h->live_urbs++;
-            }
-        }
-    }
+    bulk_resume(h);
 
     h->retune_busy = false;
 
@@ -892,6 +917,7 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
 }
 
 static void fill_health_info(const esp_rtl_sdr_handle *h, esp_rtl_sdr_health_info_t *out);
+static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h);
 
 /** Emit EVT_HEALTH on overall change, or every N IQ blocks while streaming.
  *  See docs/RUNTIME_CONSTANTS.md — apps may poll get_health() at any rate. */
@@ -901,9 +927,14 @@ static void delivery_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
-        /* Async retune from callback path: apply off the USB client task. */
-        if (h->streaming && h->pending_retune_hz != 0 && !h->retune_busy) {
+        /* Async EP0 off the USB client task (retune first, then gain/bias). */
+        if (h->streaming && h->pending_retune_hz != 0 && !h->retune_busy &&
+            !h->ep0_sideband_busy) {
             (void)apply_pending_retune(h);
+        }
+        if (h->streaming && !h->retune_busy && !h->ep0_sideband_busy &&
+            (h->pending_gain || h->pending_bias)) {
+            (void)apply_pending_sideband_ep0(h);
         }
 
         IqSlot *slot = nullptr;
@@ -1640,6 +1671,9 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->pause_resubmit = true;
     h->streaming = false;
     h->pending_retune_hz = 0;
+    h->pending_gain = false;
+    h->pending_bias = false;
+    h->ep0_sideband_busy = false;
 
     if (h->dev != nullptr && h->bulk_num > 0) {
         usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
@@ -2827,22 +2861,30 @@ esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
 /* Phase 3 — gain / bias (clean-room measured Blog V4 2026-08-12)             */
 /* -------------------------------------------------------------------------- */
 
-static esp_err_t apply_measured_v4_gain(esp_rtl_sdr_handle *h, int tenth_db, int *applied_tenth)
+/** IR gain writes only (caller owns bulk pause). Retries full trio on STALL/USB. */
+static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *applied_tenth)
 {
     const size_t idx = measured_v4_nearest_gain_index(tenth_db);
     const MeasuredV4GainStep &st = kMeasuredV4GainSteps[idx];
     const RtlControlRecord w05 = measured_v4_ir_reg_write(0x05, st.reg05);
     const RtlControlRecord w07 = measured_v4_ir_reg_write(0x07, st.reg07);
     const RtlControlRecord w0c = measured_v4_ir_reg_write(0x0c, kMeasuredV4GainReg0c);
-    esp_err_t err = run_record(h, w05, false);
-    if (err != ESP_OK) {
-        return err;
+
+    esp_err_t err = ESP_FAIL;
+    for (int pass = 0; pass < 3; ++pass) {
+        err = run_record(h, w05, false);
+        if (err == ESP_OK) {
+            err = run_record(h, w07, false);
+        }
+        if (err == ESP_OK) {
+            err = run_record(h, w0c, false);
+        }
+        if (err == ESP_OK) {
+            break;
+        }
+        ESP_LOGW(TAG, "gain EP0 pass %d failed: %s", pass, esp_rtl_sdr_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(30 + pass * 20));
     }
-    err = run_record(h, w07, false);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = run_record(h, w0c, false);
     if (err != ESP_OK) {
         return err;
     }
@@ -2852,17 +2894,115 @@ static esp_err_t apply_measured_v4_gain(esp_rtl_sdr_handle *h, int tenth_db, int
     return ESP_OK;
 }
 
-static esp_err_t apply_measured_v4_bias(esp_rtl_sdr_handle *h, bool enable)
+/** SYS bias sequence only (caller owns bulk pause). Settle after GPIO writes. */
+static esp_err_t apply_bias_records(esp_rtl_sdr_handle *h, bool enable)
 {
     const RtlControlRecord *tab = enable ? kMeasuredV4BiasOn : kMeasuredV4BiasOff;
     const size_t n = enable ? kMeasuredV4BiasOnCount : kMeasuredV4BiasOffCount;
-    for (size_t i = 0; i < n; ++i) {
-        const esp_err_t err = run_record(h, tab[i], false);
-        if (err != ESP_OK) {
-            return err;
+
+    esp_err_t err = ESP_OK;
+    for (int pass = 0; pass < 2; ++pass) {
+        err = ESP_OK;
+        for (size_t i = 0; i < n; ++i) {
+            err = run_record(h, tab[i], false);
+            if (err != ESP_OK) {
+                break;
+            }
+        }
+        if (err == ESP_OK) {
+            /* SYS GPIO path needs a beat before IR gain or bulk resume. */
+            vTaskDelay(pdMS_TO_TICKS(40));
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG, "bias EP0 pass %d failed: %s", pass, esp_rtl_sdr_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(40));
+    }
+    return err;
+}
+
+/**
+ * Drain bulk once, apply any pending bias then gain, resume.
+ * Must not run on USB client task. Coalesces stacked pending values.
+ */
+static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr || !h->streaming) {
+        return ESP_RTL_SDR_ERR_NOT_STREAMING;
+    }
+    if (h->ep0_sideband_busy || h->retune_busy) {
+        return ESP_OK;
+    }
+    if (!h->pending_gain && !h->pending_bias) {
+        return ESP_OK;
+    }
+    h->ep0_sideband_busy = true;
+
+    const bool do_bias = h->pending_bias;
+    const bool bias_en = h->pending_bias_enable;
+    const bool do_gain = h->pending_gain;
+    const int gain_t = h->pending_gain_tenth;
+    h->pending_bias = false;
+    h->pending_gain = false;
+
+    bulk_pause_and_drain(h);
+
+    esp_err_t err = ESP_OK;
+    if (do_bias) {
+        err = apply_bias_records(h, bias_en);
+        if (err == ESP_OK) {
+            h->bias_tee_want = bias_en;
+            ESP_LOGI(TAG, "bias-T %s [measured V4, async]", bias_en ? "ON" : "OFF");
+        } else {
+            ESP_LOGW(TAG, "bias-T EP0 failed: %s", esp_rtl_sdr_err_to_name(err));
         }
     }
-    return ESP_OK;
+    if (do_gain) {
+        int applied = 0;
+        const esp_err_t gerr = apply_gain_records(h, gain_t, &applied);
+        if (gerr == ESP_OK) {
+            h->gain_tenth_db = applied;
+            h->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
+            ESP_LOGI(TAG, "tuner gain applied %d (0.1 dB) [async]", applied);
+        } else {
+            ESP_LOGW(TAG, "tuner gain EP0 failed req=%d: %s", gain_t,
+                     esp_rtl_sdr_err_to_name(gerr));
+            if (err == ESP_OK) {
+                err = gerr;
+            }
+        }
+    }
+
+    bulk_resume(h);
+    h->ep0_sideband_busy = false;
+
+    /* If newer requests arrived while busy, leave them for next delivery pass. */
+    return err;
+}
+
+static esp_err_t apply_measured_v4_gain(esp_rtl_sdr_handle *h, int tenth_db, int *applied_tenth)
+{
+    /* Streaming: queue for delivery task (non-blocking for HTTP/UI). */
+    if (h->streaming) {
+        h->pending_gain_tenth = tenth_db;
+        h->pending_gain = true;
+        if (applied_tenth != nullptr) {
+            *applied_tenth = kMeasuredV4GainSteps[measured_v4_nearest_gain_index(tenth_db)]
+                                 .tenth_db;
+        }
+        return ESP_OK;
+    }
+    return apply_gain_records(h, tenth_db, applied_tenth);
+}
+
+static esp_err_t apply_measured_v4_bias(esp_rtl_sdr_handle *h, bool enable)
+{
+    if (h->streaming) {
+        h->pending_bias_enable = enable;
+        h->pending_bias = true;
+        h->bias_tee_want = enable; /* preference immediately; EP0 async */
+        return ESP_OK;
+    }
+    return apply_bias_records(h, enable);
 }
 
 esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,

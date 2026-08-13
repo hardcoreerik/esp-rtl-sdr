@@ -178,8 +178,8 @@ if (err == ESP_OK && n > 0) {
 ```c
 uint32_t caps = esp_rtl_sdr_get_capabilities();
 if (caps & ESP_RTL_SDR_CAP_STREAM) { /* start/stop OK to attempt */ }
-if (!(caps & ESP_RTL_SDR_CAP_GAIN)) {
-    /* set_tuner_gain returns UNSUPPORTED until measured — don't expect RF effect */
+if (caps & ESP_RTL_SDR_CAP_GAIN) {
+    /* 0.7.5+: manual gain after start; AUTO mode still unsupported */
 }
 ```
 
@@ -321,6 +321,7 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 | [docs/RATES.md](docs/RATES.md) | Rate windows + passport |
 | [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) | Automated tests + CI |
 | [docs/LAB_HOBBYIST.md](docs/LAB_HOBBYIST.md) | Desk lab + TinySA |
+| [docs/DRIVER_GAPS_VS_DESKTOP.md](docs/DRIVER_GAPS_VS_DESKTOP.md) | Gaps vs SDR# / librtlsdr-class tools |
 | [docs/README.md](docs/README.md) | Full index |
 | [CHANGELOG.md](CHANGELOG.md) | Releases |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PRs / clean-room |

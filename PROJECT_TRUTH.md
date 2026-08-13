@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-13**  
-Version: **0.7.5** (measured Blog V4 gain/bias CAP — not production-ready)  
+Version: **0.7.6** (async gain/bias EP0 + measured CAP — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -110,6 +110,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.3** | True async retune from event callback + `EVT_RETUNED` |
 | **0.7.4** | Delivery modes BOTH/CALLBACK/READ + lazy pull ring |
 | **0.7.5** | Measured Blog V4 gain ladder + bias-T SYS EP0; CAP_GAIN/BIAS on |
+| **0.7.6** | Async mid-stream gain/bias (bulk-pause queue); stall retries; desktop-gap map |
 
 ---
 

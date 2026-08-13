@@ -219,17 +219,21 @@ void example_custom_rate_ppm(esp_rtl_sdr_handle_t sdr)
 
 ---
 
-## 10. Capability-safe gain attempt (0.7.x = skip)
+## 10. Capability-safe gain / bias (0.7.5+)
 
 ```c
 void example_gain_if_ready(esp_rtl_sdr_handle_t sdr)
 {
     if (!(esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_GAIN)) {
-        ESP_LOGW("ex", "CAP_GAIN off — Phase 3 capture still open");
+        ESP_LOGW("ex", "CAP_GAIN unexpected off on 0.7.5+");
         return;
     }
+    /* Requires claimed interface (after start). AUTO mode still unsupported. */
     ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain_mode(sdr, ESP_RTL_SDR_GAIN_MODE_MANUAL));
-    ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain(sdr, 400)); /* 40.0 dB tenths */
+    ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain(sdr, 400)); /* nearest ~40.2 dB */
+    if (esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_BIAS_TEE) {
+        ESP_ERROR_CHECK(esp_rtl_sdr_set_bias_tee(sdr, false));
+    }
 }
 ```
 

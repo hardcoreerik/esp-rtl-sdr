@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.7.6 (2026-08-13)
+
+### Fixed
+
+- Mid-stream gain/bias: **async queue** on delivery task (one bulk-pause window) so
+  app/HTTP loop no longer blocks 1–3 s during EP0.
+- Bias then gain in the **same** paused window when both pending; 40 ms settle after SYS bias.
+- Gain IR writes: up to 3 full retries; control transfers: 3 attempts on STALL.
+- Still pauses bulk before EP0 (same class of fix as retune).
+
 ## 0.7.5 (2026-08-13)
 
 ### Added — Phase 3 measured gain / bias (Blog V4)

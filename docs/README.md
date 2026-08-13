@@ -42,6 +42,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [DEVELOPMENT_NARRATIVE_0_7.md](DEVELOPMENT_NARRATIVE_0_7.md) | Verbose 0.7.x development commentary |
 | [GAIN_BIAS_CAPTURE.md](GAIN_BIAS_CAPTURE.md) | Phase 3 clean-room capture procedure |
 | [PHASE3_PC_SETUP.md](PHASE3_PC_SETUP.md) | Windows PC tool install / PATH / session recipe |
+| [HANDOFF_PHASE3_GAIN_BIAS.md](HANDOFF_PHASE3_GAIN_BIAS.md) | Full handoff + plan to finish issue #1 (gain/bias CAP) |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles |
 | [PORTING.md](PORTING.md) | Board BSP vs driver |

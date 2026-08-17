@@ -2,9 +2,10 @@
  * @file esp_rtl_sdr.h
  * @brief esp_rtl_sdr — production public C API (best-in-class contract)
  *
- * Standalone ESP-IDF USB Host client for the official RTL-SDR Blog V4
- * (USB 0bda:2838). Transfer sequences are clean-room / measured — this is
- * not a librtlsdr port.
+ * Standalone ESP-IDF USB Host client for RTL2832U-class RTL-SDR dongles.
+ * The measured Blog V4 path is implemented; Blog V3/R820T2 identity probing
+ * is experimental and does not claim streaming. Transfer sequences are
+ * clean-room / measured where stated — this is not a librtlsdr port.
  *
  * ---------------------------------------------------------------------------
  * Design principles (must work every time)
@@ -631,7 +632,7 @@ esp_rtl_sdr_state_t esp_rtl_sdr_get_state(esp_rtl_sdr_handle_t handle);
 esp_err_t esp_rtl_sdr_get_last_error(esp_rtl_sdr_handle_t handle);
 
 /**
- * Copy device info. present=false if no accepted V4 is attached.
+ * Copy device info. present=false if no accepted profile is attached.
  * Thread-safe snapshot. out_info is not modified on failure.
  */
 esp_err_t esp_rtl_sdr_get_device_info(esp_rtl_sdr_handle_t handle,
@@ -775,7 +776,7 @@ esp_err_t esp_rtl_sdr_set_freq_correction(esp_rtl_sdr_handle_t handle, int ppm);
 esp_err_t esp_rtl_sdr_get_freq_correction(esp_rtl_sdr_handle_t handle, int *out_ppm);
 
 /**
- * Rescan USB for accepted profile devices (Blog V4 identity today).
+ * Rescan USB for accepted profile devices.
  * Updates internal candidate list used by get_device_count / select_*.
  * Does not close the currently open device unless it vanished.
  */

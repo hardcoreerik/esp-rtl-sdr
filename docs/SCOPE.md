@@ -11,6 +11,7 @@ This project **fails closed** on unsupported hardware. Narrow support is a
 |---|---|---|
 | **MCU** | ESP32-**P4** High-Speed USB Host | e.g. M5Stack Tab5, Waveshare P4 kits |
 | **Dongle** | RTL-SDR **Blog V4** | USB `0bda:2838`, mfg/product `RTLSDRBlog` / `Blog V4` |
+| **V3 profile** | Experimental identity probe only | RTL2832U + R820T2/R860; streaming is not claimed |
 | **IQ** | Continuous CU8 multi-URB | CAP_STREAM |
 | **Tooling** | ESP-IDF ≥ 5.3, `esp32p4` | CI builds smoke on 5.3.2 + 5.4.1 |
 
@@ -34,7 +35,8 @@ Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 1. **Host USB is the hard problem** on MCU — HS host on P4 is the fair fight.  
 2. **One measured profile** beats “supports every eBay dongle” marketing.  
 3. Blog V4 has a known product identity and prior provenance path under OrcSDR.  
-4. Passport/health only mean something when *this* board + stick is characterized.
+4. Blog V3 shares the common USB ID, so the experimental profile probes the tuner but does not claim streaming without capture evidence.
+5. Passport/health only mean something when *this* board + stick is characterized.
 
 Expanding hosts/dongles is welcome **after** stand-alone P4 soak and Phase 3
 gain/bias capture — see Roadmap and open issues labeled `scope` / `port`.

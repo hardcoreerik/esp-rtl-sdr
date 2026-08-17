@@ -85,6 +85,8 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
 | Multi-device select | **Implemented** | |
 | Blog V4 filter `0bda:2838` | **Implemented** | |
+| Blog V3/R820T2 identity probe | **Experimental / unverified** | Exact V3 descriptors or completed register-zero chip-id read; no V3 init table |
+| Blog V3 IQ streaming | **Not implemented** | Requires clean-room V3 USB capture and startup sequence |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |

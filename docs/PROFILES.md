@@ -18,11 +18,22 @@ tuner policy for one dongle class. The core host client stays shared.
 | Rates | 960k, 1024k, 2048k allowlist |
 | Provenance | Clean-room captures; ESP32-P4 measured under OrcSDR Tab5 + Waveshare |
 
+### `blog_v3` (RTL-SDR Blog V3 / R820T2-R860)
+
+| Field | Value |
+|---|---|
+| Status | **Experimental / unverified** — identity probe only |
+| USB | Shared `0x0BDA:0x2838`; exact V3 descriptors or R820T2 chip-id probe |
+| Tuner | R820T2/R860 (public device documentation) |
+| Probe | R820T2 register-zero read; only completed `0x96` / `0x69` responses match |
+| Tables | No guessed initialization table; V3 start returns `ERR_UNSUPPORTED` |
+| Provenance | No physical V3 or USB capture yet |
+
 ## Planned profiles
 
 | Profile | Typical hardware | Status |
 |---|---|---|
-| `r820t2` | Common “RTL-SDR” R820T2 sticks | Planned — needs own captures |
+| Generic `r820t2` | Common “RTL-SDR” R820T2 sticks | Planned — needs own captures and identity rules |
 | OEM ID variants | Same silicon, different PID | Planned — allowlist only when tested |
 
 ## Profile checklist (new dongle class)
@@ -30,7 +41,7 @@ tuner policy for one dongle class. The core host client stays shared.
 1. Record USB device descriptor strings and VID/PID.
 2. Capture full init + one tune + one rate change + cleanup.
 3. Note expected STALLs (if any) with indices.
-4. Implement profile module; wire into accept + start paths.
+4. Implement profile module; wire into accept + start paths without reusing another tuner’s tables.
 5. Soak on ESP32-P4 HS host.
 6. Document in this file + `PROJECT_TRUTH.md`.
 

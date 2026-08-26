@@ -2,13 +2,25 @@
 
 ## Unreleased
 
+## 0.7.9 (2026-08-26)
+
 ### Fixed
 
+- **Auto pull-ring `ESP_ERR_NO_MEM` on no-PSRAM Tab5:** default `pull_ring_bytes=0`
+  still prefers ~4× URB (min ~192 KiB). If PSRAM/internal cannot allocate that,
+  auto size now shrinks to the largest even internal block down to 64 KiB.
+  Explicit `pull_ring_bytes` stays fail-closed. Tab5 L4 run 1 in
+  `docs/Test_reports/ESP_RTL_SDR_0_7_8_DROP_IN_TEST_REPORT_2026-08-26.md`.
 - **False `ERR_REENTRANT`:** reentrancy is the **callback task**, not a handle-wide
-  depth flag. App-task `set_tuner_gain_mode` / gain / bias / RTL AGC no longer fail
-  while the delivery task is emitting `EVT_IQ_BLOCK`. Tab5 L4 run 1 reproduced this
-  (`docs/Test_reports/ESP_RTL_SDR_0_7_8_DROP_IN_TEST_REPORT_2026-08-26.md`).
-  `retune_hz` async-from-callback uses the same task check.
+  depth flag. App-task setters no longer fail while the delivery task is emitting
+  `EVT_IQ_BLOCK`. (Landed on 0.7.8 `master` untagged; first immutable tag is 0.7.9.)
+
+### Smoke
+
+- `examples/p4_serial_smoke` keeps real default auto ring (no 64 KiB override),
+  suppresses IQ event logging, waits 3 s for enumeration, and emits L4 AUTO/RTL
+  AGC rows. `sdkconfig.defaults` selects pre-v3 P4 silicon for Tab5 rev v1.3.
+  Hardware re-run on COM17 is still required.
 
 ## 0.7.8 (2026-08-26)
 

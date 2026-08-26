@@ -1,5 +1,5 @@
 ## esp_rtl_sdr — ESP Component Registry metadata
-version: "0.7.8"
+version: "0.7.9"
 description: >
   Clean-room ESP-IDF USB Host client for RTL2832U-class SDR dongles.
   Blog V4 (R828D) profile first; profile-based expansion for other tuners.

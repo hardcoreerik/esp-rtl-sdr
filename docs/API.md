@@ -1,7 +1,7 @@
 # esp_rtl_sdr public API — design contract
 
 **Header:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
-**Version:** 0.7.8  
+**Version:** 0.7.9  
 **Full parameter / return / example reference:** [`API_REFERENCE.md`](API_REFERENCE.md)
 
 This document is the **design contract** (invariants, threading, ABI growth).  

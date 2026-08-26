@@ -87,7 +87,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 8
+#define ESP_RTL_SDR_VERSION_PATCH 9
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -500,9 +500,12 @@ typedef struct {
      */
     esp_rtl_sdr_delivery_mode_t delivery_mode;
     /**
-     * Optional pull-ring capacity in bytes (CU8). 0 = auto
-     * (~4× URB total, min ~192 KiB, max 512 KiB). Only allocated when the
-     * mode uses read() (lazy on first push/read).
+     * Optional pull-ring capacity in bytes (CU8). 0 = auto: prefer ~4× URB
+     * total (min ~192 KiB, max 512 KiB), then shrink to the largest even
+     * internal heap block down to 64 KiB if PSRAM/internal cannot take the
+     * preferred size (Tab5-class no-PSRAM drop-in). Non-zero is exact and
+     * fail-closed (ESP_ERR_NO_MEM, no shrink). Only allocated when the mode
+     * uses read() (lazy on first push/read).
      */
     size_t pull_ring_bytes;
 } esp_rtl_sdr_config_t;

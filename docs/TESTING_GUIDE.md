@@ -96,9 +96,16 @@ examples/p4_serial_smoke + EXTRA_COMPONENT_DIRS → this repo
 
 | Result | Meaning |
 |---|---|
-| Helpers pass, start → NO_DEVICE | Policy OK; no dongle |
-| start → OK, read bytes > 0 | Stream path alive |
-| `probe_rates` entries / best_stable | Passport learned on **this** host |
+| Helpers pass, start → NO_DEVICE | Policy OK; no dongle (`hardware=SKIP`) |
+| `SMOKE default_auto_ring PASS` | Smoke did not override `pull_ring_bytes` |
+| start → OK, `first_read` bytes > 0 | Default auto ring allocated (no 64 KiB workaround) |
+| Tuner AUTO / RTL AGC / manual ladder rows | 0.7.8 sideband contract |
+| `SMOKE OVERALL PASS hardware=RUN` | Bounded L4 matrix on attached Blog V4 |
+
+Do **not** set `cfg.pull_ring_bytes` in this smoke. Serial must not log `EVT_IQ_BLOCK`.
+`sdkconfig.defaults` must keep pre-v3 P4 (`CONFIG_ESP32P4_REV_MIN_0`) for Tab5 rev v1.3.
+
+L5 unchanged-consumer (OrcSDR) and L6 soak remain open. Re-run this smoke on Tab5 COM17 after the auto-ring shrink before claiming hardware-verified drop-in.
 
 Log outcomes into PROJECT_TRUTH only with evidence labels (Hardware-verified vs Provenance).
 

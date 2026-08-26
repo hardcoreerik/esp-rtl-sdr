@@ -969,9 +969,41 @@ static void destroy_pull_ring_unlocked(esp_rtl_sdr_handle *h)
     }
 }
 
+static constexpr size_t kPullRingAutoMin = 64u * 1024u;  /* Tab5 no-PSRAM L4 */
+static constexpr size_t kPullRingAutoMax = 512u * 1024u;
+static constexpr size_t kPullRingAutoFloor = 96000u * 2u; /* ~0.2 s @ 960 kS/s CU8 */
+
+static size_t pull_ring_auto_prefer(const esp_rtl_sdr_handle *h)
+{
+    size_t need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
+    if (need < kPullRingAutoFloor) {
+        need = kPullRingAutoFloor;
+    }
+    if (need > kPullRingAutoMax) {
+        need = kPullRingAutoMax;
+    }
+    return need & ~size_t{1};
+}
+
+static uint8_t *malloc_pull_buf(size_t need)
+{
+    uint8_t *buf = static_cast<uint8_t *>(
+        heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (buf == nullptr) {
+        buf = static_cast<uint8_t *>(
+            heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+    return buf;
+}
+
 /**
  * Lazy pull-ring init. Serialized on the handle API lock so delivery_task and
  * esp_rtl_sdr_read cannot race a double-alloc or leave a half-initialized ring.
+ *
+ * Auto size prefers ~4× URB (min ~192 KiB). If that cannot allocate (typical
+ * Tab5-class board with no PSRAM), shrink to the largest even internal block
+ * down to 64 KiB so default drop-in still works. Explicit pull_ring_bytes
+ * stays fail-closed (NO_MEM, no shrink).
  */
 static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
 {
@@ -993,30 +1025,57 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
         destroy_pull_ring_unlocked(h);
     }
 
-    size_t need = h->cfg.pull_ring_bytes;
-    if (need == 0) {
-        /* ~0.2 s at 960 kS/s CU8 (192 KiB), or 4× URB total, cap 512 KiB. */
-        need = h->cfg.transfer_bytes * h->cfg.transfer_count * 4u;
-        if (need < 96000u * 2u) {
-            need = 96000u * 2u;
-        }
-        if (need > 512u * 1024u) {
-            need = 512u * 1024u;
-        }
-    }
+    const bool auto_size = (h->cfg.pull_ring_bytes == 0);
+    size_t need = auto_size ? pull_ring_auto_prefer(h) : h->cfg.pull_ring_bytes;
     need &= ~size_t{1};
     if (need < 2u) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t *buf = static_cast<uint8_t *>(
-        heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (buf == nullptr) {
-        buf = static_cast<uint8_t *>(heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    const size_t prefer = need;
+    uint8_t *buf = malloc_pull_buf(need);
+    if (buf == nullptr && auto_size) {
+        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL |
+                                                          MALLOC_CAP_8BIT);
+        const size_t slack = 32u * 1024u;
+        if (largest > slack) {
+            largest -= slack;
+        } else {
+            largest = 0;
+        }
+        largest &= ~size_t{1};
+        static const size_t kLadder[] = {128u * 1024u, 96u * 1024u, kPullRingAutoMin};
+        size_t try_sz = largest;
+        if (try_sz > prefer) {
+            try_sz = prefer;
+        }
+        if (try_sz < kPullRingAutoMin) {
+            try_sz = kPullRingAutoMin;
+        }
+        buf = malloc_pull_buf(try_sz);
+        if (buf == nullptr) {
+            for (size_t i = 0; i < sizeof(kLadder) / sizeof(kLadder[0]); ++i) {
+                if (kLadder[i] >= try_sz && try_sz != kPullRingAutoMin) {
+                    continue;
+                }
+                buf = malloc_pull_buf(kLadder[i]);
+                if (buf != nullptr) {
+                    try_sz = kLadder[i];
+                    break;
+                }
+            }
+        }
+        if (buf != nullptr) {
+            ESP_LOGW(TAG, "pull ring auto shrunk %u -> %u (heap)",
+                     static_cast<unsigned>(prefer), static_cast<unsigned>(try_sz));
+            need = try_sz;
+        }
     }
     if (buf == nullptr) {
         return ESP_ERR_NO_MEM;
     }
+    ESP_LOGI(TAG, "pull ring %u bytes auto=%d", static_cast<unsigned>(need),
+             auto_size ? 1 : 0);
 
     SemaphoreHandle_t mux = xSemaphoreCreateMutex();
     SemaphoreHandle_t sem = xSemaphoreCreateBinary();

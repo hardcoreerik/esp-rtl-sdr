@@ -82,6 +82,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; P4 re-soak open |
 | Tuner AGC AUTO | **Implemented (measured 2026-08-26)** | CAP_GAIN_AUTO; `set_tuner_gain_mode(AUTO)`; P4 re-soak open |
 | RTL digital AGC | **Implemented (measured 2026-08-26)** | CAP_RTL_AGC; additive `set_rtl_agc`; not tuner AUTO |
+| Gain/AGC/bias getters | **Requested-state shadow** | Live setters are **async** (delivery-task EP0). `get_*` is not a hardware register readback. Smoke can prove API + IQ/metrics around transitions, not that every URB landed. |
 | R828D IF / SDR# Bandwidth | **No USB** (2026-08-26 capture) | Software-only; no CAP_IF_FILTER |
 | set/get center freq, rate, ppm | **Implemented** | |
 | Sync `read()` | **Implemented** | |

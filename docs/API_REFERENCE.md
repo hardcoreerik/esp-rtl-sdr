@@ -1221,13 +1221,20 @@ P4 re-soak and multimeter DC are still lab-open — see [`PHASE3_CAPTURE_REPORT.
 |---|---|
 | `set_tuner_gain_mode(MANUAL)` | Restore last ladder step (or 0.0 dB); no-op if already MANUAL |
 | `set_tuner_gain_mode(AUTO)` | **0.7.8+** measured IR `05=E8 07=78 0C=6B` (`CAP_GAIN_AUTO`) |
-| `get_tuner_gain_mode` | Last mode |
+| `get_tuner_gain_mode` | Last **requested** mode — not register readback |
 | `set_tuner_gain` | Nearest measured step; forces MANUAL; cancels queued AUTO |
-| `get_tuner_gain` | Last applied step (0 if never set) |
+| `get_tuner_gain` | Last requested/accepted step (0 if never set) — software shadow |
 | `get_tuner_gains` | 28 steps: 0…496 tenths dB (0.0…49.6 dB) |
 | `set_bias_tee` | SYS sequence `3004/3003/3001/3000` (ON: 3001=0x19, OFF: 0x18) |
 | `get_bias_tee` | Last requested preference |
-| `set/get_rtl_agc` | **0.7.8+** demod `0x19` ON=`0x25` OFF=`0x05` (`CAP_RTL_AGC`) |
+| `set/get_rtl_agc` | **0.7.8+** demod `0x19` ON=`0x25` OFF=`0x05` (`CAP_RTL_AGC`); get is shadow |
+
+While streaming, gain / mode / bias / RTL AGC **setters are async** (delivery task,
+one bulk-pause window). `ESP_OK` means the request was queued or applied on the
+non-streaming path — **not** that the device ACKed each EP0 byte. A smoke app
+can prove API returns, continued IQ, metrics, and health around each transition.
+It **cannot** independently prove every register write landed. USBPcap on a PC
+(or a future explicit readback CAP) is the evidence for EP0 contents.
 
 ```c
 if (esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_GAIN) {

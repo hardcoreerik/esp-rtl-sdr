@@ -156,6 +156,8 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | `read` | Blocking CU8 IQ |
 | `start_hz` | Convenience start (0 = preferred) |
 | `set/get_freq_correction` | ±200 ppm software LO |
+| Gain / AUTO / RTL AGC / bias **set** | Claimed stream; **async** while streaming (bulk pause + EP0 on delivery task). `ESP_OK` = accepted |
+| Gain / AUTO / RTL AGC / bias **get** | Last **requested** shadow — **not** EP0/I2C readback |
 | Multi-device APIs | refresh / count / at / select |
 | `apply_need` | Mission presets → preferred LO/rate |
 | `get_health` | USB/RF categories + advice |

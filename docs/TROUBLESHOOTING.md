@@ -72,6 +72,7 @@ Truth of claims: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 | `ERR_NOT_CLAIMED` | Call after successful `start` (interface must be claimed) |
 | `ERR_NOT_CLAIMED` on `set_tuner_gain_mode` / `set_rtl_agc` | Call after `start` (interface claimed) |
 | `ERR_REENTRANT` on gain/AGC | Do not call from the IQ event callback |
+| `get_tuner_gain` / `get_*_agc` disagrees with RF | Getters are **requested state**, not register readback. Setters are async while streaming. |
 | Gain/bias no RF/DC effect on P4 | P4 re-soak still open; PC capture tables may need re-verify on host |
 | Multimeter shows 0 V with bias ON | SMA DC not lab-certified yet; confirm EP0 path + supply |
 

@@ -1,6 +1,6 @@
 # esp_rtl_sdr — API Reference
 
-> **Version tracked:** `0.7.8` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
+> **Version tracked:** `0.7.9` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))  
 > **Header of record:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
 > **Design contract (invariants, ABI growth):** [`API.md`](API.md)  
 > **What works on hardware right now:** [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) wins on any claim conflict.

@@ -21,11 +21,13 @@ and how apps can influence them.
 |---|---|
 | When allocated | First IQ push or first `read()` if `delivery_mode` is BOTH or READ |
 | Never allocated | `DELIVERY_CALLBACK` |
-| Default size | ~4× URB total, min ~192 KiB, max 512 KiB |
-| Override | `config.pull_ring_bytes` (even, 1 KiB…1 MiB) |
+| Default size | Auto: prefer ~4× URB total, min ~192 KiB, max 512 KiB. If that malloc fails (no PSRAM / small internal heap), shrink to the largest even internal block down to **64 KiB**. |
+| Override | `config.pull_ring_bytes` (even, 1 KiB…1 MiB). Exact size; `ESP_ERR_NO_MEM` if it cannot allocate (no shrink). |
+
+**Why shrink:** Tab5 generic smoke (P4 v1.3, PSRAM off) could not allocate 192 KiB and failed IQ `read()` with `ESP_ERR_NO_MEM`. 64 KiB was the proven floor. Auto drop-in must not require a consumer override.
 
 **App control:** Prefer `DELIVERY_CALLBACK` if you never call `read()` (saves RAM).
-Tune URB geometry via [`KCONFIG.md`](KCONFIG.md); watch `consumer_drops`.
+Tune URB geometry via [`KCONFIG.md`](KCONFIG.md); watch `consumer_drops`. A shrunk ring still streams; a slow consumer shows up as `consumer_drops` / `app too slow`, not USB overruns.
 
 ---
 

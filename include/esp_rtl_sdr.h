@@ -47,8 +47,10 @@
  * - Safe: concurrent get_state / get_metrics / get_device_info / get_last_error
  *   from any task with a live handle.
  * - Safe: start / stop / retune / reset from app tasks (serialized).
- * - Forbidden: install/uninstall/start/stop/retune/reset from inside the
- *   event callback on the same handle (ERR_REENTRANT).
+ * - Forbidden: install/uninstall/start/stop/retune/reset **from the event
+ *   callback task** on the same handle (ERR_REENTRANT). Other tasks may call
+ *   setters while a callback is running; the guard is the calling task, not a
+ *   handle-global "callback in progress" flag.
  * - Forbidden: any public API from a USB completion ISR.
  * - IQ / events: delivered from the driver USB owner task (or a dedicated
  *   delivery task). Callbacks must return quickly (no display paint, flash,

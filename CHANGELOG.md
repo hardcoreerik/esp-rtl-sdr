@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **False `ERR_REENTRANT`:** reentrancy is the **callback task**, not a handle-wide
+  depth flag. App-task `set_tuner_gain_mode` / gain / bias / RTL AGC no longer fail
+  while the delivery task is emitting `EVT_IQ_BLOCK`. Tab5 L4 run 1 reproduced this
+  (`docs/Test_reports/ESP_RTL_SDR_0_7_8_DROP_IN_TEST_REPORT_2026-08-26.md`).
+  `retune_hz` async-from-callback uses the same task check.
+
 ## 0.7.8 (2026-08-26)
 
 ### Added — measured Tuner AGC AUTO + RTL digital AGC

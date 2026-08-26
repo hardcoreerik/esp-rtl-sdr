@@ -128,6 +128,7 @@ Apps written against 0.7.5–0.7.7 that **never call AUTO**:
 6. Unclaimed AUTO → `ERR_NOT_CLAIMED` (not UNSUPPORTED).
 7. From IQ callback → `ERR_REENTRANT` (same as `set_tuner_gain`).
 8. Default `get_tuner_gain_mode()` may still read AUTO before any EP0. First explicit AUTO after `start` **must** write hardware (`tuner_auto_applied` flag). Treating “default AUTO” as already applied is a bug.
+9. `ERR_REENTRANT` is **callback-task only**. An app task must not get REENTRANT solely because `EVT_IQ_BLOCK` is running on the delivery task (Tab5 L4 run 1).
 
 ---
 

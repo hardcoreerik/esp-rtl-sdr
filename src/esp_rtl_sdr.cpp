@@ -31,6 +31,7 @@
 
 #include "transfers_blog_v4.hpp"
 #include "measured_gain_bias_v4.hpp"
+#include "reentrancy.hpp"
 
 static const char *TAG = "esp_rtl_sdr";
 
@@ -86,6 +87,8 @@ struct esp_rtl_sdr_handle {
     uint32_t sample_rate_sps = 0;
     uint32_t stream_start_ms = 0;
     uint32_t in_callback_depth = 0;
+    /** Task currently inside emit_after_unlock; null if depth == 0. */
+    TaskHandle_t callback_task = nullptr;
     bool destroying = false;
 
     bool owns_host = false;
@@ -242,7 +245,12 @@ static void set_error_unlocked(esp_rtl_sdr_handle *h, esp_err_t err)
 
 static esp_err_t check_not_reentrant(const esp_rtl_sdr_handle *h)
 {
-    if (h != nullptr && h->in_callback_depth > 0) {
+    if (h == nullptr) {
+        return ESP_OK;
+    }
+    const uint32_t depth = __atomic_load_n(&h->in_callback_depth, __ATOMIC_SEQ_CST);
+    const TaskHandle_t cb = __atomic_load_n(&h->callback_task, __ATOMIC_SEQ_CST);
+    if (esp_rtl_sdr_caller_is_event_callback(depth, cb, xTaskGetCurrentTaskHandle())) {
         return ESP_RTL_SDR_ERR_REENTRANT;
     }
     return ESP_OK;
@@ -256,9 +264,8 @@ static uint32_t now_ms(void)
 
 /**
  * Invoke app callback without holding the API mutex.
- * Uses atomic in_callback_depth so reentrancy guards work even if emit is
- * nested under another caller's lock (which must not happen — callers should
- * release first; select_device defers emit until after unlock).
+ * Depth + callback_task are atomic so another task can call setters while
+ * we emit; only the callback task itself is ERR_REENTRANT.
  */
 static void emit_after_unlock(esp_rtl_sdr_handle *h,
                               esp_rtl_sdr_event_t ev,
@@ -269,14 +276,17 @@ static void emit_after_unlock(esp_rtl_sdr_handle *h,
     if (cb == nullptr || h == nullptr) {
         return;
     }
+    const TaskHandle_t self = xTaskGetCurrentTaskHandle();
     if (handle_live(h)) {
+        __atomic_store_n(&h->callback_task, self, __ATOMIC_SEQ_CST);
         __atomic_add_fetch(&h->in_callback_depth, 1u, __ATOMIC_SEQ_CST);
     }
     cb(ev, payload, ctx);
     if (handle_live(h)) {
-        uint32_t d = __atomic_load_n(&h->in_callback_depth, __ATOMIC_SEQ_CST);
-        if (d > 0) {
-            __atomic_sub_fetch(&h->in_callback_depth, 1u, __ATOMIC_SEQ_CST);
+        const uint32_t d = __atomic_sub_fetch(&h->in_callback_depth, 1u, __ATOMIC_SEQ_CST);
+        if (d == 0) {
+            __atomic_store_n(&h->callback_task, static_cast<TaskHandle_t>(nullptr),
+                             __ATOMIC_SEQ_CST);
         }
     }
 }
@@ -1627,7 +1637,9 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         if (handle->destroying) {
             return ESP_RTL_SDR_ERR_BUSY;
         }
-        if (handle->in_callback_depth > 0) {
+        const uint32_t depth = __atomic_load_n(&handle->in_callback_depth, __ATOMIC_SEQ_CST);
+        const TaskHandle_t cb = __atomic_load_n(&handle->callback_task, __ATOMIC_SEQ_CST);
+        if (esp_rtl_sdr_caller_is_event_callback(depth, cb, xTaskGetCurrentTaskHandle())) {
             return ESP_RTL_SDR_ERR_REENTRANT;
         }
         handle->destroying = true;
@@ -2048,7 +2060,12 @@ esp_err_t esp_rtl_sdr_retune_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_
             return ESP_RTL_SDR_ERR_NOT_STREAMING;
         }
         handle->pending_retune_hz = q;
-        from_callback = (handle->in_callback_depth > 0);
+        {
+            const uint32_t depth = __atomic_load_n(&handle->in_callback_depth, __ATOMIC_SEQ_CST);
+            const TaskHandle_t cb = __atomic_load_n(&handle->callback_task, __ATOMIC_SEQ_CST);
+            from_callback =
+                esp_rtl_sdr_caller_is_event_callback(depth, cb, xTaskGetCurrentTaskHandle());
+        }
         set_error_unlocked(handle, ESP_OK);
     }
 

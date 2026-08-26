@@ -136,8 +136,12 @@ struct esp_rtl_sdr_handle {
      */
     volatile bool pending_gain = false;
     volatile int pending_gain_tenth = 0;
+    volatile bool pending_gain_mode = false;
+    volatile esp_rtl_sdr_gain_mode_t pending_gain_mode_val = ESP_RTL_SDR_GAIN_MODE_MANUAL;
     volatile bool pending_bias = false;
     volatile bool pending_bias_enable = false;
+    volatile bool pending_rtl_agc = false;
+    volatile bool pending_rtl_agc_enable = false;
     volatile bool ep0_sideband_busy = false;
 
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
@@ -166,6 +170,8 @@ struct esp_rtl_sdr_handle {
     esp_rtl_sdr_gain_mode_t gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     int gain_tenth_db = 0;
     bool bias_tee_want = false;
+    bool rtl_agc_want = false;
+    bool tuner_auto_applied = false; /* true after AUTO trio actually written */
 
     /** Sync-read pull ring (CU8 bytes). Filled by delivery task. */
     uint8_t *pull_buf = nullptr;
@@ -1041,7 +1047,8 @@ static void delivery_task_fn(void *arg)
             (void)apply_pending_retune(h);
         }
         if (h->streaming && !h->retune_busy && !h->ep0_sideband_busy &&
-            (h->pending_gain || h->pending_bias)) {
+            (h->pending_gain || h->pending_bias || h->pending_gain_mode ||
+             h->pending_rtl_agc)) {
             (void)apply_pending_sideband_ep0(h);
         }
 
@@ -1780,7 +1787,9 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->streaming = false;
     h->pending_retune_hz = 0;
     h->pending_gain = false;
+    h->pending_gain_mode = false;
     h->pending_bias = false;
+    h->pending_rtl_agc = false;
     h->ep0_sideband_busy = false;
 
     if (h->dev != nullptr && h->bulk_num > 0) {
@@ -2993,6 +3002,53 @@ static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *ap
     return ESP_OK;
 }
 
+/** Tuner AGC AUTO trio (caller owns bulk pause). Do not run band FE after — it
+ *  would clobber measured reg0c=0x6B back to the manual 0x68 on VHF/HF. */
+static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h)
+{
+    const RtlControlRecord w05 =
+        measured_v4_ir_reg_write(0x05, kMeasuredV4TunerAgcReg05);
+    const RtlControlRecord w07 =
+        measured_v4_ir_reg_write(0x07, kMeasuredV4TunerAgcReg07);
+    const RtlControlRecord w0c =
+        measured_v4_ir_reg_write(0x0c, kMeasuredV4TunerAgcReg0c);
+
+    esp_err_t err = ESP_FAIL;
+    for (int pass = 0; pass < 3; ++pass) {
+        err = run_record(h, w05, false);
+        if (err == ESP_OK) {
+            err = run_record(h, w07, false);
+        }
+        if (err == ESP_OK) {
+            err = run_record(h, w0c, false);
+        }
+        if (err == ESP_OK) {
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG, "tuner AGC AUTO EP0 pass %d failed: %s", pass,
+                 esp_rtl_sdr_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(30 + pass * 20));
+    }
+    return err;
+}
+
+/** RTL2832 digital AGC demod 0x19 (caller owns bulk pause). */
+static esp_err_t apply_rtl_agc_records(esp_rtl_sdr_handle *h, bool enable)
+{
+    const RtlControlRecord rec = measured_v4_demod_reg_write(
+        kMeasuredV4RtlAgcReg, enable ? kMeasuredV4RtlAgcOn : kMeasuredV4RtlAgcOff);
+    esp_err_t err = ESP_FAIL;
+    for (int pass = 0; pass < 3; ++pass) {
+        err = run_record(h, rec, false);
+        if (err == ESP_OK) {
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG, "RTL AGC EP0 pass %d failed: %s", pass, esp_rtl_sdr_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(20 + pass * 15));
+    }
+    return err;
+}
+
 /** SYS bias sequence only (caller owns bulk pause). Settle after GPIO writes. */
 static esp_err_t apply_bias_records(esp_rtl_sdr_handle *h, bool enable)
 {
@@ -3020,7 +3076,7 @@ static esp_err_t apply_bias_records(esp_rtl_sdr_handle *h, bool enable)
 }
 
 /**
- * Drain bulk once, apply any pending bias then gain, resume.
+ * Drain bulk once, apply pending bias / tuner mode / gain / RTL AGC, resume.
  * Must not run on USB client task. Coalesces stacked pending values.
  */
 static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
@@ -3031,17 +3087,24 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
     if (h->ep0_sideband_busy || h->retune_busy) {
         return ESP_OK;
     }
-    if (!h->pending_gain && !h->pending_bias) {
+    if (!h->pending_gain && !h->pending_bias && !h->pending_gain_mode &&
+        !h->pending_rtl_agc) {
         return ESP_OK;
     }
     h->ep0_sideband_busy = true;
 
     const bool do_bias = h->pending_bias;
     const bool bias_en = h->pending_bias_enable;
+    const bool do_mode = h->pending_gain_mode;
+    const esp_rtl_sdr_gain_mode_t mode_val = h->pending_gain_mode_val;
     const bool do_gain = h->pending_gain;
     const int gain_t = h->pending_gain_tenth;
+    const bool do_rtl = h->pending_rtl_agc;
+    const bool rtl_en = h->pending_rtl_agc_enable;
     h->pending_bias = false;
     h->pending_gain = false;
+    h->pending_gain_mode = false;
+    h->pending_rtl_agc = false;
 
     bulk_pause_and_drain(h);
 
@@ -3055,20 +3118,52 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
             ESP_LOGW(TAG, "bias-T EP0 failed: %s", esp_rtl_sdr_err_to_name(err));
         }
     }
-    if (do_gain) {
+
+    /* Manual ladder (set_tuner_gain) wins over a stale AUTO queue. */
+    const bool apply_auto = do_mode && mode_val == ESP_RTL_SDR_GAIN_MODE_AUTO && !do_gain;
+    const bool apply_manual =
+        do_gain || (do_mode && mode_val == ESP_RTL_SDR_GAIN_MODE_MANUAL);
+
+    if (apply_auto) {
+        const esp_err_t aerr = apply_tuner_agc_auto_records(h);
+        if (aerr == ESP_OK) {
+            h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
+            h->tuner_auto_applied = true;
+            ESP_LOGI(TAG, "tuner AGC AUTO [measured V4, async]");
+        } else {
+            ESP_LOGW(TAG, "tuner AGC AUTO EP0 failed: %s", esp_rtl_sdr_err_to_name(aerr));
+            if (err == ESP_OK) {
+                err = aerr;
+            }
+        }
+    } else if (apply_manual) {
         int applied = 0;
-        const esp_err_t gerr = apply_gain_records(h, gain_t, &applied);
+        const int tenth = do_gain ? gain_t : h->gain_tenth_db;
+        const esp_err_t gerr = apply_gain_records(h, tenth, &applied);
         if (gerr == ESP_OK) {
             h->gain_tenth_db = applied;
             h->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
+            h->tuner_auto_applied = false;
             ESP_LOGI(TAG, "tuner gain applied %d (0.1 dB) [async]", applied);
-            /* Keep triplexer path after reg05 gain writes. */
             (void)run_band_frontend_after_gain(h, h->frequency_hz);
         } else {
-            ESP_LOGW(TAG, "tuner gain EP0 failed req=%d: %s", gain_t,
+            ESP_LOGW(TAG, "tuner gain EP0 failed req=%d: %s", tenth,
                      esp_rtl_sdr_err_to_name(gerr));
             if (err == ESP_OK) {
                 err = gerr;
+            }
+        }
+    }
+
+    if (do_rtl) {
+        const esp_err_t rerr = apply_rtl_agc_records(h, rtl_en);
+        if (rerr == ESP_OK) {
+            h->rtl_agc_want = rtl_en;
+            ESP_LOGI(TAG, "RTL AGC %s [measured demod 0x19, async]", rtl_en ? "ON" : "OFF");
+        } else {
+            ESP_LOGW(TAG, "RTL AGC EP0 failed: %s", esp_rtl_sdr_err_to_name(rerr));
+            if (err == ESP_OK) {
+                err = rerr;
             }
         }
     }
@@ -3106,6 +3201,34 @@ static esp_err_t apply_measured_v4_bias(esp_rtl_sdr_handle *h, bool enable)
     return apply_bias_records(h, enable);
 }
 
+static esp_err_t apply_measured_v4_gain_mode(esp_rtl_sdr_handle *h,
+                                             esp_rtl_sdr_gain_mode_t mode)
+{
+    if (h->streaming) {
+        h->pending_gain_mode_val = mode;
+        h->pending_gain_mode = true;
+        if (mode == ESP_RTL_SDR_GAIN_MODE_AUTO) {
+            h->pending_gain = false; /* AUTO replaces a queued ladder write */
+        }
+        return ESP_OK;
+    }
+    if (mode == ESP_RTL_SDR_GAIN_MODE_AUTO) {
+        const esp_err_t aerr = apply_tuner_agc_auto_records(h);
+        if (aerr == ESP_OK) {
+            h->tuner_auto_applied = true;
+        }
+        return aerr;
+    }
+    int applied = 0;
+    const esp_err_t err = apply_gain_records(h, h->gain_tenth_db, &applied);
+    if (err == ESP_OK) {
+        h->gain_tenth_db = applied;
+        h->tuner_auto_applied = false;
+        (void)run_band_frontend_after_gain(h, h->frequency_hz);
+    }
+    return err;
+}
+
 esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t mode)
 {
@@ -3115,18 +3238,44 @@ esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
     if (mode != ESP_RTL_SDR_GAIN_MODE_AUTO && mode != ESP_RTL_SDR_GAIN_MODE_MANUAL) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (check_not_reentrant(handle) != ESP_OK) {
+        return ESP_RTL_SDR_ERR_REENTRANT;
+    }
+
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        if (!handle->iface_claimed || handle->dev == nullptr) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_CLAIMED);
+            return ESP_RTL_SDR_ERR_NOT_CLAIMED;
+        }
+        /* Default get() is AUTO before any EP0. First AUTO after claim must write. */
+        const bool already =
+            (mode == ESP_RTL_SDR_GAIN_MODE_AUTO) ? handle->tuner_auto_applied
+                                                 : (handle->gain_mode == ESP_RTL_SDR_GAIN_MODE_MANUAL);
+        if (already && !handle->pending_gain_mode) {
+            set_error_unlocked(handle, ESP_OK);
+            return ESP_OK;
+        }
+    }
+
+    const esp_err_t err = apply_measured_v4_gain_mode(handle, mode);
+
     HandleLock lk(handle);
     if (!lk.ok()) {
-        return ESP_RTL_SDR_ERR_TIMEOUT;
+        return (err == ESP_OK) ? ESP_RTL_SDR_ERR_TIMEOUT : err;
     }
-    handle->gain_mode = mode;
-    /* AUTO AGC EP0 not in 2026-08-12 capture set — manual path only. */
-    if (mode == ESP_RTL_SDR_GAIN_MODE_AUTO) {
-        set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
-        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    if (err == ESP_OK) {
+        handle->gain_mode = mode;
+        set_error_unlocked(handle, ESP_OK);
+        ESP_LOGI(TAG, "tuner gain mode %s [measured V4]",
+                 mode == ESP_RTL_SDR_GAIN_MODE_AUTO ? "AUTO" : "MANUAL");
+    } else {
+        set_error_unlocked(handle, err);
     }
-    set_error_unlocked(handle, ESP_OK);
-    return ESP_OK;
+    return err;
 }
 
 esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
@@ -3165,6 +3314,8 @@ esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth
             return ESP_RTL_SDR_ERR_NOT_CLAIMED;
         }
         handle->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
+        handle->pending_gain_mode = false; /* cancel queued AUTO */
+        handle->tuner_auto_applied = false;
     }
 
     int applied = 0;
@@ -3256,6 +3407,65 @@ esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
         set_error_unlocked(handle, err);
     }
     return err;
+}
+
+esp_err_t esp_rtl_sdr_set_rtl_agc(esp_rtl_sdr_handle_t handle, bool enable)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if (check_not_reentrant(handle) != ESP_OK) {
+        return ESP_RTL_SDR_ERR_REENTRANT;
+    }
+
+    {
+        HandleLock lk(handle);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        if (!handle->iface_claimed || handle->dev == nullptr) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_CLAIMED);
+            return ESP_RTL_SDR_ERR_NOT_CLAIMED;
+        }
+        if (handle->streaming) {
+            handle->pending_rtl_agc_enable = enable;
+            handle->pending_rtl_agc = true;
+            handle->rtl_agc_want = enable;
+            set_error_unlocked(handle, ESP_OK);
+            return ESP_OK;
+        }
+    }
+
+    const esp_err_t err = apply_rtl_agc_records(handle, enable);
+
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return (err == ESP_OK) ? ESP_RTL_SDR_ERR_TIMEOUT : err;
+    }
+    if (err == ESP_OK) {
+        handle->rtl_agc_want = enable;
+        set_error_unlocked(handle, ESP_OK);
+        ESP_LOGI(TAG, "RTL AGC %s [measured demod 0x19]", enable ? "ON" : "OFF");
+    } else {
+        set_error_unlocked(handle, err);
+    }
+    return err;
+}
+
+esp_err_t esp_rtl_sdr_get_rtl_agc(esp_rtl_sdr_handle_t handle, bool *out_enable)
+{
+    if (out_enable == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_enable = handle->rtl_agc_want;
+    return ESP_OK;
 }
 
 esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable)

@@ -6,8 +6,8 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-08-13**  
-Version: **0.7.7** (HF upconverter CAP + async gain/bias — not production-ready)  
+Snapshot date: **2026-08-26**  
+Version: **0.7.8** (measured Tuner AUTO + RTL AGC — not production-ready)  
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -79,7 +79,10 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
-| Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; AUTO AGC still unsupported; P4 re-soak open |
+| Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; P4 re-soak open |
+| Tuner AGC AUTO | **Implemented (measured 2026-08-26)** | CAP_GAIN_AUTO; `set_tuner_gain_mode(AUTO)`; P4 re-soak open |
+| RTL digital AGC | **Implemented (measured 2026-08-26)** | CAP_RTL_AGC; additive `set_rtl_agc`; not tuner AUTO |
+| R828D IF / SDR# Bandwidth | **No USB** (2026-08-26 capture) | Software-only; no CAP_IF_FILTER |
 | set/get center freq, rate, ppm | **Implemented** | |
 | Sync `read()` | **Implemented** | |
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
@@ -111,6 +114,8 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.4** | Delivery modes BOTH/CALLBACK/READ + lazy pull ring |
 | **0.7.5** | Measured Blog V4 gain ladder + bias-T SYS EP0; CAP_GAIN/BIAS on |
 | **0.7.6** | Async mid-stream gain/bias (bulk-pause queue); stall retries; desktop-gap map |
+| **0.7.7** | HF upconverter CAP (RF+28.8e6) |
+| **0.7.8** | Measured Tuner AUTO + RTL digital AGC; IF filter USB-silent |
 
 ---
 

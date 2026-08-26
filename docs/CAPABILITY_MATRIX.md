@@ -2,7 +2,7 @@
 
 Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.md`.
 
-| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.7.7 | Phase |
+| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.7.8 | Phase |
 |---|---|---|---|---|
 | 1 | Open / close | `rtlsdr_open` | `install` / `uninstall` | **Done** |
 | 2 | Async IQ | `read_async` | `start` + `EVT_IQ_BLOCK` | **Done** |
@@ -10,7 +10,7 @@ Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.m
 | 4–5 | Center freq | set/get | set/get + retune | **Done** |
 | 6 | Sample rate | many rates | continuous in HW windows + quantize | **Done** (0.7) |
 | 7 | Get sample rate | yes | exact programmed SPS | **Done** |
-| 8–9 | Tuner gain | modes / steps | Manual ladder 0.0…49.6 dB (CAP_GAIN); AUTO open | **3 partial** |
+| 8–9 | Tuner gain | modes / steps | Manual ladder + Tuner AUTO (`CAP_GAIN_AUTO`) + RTL AGC | **Done (0.7.8)** |
 | 11 | ppm | yes | software LO offset | **Done** |
 | 12 | Bias-T | common | Measured SYS EP0 (CAP_BIAS_TEE); DC re-soak open | **3 partial** |
 | 13 | Direct sampling / HF | forks | **HF upconverter CAP** (RF+28.8e6); not direct sampling | **Done (0.7.7)** |

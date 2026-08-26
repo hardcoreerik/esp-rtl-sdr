@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.7.8 (2026-08-26)
+
+### Added — measured Tuner AGC AUTO + RTL digital AGC
+
+- **`CAP_GAIN_AUTO`**: `set_tuner_gain_mode(AUTO)` writes measured R828D IR trio
+  `05=E8 07=78 0C=6B` (lab 2026-08-26). MANUAL restores the last ladder step.
+- **`CAP_RTL_AGC`**: additive `set/get_rtl_agc` — demod `0x19` ON=`0x25` OFF=`0x05`.
+  Not tuner AUTO. Apps that never call it are unchanged.
+- Same async bulk-pause sideband queue as mid-stream gain/bias (0.7.6).
+- Fail-closed: unclaimed → `ERR_NOT_CLAIMED`; callback → `ERR_REENTRANT`;
+  same mode twice is a no-op. `set_tuner_gain` still forces MANUAL.
+- After AUTO, skip triplexer filter rewrite (would clobber `0x0c=0x6B`).
+- **IF / SDR# Bandwidth:** capture was USB-silent after open. `CAP_IF_FILTER` not added.
+
+### Evidence
+
+- `agc_tuner_on_off.pcapng` SHA-256 `E131C5C6…3E8E` (4 ON/OFF clusters)
+- `agc_rtl_on_off.pcapng` SHA-256 `1E5B0061…D482` (4 demod 0x19 writes)
+- `if_filters_steps.pcapng` SHA-256 `D9D32608…A9FB` (software-only Bandwidth)
+- Procedure: `docs/AGC_IF_CAPTURE.md`
+
 ## 0.7.7 (2026-08-13)
 
 ### Added — Blog V4 HF upconverter CAP

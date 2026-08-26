@@ -41,6 +41,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [HARDENING_0_7_2.md](HARDENING_0_7_2.md) | 0.7.2 runtime hardening notes |
 | [DEVELOPMENT_NARRATIVE_0_7.md](DEVELOPMENT_NARRATIVE_0_7.md) | Verbose 0.7.x development commentary |
 | [GAIN_BIAS_CAPTURE.md](GAIN_BIAS_CAPTURE.md) | Phase 3 clean-room capture procedure |
+| [AGC_IF_CAPTURE.md](AGC_IF_CAPTURE.md) | Tuner AUTO / RTL AGC / IF-filter USB capture |
 | [PHASE3_PC_SETUP.md](PHASE3_PC_SETUP.md) | Windows PC tool install / PATH / session recipe |
 | [HANDOFF_PHASE3_GAIN_BIAS.md](HANDOFF_PHASE3_GAIN_BIAS.md) | Full handoff + plan to finish issue #1 (gain/bias CAP) |
 | [PHASE3_CAPTURE_REPORT.md](PHASE3_CAPTURE_REPORT.md) | Plain-English report: bias+gain lab captures and why they matter |

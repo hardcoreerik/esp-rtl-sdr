@@ -75,6 +75,16 @@ if grep -E 'ESP_RTL_SDR_CAP_GAIN|ESP_RTL_SDR_CAP_BIAS_TEE' src/esp_rtl_sdr_polic
     exit 1
   fi
 fi
+if grep -E 'ESP_RTL_SDR_CAP_GAIN_AUTO|ESP_RTL_SDR_CAP_RTL_AGC' src/esp_rtl_sdr_policy.cpp | grep -v '//' >/dev/null; then
+  if ! grep -q 'MEASURED_2026_08_26' src/esp_rtl_sdr_policy.cpp; then
+    echo "CAP_GAIN_AUTO/RTL_AGC enabled without MEASURED_2026_08_26 marker in policy"
+    exit 1
+  fi
+  if ! grep -q 'kMeasuredV4TunerAgcReg05' private/measured_gain_bias_v4.hpp; then
+    echo "missing measured Tuner AGC constants"
+    exit 1
+  fi
+fi
 
 # Host test sources present
 test -f tests/host/test_policy.cpp

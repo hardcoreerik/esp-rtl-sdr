@@ -70,7 +70,8 @@ Truth of claims: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 | Symptom | Check |
 |---|---|
 | `ERR_NOT_CLAIMED` | Call after successful `start` (interface must be claimed) |
-| `ERR_UNSUPPORTED` on `set_tuner_gain_mode(AUTO)` | Expected — AUTO AGC EP0 not captured |
+| `ERR_NOT_CLAIMED` on `set_tuner_gain_mode` / `set_rtl_agc` | Call after `start` (interface claimed) |
+| `ERR_REENTRANT` on gain/AGC | Do not call from the IQ event callback |
 | Gain/bias no RF/DC effect on P4 | P4 re-soak still open; PC capture tables may need re-verify on host |
 | Multimeter shows 0 V with bias ON | SMA DC not lab-certified yet; confirm EP0 path + supply |
 

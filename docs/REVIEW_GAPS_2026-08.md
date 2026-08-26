@@ -6,7 +6,7 @@ and cannot be truthfully closed with docs alone.
 
 | # | Review finding | Status after this work | Evidence |
 |---|---|---|---|
-| 1 | Gain / bias incomplete | **0.7.5 tables + CAP on**; P4 re-soak / multimeter / AUTO still open | [`PHASE3_CAPTURE_REPORT.md`](PHASE3_CAPTURE_REPORT.md), [#1](https://github.com/hardcoreerik/esp-rtl-sdr/issues/1) |
+| 1 | Gain / bias incomplete | **0.7.5 tables + CAP on**; AUTO **0.7.8**; P4 re-soak / multimeter still open | [`PHASE3_CAPTURE_REPORT.md`](PHASE3_CAPTURE_REPORT.md), [`AGC_IF_CAPTURE.md`](AGC_IF_CAPTURE.md) |
 | 2 | Narrow HW (P4 + V4 only) | **Documented as intentional scope** | [`SCOPE.md`](SCOPE.md), [#4](https://github.com/hardcoreerik/esp-rtl-sdr/issues/4) Deferred |
 | 3 | Single maintainer + AI | **Disclosed** (not “fixed” — truth) | AI disclosure, CONTRIBUTING, [#5](https://github.com/hardcoreerik/esp-rtl-sdr/issues/5) |
 | 4 | Empty issues/PRs | **Seeded tracking issues** | [#1](https://github.com/hardcoreerik/esp-rtl-sdr/issues/1)–[#5](https://github.com/hardcoreerik/esp-rtl-sdr/issues/5) |

@@ -73,6 +73,31 @@ constexpr size_t kMeasuredV4GainStepCount =
 constexpr uint8_t kMeasuredV4GainReg0c = 0x68;
 
 /**
+ * Tuner AGC AUTO — measured 2026-08-26 (agc_tuner_on_off.pcapng).
+ * Four post-open clusters, ON/OFF/ON/OFF. AUTO ON is a distinct 05/07/0c trio.
+ * SHA-256 E131C5C642E7DFE8443D4667975871C220FFF4A237826B8423E9E38944BD3E8E
+ *
+ * Manual 29.7 dB ladder is 05=F7 07=67 0C=68. AUTO is the first time 0x0c=0x6B
+ * appeared on this IR path (manual ladder never changed 0x0c).
+ */
+constexpr uint8_t kMeasuredV4TunerAgcReg05 = 0xe8;
+constexpr uint8_t kMeasuredV4TunerAgcReg07 = 0x78;
+constexpr uint8_t kMeasuredV4TunerAgcReg0c = 0x6b;
+
+/**
+ * RTL2832 digital AGC (SDR# "RTL AGC") — measured 2026-08-26
+ * (agc_rtl_on_off.pcapng).
+ * SHA-256 1E5B006179C548E62617F530D5BC292AD45900763F6BCEF357264D4FDD55D482
+ * Demod page write: wValue=0x1920 (reg 0x19 | 0x20), wIndex=0x0010 (OUT).
+ * Not the R828D tuner. Do not conflate with Tuner AGC AUTO.
+ */
+constexpr uint8_t kMeasuredV4RtlAgcReg = 0x19;
+constexpr uint16_t kMeasuredV4RtlAgcWvalue = 0x1920;
+constexpr uint16_t kMeasuredV4RtlAgcWindex = 0x0010;
+constexpr uint8_t kMeasuredV4RtlAgcOn = 0x25;
+constexpr uint8_t kMeasuredV4RtlAgcOff = 0x05;
+
+/**
  * Bias-T SYS sequence measured from rtl_biast clusters (toggle groups).
  * ON:  3001 data 0x19   OFF: 3001 data 0x18  (LSB differs)
  * Companion writes 3004/3003/3000 match every observed toggle cluster.
@@ -106,6 +131,18 @@ inline RtlControlRecord measured_v4_ir_reg_write(uint8_t reg, uint8_t value)
     rec.length = 2;
     rec.data[0] = reg;
     rec.data[1] = value;
+    return rec;
+}
+
+/** Measured demod vendor OUT (RTL AGC uses reg 0x19 @ wIndex 0x0010). */
+inline RtlControlRecord measured_v4_demod_reg_write(uint8_t reg, uint8_t value)
+{
+    RtlControlRecord rec{};
+    rec.value = static_cast<uint16_t>((static_cast<uint16_t>(reg) << 8) | 0x20);
+    rec.index = kMeasuredV4RtlAgcWindex;
+    rec.request_type = 0x40;
+    rec.length = 1;
+    rec.data[0] = value;
     return rec;
 }
 

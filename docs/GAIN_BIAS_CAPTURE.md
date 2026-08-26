@@ -2,7 +2,7 @@
 
 > **Status (0.7.5+):** CAP_GAIN and CAP_BIAS_TEE are **on** for Blog V4 manual gain
 > and bias-T, from clean-room USBPcap tables in `private/measured_gain_bias_v4.hpp`.
-> AUTO AGC remains unsupported. P4 re-soak of the ESP path is still open.
+> Tuner AUTO + RTL AGC: **0.7.8 measured** (`docs/AGC_IF_CAPTURE.md`). P4 re-soak of the ESP path is still open.
 > This document is the **capture procedure** for new profiles / re-measurement.
 > Do **not** paste librtlsdr / rtl-sdr-blog tables.
 

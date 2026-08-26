@@ -11,6 +11,7 @@
 #include <string>
 
 #include "esp_rtl_sdr.h"
+#include "measured_gain_bias_v4.hpp"
 
 static int g_failed = 0;
 static int g_passed = 0;
@@ -103,9 +104,57 @@ static void test_capabilities(void)
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_GAIN) != 0);
     /* 0.7.7 HF upconverter path */
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0);
+    /* 0.7.8 measured Tuner AUTO + RTL digital AGC */
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_GAIN_AUTO) != 0);
+    EXPECT_TRUE((c & ESP_RTL_SDR_CAP_RTL_AGC) != 0);
     /* Still reserved */
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_DIRECT_SAMPLING) == 0);
     EXPECT_TRUE((c & ESP_RTL_SDR_CAP_IQ_ACQUIRE) == 0);
+}
+
+static void test_measured_agc_tables(void)
+{
+    /* Tuner AUTO trio is not a manual ladder step. */
+    EXPECT_EQ_U(kMeasuredV4TunerAgcReg05, 0xe8);
+    EXPECT_EQ_U(kMeasuredV4TunerAgcReg07, 0x78);
+    EXPECT_EQ_U(kMeasuredV4TunerAgcReg0c, 0x6b);
+    EXPECT_TRUE(kMeasuredV4TunerAgcReg0c != kMeasuredV4GainReg0c);
+
+    bool auto_matches_manual = false;
+    for (size_t i = 0; i < kMeasuredV4GainStepCount; ++i) {
+        if (kMeasuredV4GainSteps[i].reg05 == kMeasuredV4TunerAgcReg05 &&
+            kMeasuredV4GainSteps[i].reg07 == kMeasuredV4TunerAgcReg07) {
+            auto_matches_manual = true;
+        }
+    }
+    EXPECT_TRUE(!auto_matches_manual);
+
+    /* 29.7 dB parked UI during capture is still on the manual ladder. */
+    const size_t i297 = measured_v4_nearest_gain_index(297);
+    EXPECT_EQ_I(kMeasuredV4GainSteps[i297].tenth_db, 297);
+    EXPECT_EQ_U(kMeasuredV4GainSteps[i297].reg05, 0xf7);
+    EXPECT_EQ_U(kMeasuredV4GainSteps[i297].reg07, 0x67);
+
+    EXPECT_EQ_U(kMeasuredV4RtlAgcWvalue, 0x1920);
+    EXPECT_EQ_U(kMeasuredV4RtlAgcWindex, 0x0010);
+    EXPECT_EQ_U(kMeasuredV4RtlAgcOn, 0x25);
+    EXPECT_EQ_U(kMeasuredV4RtlAgcOff, 0x05);
+    EXPECT_TRUE(kMeasuredV4RtlAgcOn != kMeasuredV4RtlAgcOff);
+
+    const RtlControlRecord ir = measured_v4_ir_reg_write(0x05, kMeasuredV4TunerAgcReg05);
+    EXPECT_EQ_U(ir.value, 0x0074);
+    EXPECT_EQ_U(ir.index, 0x0610);
+    EXPECT_EQ_U(ir.request_type, 0x40);
+    EXPECT_EQ_U(ir.length, 2);
+    EXPECT_EQ_U(ir.data[0], 0x05);
+    EXPECT_EQ_U(ir.data[1], 0xe8);
+
+    const RtlControlRecord dem =
+        measured_v4_demod_reg_write(kMeasuredV4RtlAgcReg, kMeasuredV4RtlAgcOn);
+    EXPECT_EQ_U(dem.value, 0x1920);
+    EXPECT_EQ_U(dem.index, 0x0010);
+    EXPECT_EQ_U(dem.length, 1);
+    EXPECT_EQ_U(dem.data[0], 0x25);
 }
 
 static void test_rate_windows(void)
@@ -465,6 +514,7 @@ int main(void)
     std::printf("esp_rtl_sdr host policy tests (%s)\n", esp_rtl_sdr_get_version_string());
     test_version();
     test_capabilities();
+    test_measured_agc_tables();
     test_delivery_mode_helpers();
     test_rate_windows();
     test_recommended_rates();

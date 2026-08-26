@@ -85,7 +85,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 7
+#define ESP_RTL_SDR_VERSION_PATCH 8
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -298,6 +298,10 @@ typedef enum {
     ESP_RTL_SDR_CAP_DELIVERY_MODE = 1u << 16, /**< config.delivery_mode honored */
     /** Blog V4 HF path: RF&lt;28.8 MHz → tuner LO RF+28.8e6 + triplexer HF input (0.7.7+). */
     ESP_RTL_SDR_CAP_HF_UPCONVERTER = 1u << 17,
+    /** Tuner AGC AUTO EP0 (R828D 05/07/0c) — measured 2026-08-26. */
+    ESP_RTL_SDR_CAP_GAIN_AUTO = 1u << 18,
+    /** RTL2832 digital AGC (demod 0x19) — measured 2026-08-26; not tuner AUTO. */
+    ESP_RTL_SDR_CAP_RTL_AGC = 1u << 19,
 } esp_rtl_sdr_cap_t;
 
 /**
@@ -841,8 +845,9 @@ esp_err_t esp_rtl_sdr_get_rate_passport(esp_rtl_sdr_handle_t handle,
 /* -------------------------------------------------------------------------- */
 
 /**
- * Tuner gain mode. MANUAL is supported (CAP_GAIN). AUTO returns ERR_UNSUPPORTED
- * until AGC EP0 is captured (see docs/GAIN_BIAS_CAPTURE.md).
+ * Tuner gain mode. MANUAL = measured ladder (CAP_GAIN). AUTO = measured
+ * R828D AGC trio (CAP_GAIN_AUTO, 0.7.8+). Default get() is AUTO until the
+ * app forces MANUAL; AUTO EP0 is applied only after the interface is claimed.
  */
 typedef enum {
     ESP_RTL_SDR_GAIN_MODE_AUTO = 0,
@@ -850,8 +855,10 @@ typedef enum {
 } esp_rtl_sdr_gain_mode_t;
 
 /**
- * Set tuner gain mode. MANUAL is supported (measured Blog V4). AUTO returns
- * ERR_UNSUPPORTED until AGC EP0 is captured. Requires CAP_GAIN.
+ * Set tuner gain mode. Requires claimed interface (after start).
+ * AUTO writes measured 05/07/0c AGC ON (CAP_GAIN_AUTO). MANUAL restores the
+ * last ladder step (or 0.0 dB if never set). Same mode twice is a no-op.
+ * set_tuner_gain() forces MANUAL. Not the RTL digital AGC (see set_rtl_agc).
  */
 esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t mode);
@@ -882,6 +889,14 @@ esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gain
  */
 esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable);
 esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable);
+
+/**
+ * RTL2832 digital AGC (SDR# "RTL AGC") — measured demod 0x19 ON=0x25 OFF=0x05.
+ * Requires CAP_RTL_AGC and a claimed interface. Independent of tuner AUTO.
+ * Additive 0.7.8; default off. Same reentrancy / async sideband rules as gain.
+ */
+esp_err_t esp_rtl_sdr_set_rtl_agc(esp_rtl_sdr_handle_t handle, bool enable);
+esp_err_t esp_rtl_sdr_get_rtl_agc(esp_rtl_sdr_handle_t handle, bool *out_enable);
 
 #ifdef __cplusplus
 }

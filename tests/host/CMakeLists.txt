@@ -13,6 +13,7 @@ add_executable(esp_rtl_sdr_host_tests
 target_include_directories(esp_rtl_sdr_host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/stubs
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../private
 )
 
 if(MSVC)

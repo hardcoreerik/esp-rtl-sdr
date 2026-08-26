@@ -1,7 +1,7 @@
 # esp_rtl_sdr public API — design contract
 
 **Header:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
-**Version:** 0.7.7  
+**Version:** 0.7.8  
 **Full parameter / return / example reference:** [`API_REFERENCE.md`](API_REFERENCE.md)
 
 This document is the **design contract** (invariants, threading, ABI growth).  
@@ -118,7 +118,7 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 
 ---
 
-## Capabilities (0.7.7 binary)
+## Capabilities (0.7.8 binary)
 
 | Flag | Status |
 |---|---|
@@ -135,7 +135,10 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | `HEALTH` | On; `get_health` |
 | `PASSPORT` | On; `probe_rates` |
 | `DELIVERY_MODE` | On; `config.delivery_mode` BOTH/CALLBACK/READ |
-| `GAIN` | On (measured Blog V4 manual ladder; AUTO unsupported) |
+| `GAIN` | On (measured Blog V4 manual ladder) |
+| `GAIN_AUTO` | On (measured Tuner AGC AUTO, 0.7.8) |
+| `RTL_AGC` | On (measured demod 0x19, 0.7.8; additive) |
+| `HF_UPCONVERTER` | On (0.7.7) |
 | `BIAS_TEE` | On (measured SYS sequence; no multimeter DC yet) |
 | `IQ_ACQUIRE` | Off |
 | `DIRECT_SAMPLING` | Reserved off |

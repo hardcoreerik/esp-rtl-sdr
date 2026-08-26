@@ -89,7 +89,7 @@ continuous rates, need/health/passport) done here.
 | EP0 / profile tables came from clean-room measurement, not librtlsdr source | Claimed; clean-room rules apply |
 | Same tables worked unmodified on a second P4 board (Waveshare) under OrcSDR | **Provenance** (OrcSDR), not yet re-logged from this tree’s example |
 | `probe_rates` / continuous rates validated on P4 from *this* tree | **Implemented**; hardware log still open |
-| Gain / bias-T | **0.7.5 measured** CAP_GAIN/BIAS on; AUTO + P4 re-soak open |
+| Gain / bias-T | **0.7.5 measured** CAP_GAIN/BIAS on; AUTO **0.7.8**; P4 re-soak open |
 
 ---
 

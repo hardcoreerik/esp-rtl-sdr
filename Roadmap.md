@@ -115,7 +115,8 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 - [x] Never paste librtlsdr gain tables (clean-room `measured_gain_bias_v4.hpp`)
 - [ ] P4 re-soak: `set_tuner_gain` / `set_bias_tee` on ESP host path
 - [ ] Optional multimeter SMA DC for bias-T
-- [ ] AUTO AGC capture (still unsupported)
+- [x] AUTO AGC capture (Tuner AUTO + RTL AGC, 0.7.8)
+- [ ] P4 re-soak of AUTO / RTL AGC from this tree
 - [ ] Lab: Baofeng / Flipper for clip vs weak health correlation
 
 **Exit:** Gain and bias work on Blog V4 with recorded procedure (+ P4 soak).

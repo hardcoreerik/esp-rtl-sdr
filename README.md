@@ -3,7 +3,7 @@
 **Make an RTL-SDR Blog V4 a first-class peripheral on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.7.7-green)
+![Status](https://img.shields.io/badge/version-0.7.8-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
@@ -57,7 +57,7 @@ On a P4, the **host USB and RAM path is the hard part**. We lean into that:
 | “Supports every RTL” marketing | **Fail closed** on unknown sticks; one measured profile first |
 | App figures out “is RF dead?” | **Health** narrative (USB / app / RF clip / weak) |
 
-We are **not** chasing full librtlsdr feature parity (AGC / IF filter still open). We are chasing a driver that is **safe to live inside a real FreeRTOS product**.
+We are **not** chasing full librtlsdr feature parity (tuner IF filter still open). We are chasing a driver that is **safe to live inside a real FreeRTOS product**.
 
 ---
 
@@ -180,7 +180,10 @@ if (err == ESP_OK && n > 0) {
 uint32_t caps = esp_rtl_sdr_get_capabilities();
 if (caps & ESP_RTL_SDR_CAP_STREAM) { /* start/stop OK to attempt */ }
 if (caps & ESP_RTL_SDR_CAP_GAIN) {
-    /* 0.7.5+: manual gain after start; AUTO mode still unsupported */
+    /* 0.7.5+: manual gain after start */
+}
+if (caps & ESP_RTL_SDR_CAP_GAIN_AUTO) {
+    /* 0.7.8+: set_tuner_gain_mode(AUTO) — measured Tuner AGC */
 }
 ```
 
@@ -235,16 +238,17 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `refresh_device_list` · `get_device_count` · `get_device_at` | Candidates |
 | `select_device` · `select_device_serial` | Choose Blog V4 by index/serial |
 
-### Gain, bias & HF (0.7.5–0.7.7 Blog V4)
+### Gain, bias & HF (0.7.5–0.7.8 Blog V4)
 
 | API | Today |
 |---|---|
 | `set/get_tuner_gain` · `get_tuner_gains` | Manual ladder 0.0…49.6 dB (CAP_GAIN); need claimed stream |
-| `set_tuner_gain_mode(MANUAL)` | OK; **AUTO** still unsupported |
+| `set_tuner_gain_mode(MANUAL\|AUTO)` | MANUAL ladder; AUTO measured R828D AGC (`CAP_GAIN_AUTO`, 0.7.8+) |
+| `set/get_rtl_agc` | RTL2832 digital AGC (`CAP_RTL_AGC`); not tuner AUTO |
 | `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
 | HF (0.7.7) | **500 kHz…1766 MHz**; RF&lt;28.8 MHz uses +28.8 MHz upconverter (`CAP_HF_UPCONVERTER`) |
 
-Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md). P4 RF soak of HF FE still open.
+Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md). P4 RF soak of HF FE / AUTO still open.
 
 ### Typical rates (macros)
 
@@ -287,7 +291,7 @@ install → IDLE
 
 | Works | Not yet |
 |---|---|
-| Blog V4 stream + retune + metrics on P4 | Tuner AGC AUTO EP0 |
+| Blog V4 stream + retune + metrics on P4 | Tuner IF / SDR# Bandwidth EP0 (USB-silent) |
 | Continuous rates + passport API | “Any RTL2832U” |
 | Manual gain + bias CAP (0.7.5+) | Formal multi-hour soak artifact from *this* repo only |
 | HF upconverter CAP (0.7.7) | IF / channel filter EP0 |

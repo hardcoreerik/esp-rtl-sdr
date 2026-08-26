@@ -19,7 +19,7 @@ Labels:
 | Desktop control | SDR# / rtlsdr | esp_rtl_sdr today | Gap owner |
 |---|---|---|---|
 | Manual tuner gain ladder | Full list | **Measured 28-step** Blog V4 (0.7.5+) | — done (measured) |
-| Tuner AGC (auto) | Yes | **UNSUPPORTED** | **Driver** — need AGC EP0 capture |
+| Tuner AGC (auto) | Yes | **Measured AUTO** (`CAP_GAIN_AUTO`, 0.7.8) | P4 re-soak |
 | IF / channel filter (tuner) | Often via gain stages + IF filter | **No** — only software LPF after IQ | **Driver/HW** — R828D IF/filter regs not measured as CAP |
 | Bias-T | Yes | **Measured SYS EP0** | Optional multimeter DC claim still open |
 | Direct sampling / HF | Forks | **HF upconverter CAP 0.7.7** (not direct sampling) | — soak RF |
@@ -32,7 +32,7 @@ Labels:
 ### Driver follow-ups exposed by FM work
 
 1. **Hardware channel filter** — SDR# “Filter” on WFM is partly **post-IQ DSP** (we mirrored that in `fm_pcm`) and partly **tuner IF bandwidth**. We never measured R828D IF-filter EP0 for Blog V4; software IF is the only honest CAP today.
-2. **AUTO gain** — CAP_GAIN is manual only; `set_tuner_gain_mode(AUTO)` fails closed.
+2. **AUTO gain** — **0.7.8 measured.** `CAP_GAIN_AUTO`; RTL digital AGC is separate (`CAP_RTL_AGC`).
 3. **Gain under bias / mid-stream** — improved by async bulk-pause EP0 (0.7.6); still not multimeter-certified bias DC.
 4. **No stereo / RDS path in driver** — pure app/DSP (or future IQ streaming for host demod).
 5. **HF / shortwave upconverter CAP** — **0.7.7 on**: RF &lt; 28.8 MHz maps to tuner LO
@@ -70,8 +70,8 @@ Labels:
 
 ### Driver (esp_rtl_sdr)
 
-1. **AUTO AGC EP0** — clean-room capture + CAP path  
-2. **Optional IF-filter / bandwidth EP0** for R828D if measured (do not invent)  
+1. ~~AUTO AGC EP0~~ **0.7.8 measured** (Tuner AUTO + RTL AGC). P4 re-soak.  
+2. **Optional IF-filter / bandwidth EP0** — 2026-08-26 SDR# Bandwidth was USB-silent; do not invent  
 3. **Hardening** gain+bias under load (retries exist; P4 soak log)  
 4. **Bias DC evidence** when multimeter available  
 

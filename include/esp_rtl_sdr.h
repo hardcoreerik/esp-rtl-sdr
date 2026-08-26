@@ -47,8 +47,10 @@
  * - Safe: concurrent get_state / get_metrics / get_device_info / get_last_error
  *   from any task with a live handle.
  * - Safe: start / stop / retune / reset from app tasks (serialized).
- * - Forbidden: install/uninstall/start/stop/retune/reset from inside the
- *   event callback on the same handle (ERR_REENTRANT).
+ * - Forbidden: install/uninstall/start/stop/retune/reset **from the event
+ *   callback task** on the same handle (ERR_REENTRANT). Other tasks may call
+ *   setters while a callback is running; the guard is the calling task, not a
+ *   handle-global "callback in progress" flag.
  * - Forbidden: any public API from a USB completion ISR.
  * - IQ / events: delivered from the driver USB owner task (or a dedicated
  *   delivery task). Callbacks must return quickly (no display paint, flash,
@@ -856,24 +858,33 @@ typedef enum {
 
 /**
  * Set tuner gain mode. Requires claimed interface (after start).
- * AUTO writes measured 05/07/0c AGC ON (CAP_GAIN_AUTO). MANUAL restores the
+ * AUTO queues measured 05/07/0c AGC ON (CAP_GAIN_AUTO). MANUAL restores the
  * last ladder step (or 0.0 dB if never set). Same mode twice is a no-op.
+ * While streaming, EP0 runs on the delivery task after a bulk pause (async).
+ * ESP_OK means the request was accepted, not that the dongle ACKed registers.
  * set_tuner_gain() forces MANUAL. Not the RTL digital AGC (see set_rtl_agc).
  */
 esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t mode);
 
-/** Get last requested gain mode (default AUTO). */
+/**
+ * Last **requested** gain mode (default AUTO). Not a tuner register readback.
+ * May read AUTO before any AUTO EP0 has been sent (preference only).
+ */
 esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t *out_mode);
 
 /**
  * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). Applies nearest measured
  * Blog V4 step (0.0…49.6 dB ladder). Requires claimed interface (after start).
+ * Streaming: queued on the delivery task (async). ESP_OK = accepted request.
  */
 esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth_db);
 
-/** Last applied / requested manual gain (tenths dB); 0 if never set. */
+/**
+ * Last requested / last accepted ladder step (tenths dB); 0 if never set.
+ * Software shadow — not an I2C/EP0 read of R828D registers.
+ */
 esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_tenth_db);
 
 /**
@@ -886,6 +897,7 @@ esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gain
 /**
  * Bias-T enable via measured Blog V4 SYS EP0 (lab 2026-08-12).
  * Requires claimed interface (after start). Multimeter DC not yet recorded.
+ * Streaming: async sideband queue. get_bias_tee() is last requested preference.
  */
 esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable);
 esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable);
@@ -893,7 +905,8 @@ esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable
 /**
  * RTL2832 digital AGC (SDR# "RTL AGC") — measured demod 0x19 ON=0x25 OFF=0x05.
  * Requires CAP_RTL_AGC and a claimed interface. Independent of tuner AUTO.
- * Additive 0.7.8; default off. Same reentrancy / async sideband rules as gain.
+ * Additive 0.7.8; default off. Same async sideband rules as gain.
+ * set: ESP_OK = request accepted. get: last requested shadow, not demod readback.
  */
 esp_err_t esp_rtl_sdr_set_rtl_agc(esp_rtl_sdr_handle_t handle, bool enable);
 esp_err_t esp_rtl_sdr_get_rtl_agc(esp_rtl_sdr_handle_t handle, bool *out_enable);

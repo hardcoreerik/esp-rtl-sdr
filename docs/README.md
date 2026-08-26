@@ -44,6 +44,8 @@ When docs disagree, PROJECT_TRUTH wins.
 | [AGC_IF_CAPTURE.md](AGC_IF_CAPTURE.md) | Tuner AUTO / RTL AGC / IF-filter USB capture |
 | [PHASE3_PC_SETUP.md](PHASE3_PC_SETUP.md) | Windows PC tool install / PATH / session recipe |
 | [HANDOFF_PHASE3_GAIN_BIAS.md](HANDOFF_PHASE3_GAIN_BIAS.md) | Full handoff + plan to finish issue #1 (gain/bias CAP) |
+| [HANDOFF_0_7_8_TEST.md](HANDOFF_0_7_8_TEST.md) | 0.7.8 AGC test plan + Codex prompt (smoke/OrcSDR/lab) |
+| [Test_reports/ESP_RTL_SDR_0_7_8_DROP_IN_TEST_REPORT_2026-08-26.md](Test_reports/ESP_RTL_SDR_0_7_8_DROP_IN_TEST_REPORT_2026-08-26.md) | Tab5 L4 matrix + false-REENTRANT / pull-ring findings |
 | [PHASE3_CAPTURE_REPORT.md](PHASE3_CAPTURE_REPORT.md) | Plain-English report: bias+gain lab captures and why they matter |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles |

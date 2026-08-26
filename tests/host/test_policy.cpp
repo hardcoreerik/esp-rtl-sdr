@@ -12,6 +12,7 @@
 
 #include "esp_rtl_sdr.h"
 #include "measured_gain_bias_v4.hpp"
+#include "reentrancy.hpp"
 
 static int g_failed = 0;
 static int g_passed = 0;
@@ -155,6 +156,21 @@ static void test_measured_agc_tables(void)
     EXPECT_EQ_U(dem.index, 0x0010);
     EXPECT_EQ_U(dem.length, 1);
     EXPECT_EQ_U(dem.data[0], 0x25);
+}
+
+static void test_callback_reentry_is_task_local(void)
+{
+    const void *delivery = reinterpret_cast<const void *>(0x1000);
+    const void *app = reinterpret_cast<const void *>(0x2000);
+
+    EXPECT_TRUE(!esp_rtl_sdr_caller_is_event_callback(0, delivery, app));
+    EXPECT_TRUE(!esp_rtl_sdr_caller_is_event_callback(1, nullptr, app));
+    EXPECT_TRUE(!esp_rtl_sdr_caller_is_event_callback(1, delivery, nullptr));
+    /* Delivery task emitting: app task is NOT reentrant. */
+    EXPECT_TRUE(!esp_rtl_sdr_caller_is_event_callback(1, delivery, app));
+    /* Callback task calling a setter: IS reentrant. */
+    EXPECT_TRUE(esp_rtl_sdr_caller_is_event_callback(1, delivery, delivery));
+    EXPECT_TRUE(esp_rtl_sdr_caller_is_event_callback(2, app, app));
 }
 
 static void test_rate_windows(void)
@@ -515,6 +531,7 @@ int main(void)
     test_version();
     test_capabilities();
     test_measured_agc_tables();
+    test_callback_reentry_is_task_local();
     test_delivery_mode_helpers();
     test_rate_windows();
     test_recommended_rates();

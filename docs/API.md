@@ -16,7 +16,7 @@ For every function’s parameters, return semantics, and copy-paste examples, us
 |---|---|
 | Works every time | Strict validation; no half-open USB; fail closed to IDLE/FAULT |
 | Safe under concurrency | Per-handle mutex; RAII locks; short timeouts on queries |
-| No callback re-entry | `in_callback_depth` → `ERR_REENTRANT` on lifecycle APIs |
+| No callback re-entry | `ERR_REENTRANT` only if **this task** is inside the event callback. App tasks may set gain/mode while delivery emits. |
 | Events outside lock | Callbacks run only after mutex release |
 | Stable ABI growth | `struct_size` on config structs; new fields only at end |
 | Clear failures | Component error codes + `err_to_name` + `get_last_error` |
@@ -156,6 +156,8 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | `read` | Blocking CU8 IQ |
 | `start_hz` | Convenience start (0 = preferred) |
 | `set/get_freq_correction` | ±200 ppm software LO |
+| Gain / AUTO / RTL AGC / bias **set** | Claimed stream; **async** while streaming (bulk pause + EP0 on delivery task). `ESP_OK` = accepted |
+| Gain / AUTO / RTL AGC / bias **get** | Last **requested** shadow — **not** EP0/I2C readback |
 | Multi-device APIs | refresh / count / at / select |
 | `apply_need` | Mission presets → preferred LO/rate |
 | `get_health` | USB/RF categories + advice |

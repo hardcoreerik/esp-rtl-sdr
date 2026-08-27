@@ -3,6 +3,10 @@
 ESP-IDF app that links **esp_rtl_sdr** and exercises the public 0.7.12 drop-in
 contract on ESP32-P4 / Tab5.
 
+The example uses M5Unified's Tab5 power-expander helper to enable the USB-A rail
+before installing the USB host, so cold boots do not depend on previously run
+firmware or initialize unrelated display/audio hardware.
+
 **One USB host install per boot.** IDF 5.5.4 `usb_host_uninstall` is not a
 reliable re-entry on Tab5, so A/B URB layouts are **two firmware images**,
 not two installs in one run.

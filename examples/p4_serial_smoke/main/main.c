@@ -1,5 +1,5 @@
 /*
- * ESP-IDF Tab5 / P4 drop-in smoke for esp_rtl_sdr public API (v0.7.10).
+ * ESP-IDF Tab5 / P4 drop-in smoke for esp_rtl_sdr public API (v0.7.11).
  *
  * One USB host install per boot. URB layout is a Kconfig choice so A/B
  * (6x16 KiB vs 3x32 KiB) is two firmware images, not two installs.
@@ -99,13 +99,16 @@ static size_t wait_devices(esp_rtl_sdr_handle_t sdr, int timeout_ms)
     return 0;
 }
 
+/* Off-stack: xTaskCreate stack is 4 KiB; a 16 KiB local blew soak_drain
+ * (issue #11). One soak at a time, so a single static buffer is enough. */
+static uint8_t s_drain_buf[16384];
+
 static void drain_task(void *arg)
 {
     esp_rtl_sdr_handle_t sdr = (esp_rtl_sdr_handle_t)arg;
-    uint8_t buf[16384];
     while (g_drain) {
         size_t n = 0;
-        (void)esp_rtl_sdr_read(sdr, buf, sizeof(buf), 50, &n);
+        (void)esp_rtl_sdr_read(sdr, s_drain_buf, sizeof(s_drain_buf), 50, &n);
     }
     vTaskDelete(NULL);
 }
@@ -124,7 +127,7 @@ static void check_pure_helpers(void)
     smoke_row("rate_4M_reject", !esp_rtl_sdr_is_rate_supported(4000000));
 
     const char *ver = esp_rtl_sdr_get_version_string();
-    smoke_row("version_0_7_10", ver != NULL && strcmp(ver, "0.7.10") == 0);
+    smoke_row("version_0_7_11", ver != NULL && strcmp(ver, "0.7.11") == 0);
 
     const uint32_t caps = esp_rtl_sdr_get_capabilities();
     smoke_row("cap_gain", (caps & ESP_RTL_SDR_CAP_GAIN) != 0);

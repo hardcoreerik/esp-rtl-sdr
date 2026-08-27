@@ -23,6 +23,7 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "M5Unified.h"
 #include "esp_rtl_sdr.h"
 #include "smoke_soak_scope.h"
 
@@ -65,7 +66,7 @@ static void on_event(esp_rtl_sdr_event_t event, const void *payload, void *ctx)
         return;
     }
     if (event == ESP_RTL_SDR_EVT_PASSPORT_PROGRESS && payload != NULL) {
-        const esp_rtl_sdr_passport_entry_t *e = payload;
+        const auto *e = static_cast<const esp_rtl_sdr_passport_entry_t *>(payload);
         ESP_LOGI(TAG, "passport progress rate=%u eff=%u stable=%d",
                  (unsigned)e->exact_sps, (unsigned)e->effective_sps, (int)e->stable);
     }
@@ -74,6 +75,30 @@ static void on_event(esp_rtl_sdr_event_t event, const void *payload, void *ctx)
 static void settle_ms(int ms)
 {
     vTaskDelay(pdMS_TO_TICKS(ms));
+}
+
+static bool enable_tab5_usb_power(void)
+{
+    auto config = M5.config();
+    config.clear_display = false;
+    config.external_display_value = 0;
+    config.external_speaker_value = 0;
+    config.internal_imu = false;
+    config.internal_rtc = false;
+    config.internal_mic = false;
+    config.internal_spk = false;
+    config.output_power = true;
+    M5.begin(config);
+
+    if (M5.getBoard() != m5::board_t::board_M5Tab5) {
+        ESP_LOGE(TAG, "expected Tab5, detected board=%u", (unsigned)M5.getBoard());
+        return false;
+    }
+
+    M5.Power.setExtOutput(true, m5::ext_USB);
+    settle_ms(350);
+    ESP_LOGI(TAG, "Tab5 USB-A power enabled and settled");
+    return true;
 }
 
 static bool smoke_read(esp_rtl_sdr_handle_t sdr, const char *name)
@@ -275,13 +300,14 @@ static void run_quiet_soak(esp_rtl_sdr_handle_t sdr,
     smoke_row(SMOKE_SOAK_NAME, scope.pass);
 }
 
-void app_main(void)
+extern "C" void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_LOGI(TAG, "esp_rtl_sdr %s soak=%s urbs=%ux%u",
              esp_rtl_sdr_get_version_string(), SMOKE_SOAK_NAME,
              SMOKE_XFER_COUNT, SMOKE_XFER_BYTES);
     check_pure_helpers();
+    smoke_row("tab5_usb_power", enable_tab5_usb_power());
 
     esp_rtl_sdr_config_t cfg;
     esp_rtl_sdr_config_default(&cfg);

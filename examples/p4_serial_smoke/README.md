@@ -1,6 +1,6 @@
 # p4_serial_smoke
 
-ESP-IDF app that links **esp_rtl_sdr** and exercises the public 0.7.10 drop-in
+ESP-IDF app that links **esp_rtl_sdr** and exercises the public 0.7.11 drop-in
 contract on ESP32-P4 / Tab5.
 
 **One USB host install per boot.** IDF 5.5.4 `usb_host_uninstall` is not a
@@ -46,8 +46,8 @@ selects min_rev 3.1 and esptool refuses: bootloader requires [v3.1-v3.99], chip 
 These symbols are **this example only**. They do not ship in the library. P4 rev
 <3.0 vs >=3.0 firmware is mutually exclusive; a v3.1+ module must not use this default.
 
-`CMakeLists.txt` sets `PROJECT_VER` to `0.7.10` so the image identity matches the
-driver, not git-describe of tag v0.7.9.
+`CMakeLists.txt` sets `PROJECT_VER` to `0.7.11` so the image identity matches the
+driver, not git-describe of an older tag.
 
 ## Build (ESP32-P4, IDF 5.5.4)
 
@@ -69,9 +69,9 @@ idf.py -B build-3x32k build
 # Tab5: idf.py -B build-3x32k -p COM17 flash monitor
 ```
 
-Confirm at boot: `esp_rtl_sdr 0.7.10 soak=usb_soak_960k_6x16k urbs=6x16384`
+Confirm at boot: `esp_rtl_sdr 0.7.11 soak=usb_soak_960k_6x16k urbs=6x16384`
 or `soak=usb_soak_960k_3x32k urbs=3x32768`. App version in
-`build/project_description.json` must be `0.7.10`.
+`build/project_description.json` must be `0.7.11`.
 
 The component is pulled via `components/esp_rtl_sdr/` (stable name wrapping the
 repo root sources). No dongle is required for a successful **compile**.

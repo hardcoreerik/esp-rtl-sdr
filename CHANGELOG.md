@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.7.11 (2026-08-27)
+
+### Fixed
+
+- **p4_serial_smoke soak_drain stack overflow ([#11](https://github.com/hardcoreerik/esp-rtl-sdr/issues/11)):**
+  drain_task allocated a 16 KiB local buffer on a 4096-byte FreeRTOS task
+  stack (xTaskCreate sizes are bytes). Buffer is now a single static 16 KiB
+  array. Smoke harness only; driver streaming engine unchanged. Tag `v0.7.10`
+  is immutable. Re-soak both URB images against this tag.
+
 ## 0.7.10 (2026-08-27)
 
 ### Smoke / Tab5 USB

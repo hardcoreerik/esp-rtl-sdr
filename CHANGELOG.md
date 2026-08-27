@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.7.12 (2026-08-27)
+
+### Fixed
+
+- **p4_serial_smoke SOAK row attributed pre-soak pull-ring overflow to the 8 s drain:**
+  the harness waits 400 ms after `start()` before `first_read`, then starts
+  `soak_drain`. At 960 kS/s CU8 those cumulative `consumer_drops` match an
+  undrained ring, not the soak window. v0.7.11 Tab5 logs (507904 drops @
+  `6x16384`, 593920 @ `3x32768`) were that artifact. Smoke now restarts the
+  stream on the same USB host install (metrics and pull ring reset), drains
+  immediately, and reports scoped/delta bytes, overruns, drops, and advice
+  for the drain window. PASS requires efficiency >= 90%, delta overruns == 0,
+  delta consumer drops == 0, scoped advice not `USB_STARVING` or
+  `APP_TOO_SLOW`, continuing IQ, and overall hardware PASS. Driver streaming
+  engine unchanged. Tag `v0.7.11` is immutable.
+- **p4_serial_smoke A/B URB images shared one project-root `sdkconfig`:**
+  IDF 5.5.4 `-B` does not move `sdkconfig`. Overlay `set-target` could make
+  the later default image boot as `usb_soak_960k_3x32k`. Example now pins
+  `SDKCONFIG` under the `-B` directory; docs use `build-6x16k` /
+  `build-3x32k` with a pre-flash URB Kconfig grep. Smoke harness/docs only.
+
 ## 0.7.11 (2026-08-27)
 
 ### Fixed

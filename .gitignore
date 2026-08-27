@@ -2,6 +2,7 @@
 build/
 tests/host/build/
 examples/**/build/
+examples/**/build-*/
 sdkconfig
 sdkconfig.old
 sdkconfig.defaults.esp32p4

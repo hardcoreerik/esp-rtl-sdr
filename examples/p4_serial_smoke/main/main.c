@@ -1,5 +1,5 @@
 /*
- * ESP-IDF Tab5 / P4 drop-in smoke for esp_rtl_sdr public API (v0.7.11).
+ * ESP-IDF Tab5 / P4 drop-in smoke for esp_rtl_sdr public API (v0.7.12).
  *
  * One USB host install per boot. URB layout is a Kconfig choice so A/B
  * (6x16 KiB vs 3x32 KiB) is two firmware images, not two installs.
@@ -7,9 +7,12 @@
  * Quiet soak: BOTH + auto ring, drain via read() on a helper task, no
  * mid-stream EP0, then L4 gain / AUTO / RTL AGC matrix.
  *
+ * SOAK bytes/over/drops/advice are the 8 s drain window (stream restart
+ * after first_read), not cumulative pre-soak pull-ring overflow.
+ *
  * Grep-friendly rows:
  *   SMOKE <name> PASS|FAIL
- *   SOAK <label> eff=<pct> sps=<n> bytes=<n> over=<n> drops=<n> short=<n> urbs=<c>x<b>
+ *   SOAK <label> eff=<pct> sps=<n> bytes=<n> over=<n> drops=<n> short=<n> urbs=<c>x<b> advice=<s> window_ms=<ms>
  *   SMOKE OVERALL PASS|FAIL passed=<n> failed=<n> hardware=<RUN|SKIP>
  */
 #include <stdio.h>
@@ -21,6 +24,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_rtl_sdr.h"
+#include "smoke_soak_scope.h"
 
 static const char *TAG = "esp_rtl_sdr_smoke";
 
@@ -127,7 +131,7 @@ static void check_pure_helpers(void)
     smoke_row("rate_4M_reject", !esp_rtl_sdr_is_rate_supported(4000000));
 
     const char *ver = esp_rtl_sdr_get_version_string();
-    smoke_row("version_0_7_11", ver != NULL && strcmp(ver, "0.7.11") == 0);
+    smoke_row("version_0_7_12", ver != NULL && strcmp(ver, "0.7.12") == 0);
 
     const uint32_t caps = esp_rtl_sdr_get_capabilities();
     smoke_row("cap_gain", (caps & ESP_RTL_SDR_CAP_GAIN) != 0);
@@ -208,11 +212,31 @@ static void run_l4_matrix(esp_rtl_sdr_handle_t sdr)
     smoke_read(sdr, "manual_restore_read");
 }
 
-static void run_quiet_soak(esp_rtl_sdr_handle_t sdr)
+static bool restart_stream_for_soak(esp_rtl_sdr_handle_t sdr,
+                                    const esp_rtl_sdr_stream_config_t *stream)
 {
-    esp_rtl_sdr_metrics_t before;
-    memset(&before, 0, sizeof(before));
-    (void)esp_rtl_sdr_get_metrics(sdr, &before);
+    const esp_err_t stop_err = esp_rtl_sdr_stop(sdr, 1000);
+    if (stop_err != ESP_OK) {
+        ESP_LOGE(TAG, "soak restart stop -> %s", esp_rtl_sdr_err_to_name(stop_err));
+        return false;
+    }
+    const esp_err_t start_err = esp_rtl_sdr_start(sdr, stream);
+    if (start_err != ESP_OK) {
+        ESP_LOGE(TAG, "soak restart start -> %s", esp_rtl_sdr_err_to_name(start_err));
+        return false;
+    }
+    return true;
+}
+
+static void run_quiet_soak(esp_rtl_sdr_handle_t sdr,
+                           const esp_rtl_sdr_stream_config_t *stream)
+{
+    /* first_read waits 400 ms with no consumer. Restart on this same install
+     * so the soak window is not the filled pull ring (v0.7.11 logs). */
+    if (stream == NULL || !restart_stream_for_soak(sdr, stream)) {
+        smoke_row(SMOKE_SOAK_NAME, false);
+        return;
+    }
 
     g_drain = true;
     if (xTaskCreate(drain_task, "soak_drain", 4096, sdr, 5, NULL) != pdPASS) {
@@ -221,32 +245,34 @@ static void run_quiet_soak(esp_rtl_sdr_handle_t sdr)
         return;
     }
 
+    esp_rtl_sdr_metrics_t before;
+    memset(&before, 0, sizeof(before));
+    (void)esp_rtl_sdr_get_metrics(sdr, &before);
+
     settle_ms(CONFIG_ESP_RTL_SDR_SMOKE_SOAK_MS);
+
+    esp_rtl_sdr_metrics_t after;
+    memset(&after, 0, sizeof(after));
+    (void)esp_rtl_sdr_get_metrics(sdr, &after);
     g_drain = false;
     settle_ms(80);
 
-    esp_rtl_sdr_metrics_t after;
-    esp_rtl_sdr_health_info_t health;
-    memset(&after, 0, sizeof(after));
-    memset(&health, 0, sizeof(health));
-    (void)esp_rtl_sdr_get_metrics(sdr, &after);
-    (void)esp_rtl_sdr_get_health(sdr, &health);
+    smoke_soak_scope_t scope;
+    memset(&scope, 0, sizeof(scope));
+    smoke_soak_scope_from_metrics(&before, &after, CONFIG_ESP_RTL_SDR_SMOKE_SOAK_MS,
+                                  stream->sample_rate_sps, &scope);
 
-    const int eff_pct = (int)(health.efficiency * 100.0f + 0.5f);
-    printf("SOAK %s eff=%d sps=%u bytes=%llu over=%u drops=%u short=%u urbs=%ux%u advice=%s\n",
-           SMOKE_SOAK_NAME, eff_pct, (unsigned)after.effective_sps,
-           (unsigned long long)after.bytes_total, (unsigned)after.overruns,
-           (unsigned)after.consumer_drops, (unsigned)after.short_transfers,
-           SMOKE_XFER_COUNT, SMOKE_XFER_BYTES, health.advice);
-    ESP_LOGI(TAG, "soak overall=%d eff=%.3f programmed=%u delta_bytes=%llu",
-             (int)health.overall, (double)health.efficiency,
-             (unsigned)health.programmed_sps,
-             (unsigned long long)(after.bytes_total - before.bytes_total));
+    printf("SOAK %s eff=%d sps=%u bytes=%llu over=%u drops=%u short=%u urbs=%ux%u advice=%s window_ms=%d\n",
+           SMOKE_SOAK_NAME, scope.eff_pct, (unsigned)scope.scoped_sps,
+           (unsigned long long)scope.delta_bytes, (unsigned)scope.delta_overruns,
+           (unsigned)scope.delta_consumer_drops, (unsigned)scope.delta_short_transfers,
+           SMOKE_XFER_COUNT, SMOKE_XFER_BYTES, scope.advice,
+           CONFIG_ESP_RTL_SDR_SMOKE_SOAK_MS);
+    ESP_LOGI(TAG, "soak scoped eff=%.3f delta_bytes=%llu cum_drops=%u->%u",
+             (double)scope.efficiency, (unsigned long long)scope.delta_bytes,
+             (unsigned)before.consumer_drops, (unsigned)after.consumer_drops);
 
-    const bool ok = (after.bytes_total > before.bytes_total) &&
-                    (health.efficiency >= 0.90f) &&
-                    (health.overall != ESP_RTL_SDR_HEALTH_USB_STARVING);
-    smoke_row(SMOKE_SOAK_NAME, ok);
+    smoke_row(SMOKE_SOAK_NAME, scope.pass);
 }
 
 void app_main(void)
@@ -289,7 +315,7 @@ void app_main(void)
         if (start_err == ESP_OK) {
             settle_ms(400);
             smoke_read(sdr, "first_read");
-            run_quiet_soak(sdr);
+            run_quiet_soak(sdr, &stream);
             run_l4_matrix(sdr);
 
             esp_rtl_sdr_metrics_t metrics;

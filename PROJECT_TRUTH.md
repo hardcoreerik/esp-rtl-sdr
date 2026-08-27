@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-08-27**  
-Version: **0.7.11** (smoke `soak_drain` stack fix; USB soak still operator work — not production-ready)  
+Version: **0.7.12** (smoke SOAK row is the 8 s drain window; USB soak still operator work — not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -121,6 +121,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.9** | Auto pull-ring shrink for no-PSRAM Tab5; task-local REENTRANT |
 | **0.7.10** | Quiet USB soak + Tab5 P4 rev defaults (immutable; soak blocked by #11) |
 | **0.7.11** | Smoke soak_drain 16 KiB buffer off the 4 KiB task stack (#11) |
+| **0.7.12** | Smoke SOAK evidence is scoped to the drain window (not pre-soak ring overflow) |
 
 ---
 

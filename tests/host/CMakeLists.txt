@@ -14,6 +14,7 @@ target_include_directories(esp_rtl_sdr_host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/stubs
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../private
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/p4_serial_smoke/main
 )
 
 if(MSVC)

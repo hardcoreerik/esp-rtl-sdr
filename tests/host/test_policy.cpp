@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <string>
 
 #include "esp_rtl_sdr.h"
@@ -601,6 +602,46 @@ static void test_smoke_soak_scope(void)
     EXPECT_TRUE(!scope.pass);
 }
 
+static std::string slurp_repo_file(const char *rel)
+{
+    std::string here(__FILE__);
+    const auto slash = here.find_last_of("/\\");
+    const std::string host_dir =
+        (slash == std::string::npos) ? std::string(".") : here.substr(0, slash);
+    const std::string path = host_dir + "/../../" + rel;
+    std::ifstream in(path.c_str());
+    if (!in) {
+        return std::string();
+    }
+    return std::string((std::istreambuf_iterator<char>(in)),
+                       std::istreambuf_iterator<char>());
+}
+
+static void test_smoke_urb_image_isolation(void)
+{
+    const std::string cmake = slurp_repo_file("examples/p4_serial_smoke/CMakeLists.txt");
+    EXPECT_TRUE(cmake.find("SDKCONFIG") != std::string::npos);
+    EXPECT_TRUE(cmake.find("CMAKE_BINARY_DIR") != std::string::npos);
+
+    const std::string base_defaults =
+        slurp_repo_file("examples/p4_serial_smoke/sdkconfig.defaults");
+    EXPECT_TRUE(!base_defaults.empty());
+    EXPECT_TRUE(base_defaults.find("CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K") ==
+                std::string::npos);
+
+    const std::string overlay =
+        slurp_repo_file("examples/p4_serial_smoke/sdkconfig.defaults.urb_3x32k");
+    EXPECT_TRUE(overlay.find("CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K=y") !=
+                std::string::npos);
+
+    const std::string readme = slurp_repo_file("examples/p4_serial_smoke/README.md");
+    EXPECT_TRUE(readme.find("build-6x16k") != std::string::npos);
+    EXPECT_TRUE(readme.find("build-3x32k") != std::string::npos);
+    EXPECT_TRUE(readme.find("-D SDKCONFIG=build-6x16k/sdkconfig") != std::string::npos);
+    EXPECT_TRUE(readme.find("-D SDKCONFIG=build-3x32k/sdkconfig") != std::string::npos);
+    EXPECT_TRUE(readme.find("CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K") != std::string::npos);
+}
+
 int main(void)
 {
     std::printf("esp_rtl_sdr host policy tests (%s)\n", esp_rtl_sdr_get_version_string());
@@ -618,6 +659,7 @@ int main(void)
     test_usb_identity_constants();
     test_error_base_unique();
     test_smoke_soak_scope();
+    test_smoke_urb_image_isolation();
     std::printf("RESULT passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

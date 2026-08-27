@@ -1,4 +1,7 @@
 # Overlay: select 3x32 KiB URB layout for this image.
-# Use with: idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" set-target esp32p4
+# Use with a dedicated -B dir AND SDKCONFIG (IDF 5.5.4 -B does not isolate
+# sdkconfig by itself):
+#   idf.py -B build-3x32k -D SDKCONFIG=build-3x32k/sdkconfig ^
+#     -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" set-target esp32p4
 # CONFIG_ESP_RTL_SDR_SMOKE_URB_6X16K is not set
 CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K=y

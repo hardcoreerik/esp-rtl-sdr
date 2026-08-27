@@ -56,27 +56,43 @@ driver, not git-describe of an older tag.
 
 ## Build (ESP32-P4, IDF 5.5.4)
 
+IDF 5.5.4 keeps `sdkconfig` in the **project directory** unless `SDKCONFIG` is
+set. `-B` alone is not isolation: overlay `set-target` can rewrite the file the
+default image then builds. This example pins `SDKCONFIG` under the `-B` dir.
+Still use two directories and two `sdkconfig` paths.
+
 Default image (6 x 16 KiB):
 
 ```bash
 cd examples/p4_serial_smoke
-idf.py set-target esp32p4
-idf.py build
-# Tab5: idf.py -p COM17 flash monitor
+idf.py -B build-6x16k -D SDKCONFIG=build-6x16k/sdkconfig set-target esp32p4
+idf.py -B build-6x16k -D SDKCONFIG=build-6x16k/sdkconfig build
+grep CONFIG_ESP_RTL_SDR_SMOKE_URB build-6x16k/sdkconfig
+# require: CONFIG_ESP_RTL_SDR_SMOKE_URB_6X16K=y
+# require: # CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K is not set
+# Tab5: idf.py -B build-6x16k -p COM17 flash monitor
 ```
 
-3 x 32 KiB image (separate build dir recommended):
+3 x 32 KiB image (separate build dir **and** sdkconfig):
 
 ```bash
 cd examples/p4_serial_smoke
-idf.py -B build-3x32k -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" set-target esp32p4
-idf.py -B build-3x32k build
+idf.py -B build-3x32k -D SDKCONFIG=build-3x32k/sdkconfig \
+  -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" set-target esp32p4
+idf.py -B build-3x32k -D SDKCONFIG=build-3x32k/sdkconfig \
+  -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" build
+grep CONFIG_ESP_RTL_SDR_SMOKE_URB build-3x32k/sdkconfig
+# require: CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K=y
+# require: # CONFIG_ESP_RTL_SDR_SMOKE_URB_6X16K is not set
 # Tab5: idf.py -B build-3x32k -p COM17 flash monitor
 ```
 
+Do not flash until the matching `sdkconfig` grep is correct.
+
 Confirm at boot: `esp_rtl_sdr 0.7.12 soak=usb_soak_960k_6x16k urbs=6x16384`
 or `soak=usb_soak_960k_3x32k urbs=3x32768`. App version in
-`build/project_description.json` must be `0.7.12`.
+`build-6x16k/project_description.json` or
+`build-3x32k/project_description.json` must be `0.7.12`.
 
 The component is pulled via `components/esp_rtl_sdr/` (stable name wrapping the
 repo root sources). No dongle is required for a successful **compile**.

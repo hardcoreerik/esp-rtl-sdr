@@ -25,19 +25,30 @@ evidence.
 
 Checkout **tag `v0.7.12`** only.
 
+IDF 5.5.4 `-B` does **not** isolate `sdkconfig`. Overlay `set-target` wrote
+the project-root file, so a later default `idf.py build` booted as
+`usb_soak_960k_3x32k`. Use a dedicated `-B` **and** `SDKCONFIG=` per image.
+Do not flash until the URB grep matches.
+
 ```bat
 cd examples\p4_serial_smoke
 
 rem --- A: 6x16 KiB ---
-idf.py set-target esp32p4
-idf.py build
-rem confirm project_description.json project_version == 0.7.12
+idf.py -B build-6x16k -D SDKCONFIG=build-6x16k/sdkconfig set-target esp32p4
+idf.py -B build-6x16k -D SDKCONFIG=build-6x16k/sdkconfig build
+findstr CONFIG_ESP_RTL_SDR_SMOKE_URB build-6x16k\sdkconfig
+rem require: CONFIG_ESP_RTL_SDR_SMOKE_URB_6X16K=y
+rem require: # CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K is not set
+rem confirm build-6x16k\project_description.json project_version == 0.7.12
 rem confirm min_rev == 0
-idf.py -p COM17 flash monitor
+idf.py -B build-6x16k -p COM17 flash monitor
 
-rem --- B: 3x32 KiB (separate build dir) ---
-idf.py -B build-3x32k -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" set-target esp32p4
-idf.py -B build-3x32k build
+rem --- B: 3x32 KiB (separate build dir AND sdkconfig) ---
+idf.py -B build-3x32k -D SDKCONFIG=build-3x32k/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" set-target esp32p4
+idf.py -B build-3x32k -D SDKCONFIG=build-3x32k/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.urb_3x32k" build
+findstr CONFIG_ESP_RTL_SDR_SMOKE_URB build-3x32k\sdkconfig
+rem require: CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K=y
+rem require: # CONFIG_ESP_RTL_SDR_SMOKE_URB_6X16K is not set
 idf.py -B build-3x32k -p COM17 flash monitor
 ```
 

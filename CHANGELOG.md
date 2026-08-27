@@ -17,6 +17,11 @@
   delta consumer drops == 0, scoped advice not `USB_STARVING` or
   `APP_TOO_SLOW`, continuing IQ, and overall hardware PASS. Driver streaming
   engine unchanged. Tag `v0.7.11` is immutable.
+- **p4_serial_smoke A/B URB images shared one project-root `sdkconfig`:**
+  IDF 5.5.4 `-B` does not move `sdkconfig`. Overlay `set-target` could make
+  the later default image boot as `usb_soak_960k_3x32k`. Example now pins
+  `SDKCONFIG` under the `-B` directory; docs use `build-6x16k` /
+  `build-3x32k` with a pre-flash URB Kconfig grep. Smoke harness/docs only.
 
 ## 0.7.11 (2026-08-27)
 

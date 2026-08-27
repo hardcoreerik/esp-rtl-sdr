@@ -1,4 +1,4 @@
-# CI / smoke defaults — ESP32-P4 High-Speed USB host path
+# CI / smoke defaults - ESP32-P4 High-Speed USB host path
 CONFIG_IDF_TARGET="esp32p4"
 
 # Leave headroom for USB host + C++ driver tasks
@@ -8,6 +8,10 @@ CONFIG_FREERTOS_HZ=1000
 # USB Host stack (P4)
 CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024
 
-# Tab5 ships ESP32-P4 revision v1.3 (pre-v3 silicon). Images that require
-# rev 3.1+ will refuse to flash.
+# Tab5 ships ESP32-P4 revision v1.3 (pre-v3 silicon). IDF 5.5.4 hides
+# ESP32P4_REV_MIN_0 behind SELECTS_REV_LESS_V3; without that parent symbol,
+# set-target silently builds min_rev 3.1 and esptool refuses Tab5.
+# P4 rev <3.0 vs >=3.0 images are mutually exclusive. This example is for
+# Tab5-class boards. Newer P4 rev v3.x boards must not use these two lines.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
 CONFIG_ESP32P4_REV_MIN_0=y

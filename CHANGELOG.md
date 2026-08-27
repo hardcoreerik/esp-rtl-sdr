@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.7.10 (2026-08-27)
+
+### Smoke / Tab5 USB
+
+- `examples/p4_serial_smoke` quiet USB soak at 960 kS/s (BOTH + auto ring,
+  helper `read()` drain, no mid-stream EP0). PASS if efficiency >= 90%.
+  **One USB host install per boot.** A/B URB layouts are two images:
+  default `6x16384` (`usb_soak_960k_6x16k`) and overlay `3x32768`
+  (`usb_soak_960k_3x32k`, `sdkconfig.defaults.urb_3x32k`). Do not re-install
+  the host in one run (IDF 5.5.4 `usb_host_uninstall` is not a reliable
+  re-entry on Tab5).
+- `sdkconfig.defaults` sets `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y` plus
+  `CONFIG_ESP32P4_REV_MIN_0=y` (example-only). IDF 5.5.4 hides rev 0 behind
+  that parent symbol; without it Tab5 P4 v1.3 gets a v3.1 bootloader and
+  esptool refuses. P4 rev <3.0 vs >=3.0 images are mutually exclusive.
+- Example `PROJECT_VER` is `0.7.10` so the image identity is not git-describe
+  of tag v0.7.9.
+- The 0.7.9 Tab5 79% USB_STARVING figure mixed L4 gain/AGC bulk-pauses with a
+  sparse BOTH `read()`. Those `consumer_drops` are not the starve signal.
+  Hardware re-soak of both URB images is Tab5-operator work against this tag.
+
 ## 0.7.9 (2026-08-26)
 
 ### Fixed

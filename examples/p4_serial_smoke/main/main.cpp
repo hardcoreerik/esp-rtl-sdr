@@ -23,7 +23,7 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "M5Unified.h"
+#include "utility/PI4IOE5V6408_Class.hpp"
 #include "esp_rtl_sdr.h"
 #include "smoke_soak_scope.h"
 
@@ -79,26 +79,26 @@ static void settle_ms(int ms)
 
 static bool enable_tab5_usb_power(void)
 {
-    auto config = M5.config();
-    config.clear_display = false;
-    config.external_display_value = 0;
-    config.external_speaker_value = 0;
-    config.internal_imu = false;
-    config.internal_rtc = false;
-    config.internal_mic = false;
-    config.internal_spk = false;
-    config.output_power = true;
-    M5.begin(config);
-
-    if (M5.getBoard() != m5::board_t::board_M5Tab5) {
-        ESP_LOGE(TAG, "expected Tab5, detected board=%u", (unsigned)M5.getBoard());
+    if (!m5::In_I2C.begin(I2C_NUM_1, GPIO_NUM_31, GPIO_NUM_32)) {
+        ESP_LOGE(TAG, "Tab5 internal I2C initialization failed");
         return false;
     }
 
-    M5.Power.setExtOutput(true, m5::ext_USB);
+    m5::PI4IOE5V6408_Class power_io(0x44);
+    if (!power_io.begin()) {
+        ESP_LOGE(TAG, "Tab5 power expander not found");
+        return false;
+    }
+
+    power_io.digitalWrite(3, true);
+    power_io.setHighImpedance(3, false);
+    power_io.setPullMode(3, true);
+    power_io.enablePull(3, true);
+    power_io.setDirection(3, false);
     settle_ms(350);
-    ESP_LOGI(TAG, "Tab5 USB-A power enabled and settled");
-    return true;
+    const bool enabled = power_io.getWriteValue(3);
+    ESP_LOGI(TAG, "Tab5 USB-A power %s and settled", enabled ? "enabled" : "failed");
+    return enabled;
 }
 
 static bool smoke_read(esp_rtl_sdr_handle_t sdr, const char *name)

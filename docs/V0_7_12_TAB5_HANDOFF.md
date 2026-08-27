@@ -54,8 +54,8 @@ idf.py -B build-3x32k -p COM17 flash monitor
 
 Boot must print `esp_rtl_sdr 0.7.12 soak=usb_soak_960k_6x16k urbs=6x16384`
 or `... soak=usb_soak_960k_3x32k urbs=3x32768`.
-It must also print `SMOKE tab5_usb_power PASS`; the example initializes
-M5Unified and enables the Tab5 USB-A rail before driver installation.
+It must also print `SMOKE tab5_usb_power PASS`; the example uses M5Unified's
+power-expander helper to enable the Tab5 USB-A rail before driver installation.
 
 ## Pass criteria (each image)
 

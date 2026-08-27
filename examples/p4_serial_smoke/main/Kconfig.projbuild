@@ -1,0 +1,21 @@
+menu "esp_rtl_sdr p4_serial_smoke"
+
+choice ESP_RTL_SDR_SMOKE_URB
+    prompt "USB bulk URB layout for quiet soak"
+    default ESP_RTL_SDR_SMOKE_URB_6X16K
+    help
+        One layout per firmware image. Rebuild to A/B. Matches the fact that
+        usb_host_uninstall is not a reliable re-entry on IDF 5.5.4 Tab5.
+
+    config ESP_RTL_SDR_SMOKE_URB_6X16K
+        bool "6 x 16 KiB (library default)"
+    config ESP_RTL_SDR_SMOKE_URB_3X32K
+        bool "3 x 32 KiB (OrcSDR-like)"
+endchoice
+
+config ESP_RTL_SDR_SMOKE_SOAK_MS
+    int "Quiet soak duration (ms)"
+    default 8000
+    range 2000 60000
+
+endmenu

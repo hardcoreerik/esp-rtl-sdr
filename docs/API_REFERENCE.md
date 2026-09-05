@@ -1151,7 +1151,10 @@ esp_err_t esp_rtl_sdr_get_health(esp_rtl_sdr_handle_t handle,
                                  esp_rtl_sdr_health_info_t *out_health);
 ```
 
-Snapshot from live metrics. Safe while streaming. Use `advice[]` for UI / logs.
+Lifetime/cumulative snapshot from live metrics (stream start). Safe while
+streaming. Use `advice[]` for UI / logs. Early pull-ring overflow remains in these
+counters for the whole stream - for soak / app windows use
+`esp_rtl_sdr_health_from_window()` instead.
 
 ```c
 esp_rtl_sdr_health_info_t h;
@@ -1160,6 +1163,30 @@ if (h.overall != ESP_RTL_SDR_HEALTH_OK) {
     ESP_LOGW(TAG, "health: %s", h.advice);
 }
 ```
+
+### `esp_rtl_sdr_metrics_delta` / `esp_rtl_sdr_health_from_window` (0.7.13+)
+
+Pure helpers (no handle mutex). Take two `esp_rtl_sdr_get_metrics()` snapshots plus
+`window_ms` and programmed SPS:
+
+```c
+esp_rtl_sdr_metrics_t before, after;
+esp_rtl_sdr_metrics_window_t win;
+esp_rtl_sdr_health_info_t wh;
+ESP_ERROR_CHECK(esp_rtl_sdr_get_metrics(sdr, &before));
+/* ... measure window_ms ... */
+ESP_ERROR_CHECK(esp_rtl_sdr_get_metrics(sdr, &after));
+ESP_ERROR_CHECK(esp_rtl_sdr_metrics_delta(&before, &after, window_ms, sps, &win));
+ESP_ERROR_CHECK(esp_rtl_sdr_health_from_window(&before, &after, window_ms, sps, &wh));
+```
+
+| Field / result | Meaning |
+|---|---|
+| `delta_*` | Bytes / overruns / consumer_drops / short_transfers in the window |
+| `effective_sps` | CU8 scoped rate: `delta_bytes * 500 / window_ms` |
+| `efficiency` | `effective_sps / programmed_sps` |
+| `usb` / `overall` | Window only: `OK`, `USB_STARVING` (<90% eff), or `APP_TOO_SLOW` (delta drops) |
+| `rf` | Left `UNKNOWN` (sample swing is not windowed by these counters) |
 
 ### `esp_rtl_sdr_passport_opts_default`
 

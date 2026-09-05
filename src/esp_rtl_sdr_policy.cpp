@@ -6,6 +6,7 @@
 #include "esp_rtl_sdr.h"
 
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 
 /* -------------------------------------------------------------------------- */
@@ -367,4 +368,98 @@ void esp_rtl_sdr_passport_opts_default(esp_rtl_sdr_passport_opts_t *opts)
     opts->dwell_ms = ESP_RTL_SDR_PASSPORT_DEFAULT_DWELL_MS;
     opts->min_efficiency_pct = 95;
     opts->recommended_only = true;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Windowed metrics / health (pure; no handle state)                          */
+/* -------------------------------------------------------------------------- */
+
+static uint32_t u32_saturating_sub(uint32_t after, uint32_t before)
+{
+    return (after >= before) ? (after - before) : 0u;
+}
+
+static uint64_t u64_saturating_sub(uint64_t after, uint64_t before)
+{
+    return (after >= before) ? (after - before) : 0ull;
+}
+
+esp_err_t esp_rtl_sdr_metrics_delta(const esp_rtl_sdr_metrics_t *before,
+                                    const esp_rtl_sdr_metrics_t *after,
+                                    uint32_t window_ms,
+                                    uint32_t programmed_sps,
+                                    esp_rtl_sdr_metrics_window_t *out)
+{
+    if (before == nullptr || after == nullptr || out == nullptr || window_ms == 0 ||
+        programmed_sps == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_rtl_sdr_metrics_window_t w{};
+    w.struct_size = sizeof(w);
+    w.delta_bytes = u64_saturating_sub(after->bytes_total, before->bytes_total);
+    w.delta_short_transfers =
+        u32_saturating_sub(after->short_transfers, before->short_transfers);
+    w.delta_overruns = u32_saturating_sub(after->overruns, before->overruns);
+    w.delta_consumer_drops =
+        u32_saturating_sub(after->consumer_drops, before->consumer_drops);
+    w.window_ms = window_ms;
+    w.programmed_sps = programmed_sps;
+    /* CU8: samples = bytes/2; sps = bytes * 500 / window_ms (same as get_metrics). */
+    w.effective_sps = static_cast<uint32_t>((w.delta_bytes * 500ull) / window_ms);
+    w.efficiency = static_cast<float>(w.effective_sps) /
+                   static_cast<float>(programmed_sps);
+    *out = w;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_health_from_window(const esp_rtl_sdr_metrics_t *before,
+                                         const esp_rtl_sdr_metrics_t *after,
+                                         uint32_t window_ms,
+                                         uint32_t programmed_sps,
+                                         esp_rtl_sdr_health_info_t *out_health)
+{
+    if (out_health == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_rtl_sdr_metrics_window_t w{};
+    const esp_err_t err =
+        esp_rtl_sdr_metrics_delta(before, after, window_ms, programmed_sps, &w);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    esp_rtl_sdr_health_info_t h{};
+    h.struct_size = sizeof(h);
+    h.usb = ESP_RTL_SDR_HEALTH_OK;
+    h.rf = ESP_RTL_SDR_HEALTH_UNKNOWN;
+    h.overall = ESP_RTL_SDR_HEALTH_OK;
+    h.efficiency = w.efficiency;
+    h.effective_sps = w.effective_sps;
+    h.programmed_sps = programmed_sps;
+    h.overruns = w.delta_overruns;
+    h.consumer_drops = w.delta_consumer_drops;
+    if (after != nullptr) {
+        h.sample_min = after->sample_min;
+        h.sample_max = after->sample_max;
+    }
+    std::snprintf(h.advice, sizeof(h.advice), "ok");
+
+    /* Integer percent matches soak scoring (90% bar; 89% is USB_STARVING). */
+    const int eff_pct =
+        static_cast<int>((static_cast<uint64_t>(w.effective_sps) * 100ull) /
+                         static_cast<uint64_t>(programmed_sps));
+    if (eff_pct < 90) {
+        h.usb = ESP_RTL_SDR_HEALTH_USB_STARVING;
+        h.overall = ESP_RTL_SDR_HEALTH_USB_STARVING;
+        std::snprintf(h.advice, sizeof(h.advice), "USB_STARVING");
+    } else if (w.delta_consumer_drops > 0) {
+        h.usb = ESP_RTL_SDR_HEALTH_APP_TOO_SLOW;
+        h.overall = ESP_RTL_SDR_HEALTH_APP_TOO_SLOW;
+        std::snprintf(h.advice, sizeof(h.advice), "APP_TOO_SLOW");
+    }
+
+    *out_health = h;
+    return ESP_OK;
 }

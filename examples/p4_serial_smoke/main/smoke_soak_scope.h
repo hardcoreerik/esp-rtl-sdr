@@ -1,7 +1,8 @@
 /*
- * Pure soak-window scoring for p4_serial_smoke.
- * Driver get_health()/get_metrics() are cumulative from stream start; the SOAK
- * row must use before/after deltas for the drain window only.
+ * Thin soak-window adapter for p4_serial_smoke.
+ * Scoring lives in public esp_rtl_sdr_metrics_delta / esp_rtl_sdr_health_from_window
+ * so apps do not reinvent before/after delta math. get_health()/get_metrics() remain
+ * cumulative from stream start; SOAK uses the window helpers only.
  */
 #pragma once
 
@@ -28,15 +29,6 @@ typedef struct {
     bool pass;
 } smoke_soak_scope_t;
 
-/* CU8: samples = bytes/2; sps = bytes * 500 / window_ms (same as the driver). */
-static inline uint32_t smoke_soak_scoped_sps(uint64_t delta_bytes, uint32_t window_ms)
-{
-    if (window_ms == 0) {
-        return 0;
-    }
-    return (uint32_t)((delta_bytes * 500ull) / (uint64_t)window_ms);
-}
-
 static inline void smoke_soak_scope_from_metrics(const esp_rtl_sdr_metrics_t *before,
                                                  const esp_rtl_sdr_metrics_t *after,
                                                  uint32_t window_ms,
@@ -51,31 +43,40 @@ static inline void smoke_soak_scope_from_metrics(const esp_rtl_sdr_metrics_t *be
     z.advice = "invalid";
     z.pass = false;
 
-    if (before == NULL || after == NULL || window_ms == 0 || programmed_sps == 0) {
+    esp_rtl_sdr_metrics_window_t win;
+    esp_rtl_sdr_health_info_t health;
+    memset(&win, 0, sizeof(win));
+    memset(&health, 0, sizeof(health));
+
+    if (esp_rtl_sdr_metrics_delta(before, after, window_ms, programmed_sps, &win) !=
+            ESP_OK ||
+        esp_rtl_sdr_health_from_window(before, after, window_ms, programmed_sps,
+                                       &health) != ESP_OK) {
         *out = z;
         return;
     }
 
-    z.delta_bytes = after->bytes_total - before->bytes_total;
-    z.delta_overruns = after->overruns - before->overruns;
-    z.delta_consumer_drops = after->consumer_drops - before->consumer_drops;
-    z.delta_short_transfers = after->short_transfers - before->short_transfers;
-    z.scoped_sps = smoke_soak_scoped_sps(z.delta_bytes, window_ms);
-    z.eff_pct = (int)(((uint64_t)z.scoped_sps * 100ull) / (uint64_t)programmed_sps);
-    z.efficiency = (float)z.scoped_sps / (float)programmed_sps;
-    const bool eff_ok = z.eff_pct >= 90;
+    z.delta_bytes = win.delta_bytes;
+    z.delta_overruns = win.delta_overruns;
+    z.delta_consumer_drops = win.delta_consumer_drops;
+    z.delta_short_transfers = win.delta_short_transfers;
+    z.scoped_sps = win.effective_sps;
+    z.efficiency = win.efficiency;
+    z.eff_pct = (int)(((uint64_t)win.effective_sps * 100ull) / (uint64_t)programmed_sps);
 
-    if (!eff_ok) {
+    if (health.overall == ESP_RTL_SDR_HEALTH_USB_STARVING) {
         z.advice = "USB_STARVING";
-    } else if (z.delta_consumer_drops > 0) {
+    } else if (health.overall == ESP_RTL_SDR_HEALTH_APP_TOO_SLOW) {
         z.advice = "APP_TOO_SLOW";
-    } else {
+    } else if (health.overall == ESP_RTL_SDR_HEALTH_OK) {
         z.advice = "ok";
+    } else {
+        z.advice = "invalid";
     }
 
     const bool continuing_iq = z.delta_bytes > 0;
-    const bool advice_ok =
-        (strcmp(z.advice, "USB_STARVING") != 0) && (strcmp(z.advice, "APP_TOO_SLOW") != 0);
+    const bool eff_ok = z.eff_pct >= 90;
+    const bool advice_ok = (health.overall == ESP_RTL_SDR_HEALTH_OK);
     z.pass = continuing_iq && eff_ok && (z.delta_overruns == 0) &&
              (z.delta_consumer_drops == 0) && advice_ok;
     *out = z;

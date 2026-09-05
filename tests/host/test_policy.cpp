@@ -527,7 +527,7 @@ static void test_error_base_unique(void)
     EXPECT_EQ_I(ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE, ESP_RTL_SDR_ERR_NOT_V4);
 }
 
-static void test_smoke_soak_scope(void)
+static void test_metrics_window_health(void)
 {
     const uint32_t window_ms = 8000;
     const uint32_t sps = 960000;
@@ -535,6 +535,8 @@ static void test_smoke_soak_scope(void)
 
     esp_rtl_sdr_metrics_t before;
     esp_rtl_sdr_metrics_t after;
+    esp_rtl_sdr_metrics_window_t win;
+    esp_rtl_sdr_health_info_t health;
     smoke_soak_scope_t scope;
 
     /* v0.7.11 6x16k artifact: 507904 pre-soak drops must not fail a clean drain. */
@@ -545,11 +547,23 @@ static void test_smoke_soak_scope(void)
     after.consumer_drops = 507904;
     after.overruns = 0;
     after.bytes_total = before.bytes_total + eight_sec_cu8;
+
+    EXPECT_EQ_I(esp_rtl_sdr_metrics_delta(&before, &after, window_ms, sps, &win), ESP_OK);
+    EXPECT_EQ_U(win.delta_consumer_drops, 0u);
+    EXPECT_EQ_U(win.delta_overruns, 0u);
+    EXPECT_TRUE(win.delta_bytes == eight_sec_cu8);
+    EXPECT_EQ_U(win.effective_sps, sps);
+    EXPECT_EQ_I(esp_rtl_sdr_health_from_window(&before, &after, window_ms, sps, &health),
+                ESP_OK);
+    EXPECT_EQ_I((int)health.overall, (int)ESP_RTL_SDR_HEALTH_OK);
+    EXPECT_EQ_I((int)health.usb, (int)ESP_RTL_SDR_HEALTH_OK);
+    EXPECT_EQ_I((int)health.rf, (int)ESP_RTL_SDR_HEALTH_UNKNOWN);
+    EXPECT_EQ_U(health.consumer_drops, 0u);
+    EXPECT_STREQ(health.advice, "ok");
+
     std::memset(&scope, 0, sizeof(scope));
     smoke_soak_scope_from_metrics(&before, &after, window_ms, sps, &scope);
     EXPECT_EQ_U(scope.delta_consumer_drops, 0u);
-    EXPECT_EQ_U(scope.delta_overruns, 0u);
-    EXPECT_TRUE(scope.delta_bytes == eight_sec_cu8);
     EXPECT_EQ_U(scope.scoped_sps, sps);
     EXPECT_EQ_I(scope.eff_pct, 100);
     EXPECT_STREQ(scope.advice, "ok");
@@ -558,20 +572,38 @@ static void test_smoke_soak_scope(void)
     /* v0.7.11 3x32k artifact: 593920 cumulative drops, zero delta. */
     before.consumer_drops = 593920;
     after.consumer_drops = 593920;
+    EXPECT_EQ_I(esp_rtl_sdr_metrics_delta(&before, &after, window_ms, sps, &win), ESP_OK);
+    EXPECT_EQ_U(win.delta_consumer_drops, 0u);
+    EXPECT_EQ_I(esp_rtl_sdr_health_from_window(&before, &after, window_ms, sps, &health),
+                ESP_OK);
+    EXPECT_EQ_I((int)health.overall, (int)ESP_RTL_SDR_HEALTH_OK);
     smoke_soak_scope_from_metrics(&before, &after, window_ms, sps, &scope);
     EXPECT_EQ_U(scope.delta_consumer_drops, 0u);
     EXPECT_TRUE(scope.pass);
 
     /* Genuine scoped drops stay visible. */
     after.consumer_drops = 593920 + 16384;
+    EXPECT_EQ_I(esp_rtl_sdr_metrics_delta(&before, &after, window_ms, sps, &win), ESP_OK);
+    EXPECT_EQ_U(win.delta_consumer_drops, 16384u);
+    EXPECT_EQ_I(esp_rtl_sdr_health_from_window(&before, &after, window_ms, sps, &health),
+                ESP_OK);
+    EXPECT_EQ_I((int)health.overall, (int)ESP_RTL_SDR_HEALTH_APP_TOO_SLOW);
+    EXPECT_EQ_I((int)health.usb, (int)ESP_RTL_SDR_HEALTH_APP_TOO_SLOW);
+    EXPECT_STREQ(health.advice, "APP_TOO_SLOW");
     smoke_soak_scope_from_metrics(&before, &after, window_ms, sps, &scope);
     EXPECT_EQ_U(scope.delta_consumer_drops, 16384u);
     EXPECT_STREQ(scope.advice, "APP_TOO_SLOW");
     EXPECT_TRUE(!scope.pass);
 
-    /* Scoped overruns fail even when drops are unchanged. */
+    /* Scoped overruns: public health stays OK; soak adapter still fails pass. */
     after.consumer_drops = before.consumer_drops;
     after.overruns = 3;
+    EXPECT_EQ_I(esp_rtl_sdr_metrics_delta(&before, &after, window_ms, sps, &win), ESP_OK);
+    EXPECT_EQ_U(win.delta_overruns, 3u);
+    EXPECT_EQ_I(esp_rtl_sdr_health_from_window(&before, &after, window_ms, sps, &health),
+                ESP_OK);
+    EXPECT_EQ_U(health.overruns, 3u);
+    EXPECT_EQ_I((int)health.overall, (int)ESP_RTL_SDR_HEALTH_OK);
     smoke_soak_scope_from_metrics(&before, &after, window_ms, sps, &scope);
     EXPECT_EQ_U(scope.delta_overruns, 3u);
     EXPECT_TRUE(!scope.pass);
@@ -579,6 +611,9 @@ static void test_smoke_soak_scope(void)
     /* 90% of programmed CU8 in 8 s meets the efficiency bar. */
     after.overruns = 0;
     after.bytes_total = before.bytes_total + (eight_sec_cu8 * 90ull) / 100ull;
+    EXPECT_EQ_I(esp_rtl_sdr_health_from_window(&before, &after, window_ms, sps, &health),
+                ESP_OK);
+    EXPECT_EQ_I((int)health.overall, (int)ESP_RTL_SDR_HEALTH_OK);
     smoke_soak_scope_from_metrics(&before, &after, window_ms, sps, &scope);
     EXPECT_EQ_I(scope.eff_pct, 90);
     EXPECT_STREQ(scope.advice, "ok");
@@ -586,6 +621,11 @@ static void test_smoke_soak_scope(void)
 
     /* 89% of programmed CU8 in 8 s is USB_STARVING. */
     after.bytes_total = before.bytes_total + (eight_sec_cu8 * 89ull) / 100ull;
+    EXPECT_EQ_I(esp_rtl_sdr_metrics_delta(&before, &after, window_ms, sps, &win), ESP_OK);
+    EXPECT_EQ_I(esp_rtl_sdr_health_from_window(&before, &after, window_ms, sps, &health),
+                ESP_OK);
+    EXPECT_EQ_I((int)health.overall, (int)ESP_RTL_SDR_HEALTH_USB_STARVING);
+    EXPECT_STREQ(health.advice, "USB_STARVING");
     smoke_soak_scope_from_metrics(&before, &after, window_ms, sps, &scope);
     EXPECT_EQ_I(scope.eff_pct, 89);
     EXPECT_STREQ(scope.advice, "USB_STARVING");
@@ -597,6 +637,10 @@ static void test_smoke_soak_scope(void)
     EXPECT_TRUE(scope.delta_bytes == 0);
     EXPECT_TRUE(!scope.pass);
 
+    EXPECT_EQ_I(esp_rtl_sdr_metrics_delta(nullptr, &after, window_ms, sps, &win),
+                ESP_ERR_INVALID_ARG);
+    EXPECT_EQ_I(esp_rtl_sdr_health_from_window(nullptr, &after, window_ms, sps, &health),
+                ESP_ERR_INVALID_ARG);
     smoke_soak_scope_from_metrics(nullptr, &after, window_ms, sps, &scope);
     EXPECT_STREQ(scope.advice, "invalid");
     EXPECT_TRUE(!scope.pass);
@@ -658,7 +702,7 @@ int main(void)
     test_passport_opts();
     test_usb_identity_constants();
     test_error_base_unique();
-    test_smoke_soak_scope();
+    test_metrics_window_health();
     test_smoke_urb_image_isolation();
     std::printf("RESULT passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

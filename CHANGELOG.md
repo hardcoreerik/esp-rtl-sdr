@@ -7,8 +7,8 @@
 ### Added
 
 - **Public windowed metrics/health from metric snapshots:** apps take two
-  sp_rtl_sdr_get_metrics() snapshots and call sp_rtl_sdr_metrics_delta() /
-  sp_rtl_sdr_health_from_window() for scoped bytes, overruns, consumer drops,
+  esp_rtl_sdr_get_metrics() snapshots and call esp_rtl_sdr_metrics_delta() /
+  esp_rtl_sdr_health_from_window() for scoped bytes, overruns, consumer drops,
   short transfers, effective SPS, efficiency, and USB health
   (OK / USB_STARVING / APP_TOO_SLOW) for that window only. Pure helpers
   (no new handle mutex state). get_health() remains lifetime/cumulative from

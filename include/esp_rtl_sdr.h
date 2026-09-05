@@ -872,9 +872,10 @@ esp_err_t esp_rtl_sdr_metrics_delta(const esp_rtl_sdr_metrics_t *before,
  * Fills out_health with window deltas in overruns/consumer_drops, scoped
  * effective_sps/efficiency, and usb/overall in {OK, USB_STARVING, APP_TOO_SLOW,
  * UNKNOWN}. RF is left UNKNOWN (sample swing is not windowed by these counters).
- * Priority matches soak scoring: efficiency < 90% -> USB_STARVING; else
- * delta consumer_drops > 0 -> APP_TOO_SLOW; else OK. Delta overruns are reported
- * in overruns but do not alone change the enum (callers may still fail a soak).
+ * Priority matches soak scoring (not get_health()): efficiency < 90% including
+ * 0% -> USB_STARVING; else delta consumer_drops > 0 -> APP_TOO_SLOW (no
+ * drops-vs-overruns tiebreak); else OK. Delta overruns are reported in
+ * overruns but do not alone change the enum (callers may still fail a soak).
  * out_health is not modified on failure.
  *
  * @return ESP_OK, or ESP_ERR_INVALID_ARG if a pointer is NULL / window_ms == 0 /

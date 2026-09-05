@@ -87,7 +87,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 12
+#define ESP_RTL_SDR_VERSION_PATCH 13
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -823,9 +823,69 @@ esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const ch
  */
 esp_err_t esp_rtl_sdr_apply_need(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_need_t need);
 
-/** Snapshot USB/RF health from live metrics. Safe while streaming. */
+/**
+ * Snapshot USB/RF health from live metrics (lifetime / cumulative from stream
+ * start). Safe while streaming.
+ *
+ * Pre-reader ring overflow and other early drops remain in these counters for
+ * the whole stream. For soak / app window measurement use
+ * esp_rtl_sdr_health_from_window() on two get_metrics() snapshots instead.
+ */
 esp_err_t esp_rtl_sdr_get_health(esp_rtl_sdr_handle_t handle,
                                  esp_rtl_sdr_health_info_t *out_health);
+
+/**
+ * Windowed metrics from two cumulative get_metrics() snapshots.
+ * Pure helper (no handle / mutex). CU8: effective_sps = delta_bytes * 500 / window_ms.
+ * Counter underflows clamp to 0.
+ */
+typedef struct {
+    size_t struct_size;
+    uint64_t delta_bytes;
+    uint32_t delta_short_transfers;
+    uint32_t delta_overruns;
+    uint32_t delta_consumer_drops;
+    uint32_t window_ms;
+    uint32_t programmed_sps;
+    uint32_t effective_sps; /**< scoped SPS for the window only */
+    float efficiency;       /**< effective_sps / programmed_sps; 0 if unknown */
+} esp_rtl_sdr_metrics_window_t;
+
+/**
+ * Fill delta bytes/overruns/consumer_drops/short_transfers plus scoped SPS and
+ * efficiency for [before, after] over window_ms at programmed_sps.
+ * out is not modified on failure.
+ *
+ * @return ESP_OK, or ESP_ERR_INVALID_ARG if a pointer is NULL / window_ms == 0 /
+ *         programmed_sps == 0
+ */
+esp_err_t esp_rtl_sdr_metrics_delta(const esp_rtl_sdr_metrics_t *before,
+                                    const esp_rtl_sdr_metrics_t *after,
+                                    uint32_t window_ms,
+                                    uint32_t programmed_sps,
+                                    esp_rtl_sdr_metrics_window_t *out);
+
+/**
+ * Windowed USB health from two get_metrics() snapshots.
+ * get_health() stays lifetime/cumulative; this is the honest soak/app tool.
+ *
+ * Fills out_health with window deltas in overruns/consumer_drops, scoped
+ * effective_sps/efficiency, and usb/overall in {OK, USB_STARVING, APP_TOO_SLOW,
+ * UNKNOWN}. RF is left UNKNOWN (sample swing is not windowed by these counters).
+ * Priority matches soak scoring (not get_health()): efficiency < 90% including
+ * 0% -> USB_STARVING; else delta consumer_drops > 0 -> APP_TOO_SLOW (no
+ * drops-vs-overruns tiebreak); else OK. Delta overruns are reported in
+ * overruns but do not alone change the enum (callers may still fail a soak).
+ * out_health is not modified on failure.
+ *
+ * @return ESP_OK, or ESP_ERR_INVALID_ARG if a pointer is NULL / window_ms == 0 /
+ *         programmed_sps == 0
+ */
+esp_err_t esp_rtl_sdr_health_from_window(const esp_rtl_sdr_metrics_t *before,
+                                         const esp_rtl_sdr_metrics_t *after,
+                                         uint32_t window_ms,
+                                         uint32_t programmed_sps,
+                                         esp_rtl_sdr_health_info_t *out_health);
 
 void esp_rtl_sdr_passport_opts_default(esp_rtl_sdr_passport_opts_t *opts);
 

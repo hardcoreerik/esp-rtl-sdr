@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.7.13 (2026-09-05)
+
+### Added
+
+- **Public windowed metrics/health from metric snapshots:** apps take two
+  esp_rtl_sdr_get_metrics() snapshots and call esp_rtl_sdr_metrics_delta() /
+  esp_rtl_sdr_health_from_window() for scoped bytes, overruns, consumer drops,
+  short transfers, effective SPS, efficiency, and USB health
+  (OK / USB_STARVING / APP_TOO_SLOW) for that window only. Pure helpers
+  (no new handle mutex state). get_health() remains lifetime/cumulative from
+  stream start so early pull-ring overflow is not mistaken for soak drops.
+  p4_serial_smoke soak scoring now wraps the public helpers.
+
 ## 0.7.12 (2026-08-27)
 
 ### Fixed

@@ -87,7 +87,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 13
+#define ESP_RTL_SDR_VERSION_PATCH 14
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -696,6 +696,10 @@ esp_err_t esp_rtl_sdr_retune_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_
 /**
  * Stop stream and run cleanup. Idempotent if already idle.
  * Blocks up to timeout_ms for USB cleanup (0 = DEFAULT_STOP_TIMEOUT_MS).
+ * Drains live bulk URBs (same order as retune pause) before freeing the
+ * transfer pool; returns ESP_RTL_SDR_ERR_TIMEOUT and leaves FAULT if drain
+ * cannot reach live_urbs==0 (pool is not freed while transfers may be in
+ * flight — avoids Tab5 HCD assert on stop→start).
  * Emits EVT_STOPPED once when leaving STREAMING/STOPPING/FAULT-with-stream.
  */
 esp_err_t esp_rtl_sdr_stop(esp_rtl_sdr_handle_t handle, uint32_t timeout_ms);

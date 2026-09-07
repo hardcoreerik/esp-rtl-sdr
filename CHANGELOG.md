@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.7.14 (2026-09-07)
+
+### Fixed
+
+- **stop drains live URBs before free_bulk_pool (Tab5 HCD race):**
+  `stop_stream_internal()` (used by `esp_rtl_sdr_stop`, e.g. POCSAG band-switch
+  stop→start) previously halt/flush/clear'd, then took a fixed `bulk_num` ×
+  timed semaphore, then unconditionally zeroed `live_urbs` and freed the bulk
+  transfer pool. That could free a `usb_transfer_t` while IDF DWC HCD still had
+  a bulk descriptor in flight → `_buffer_parse_bulk` assert
+  (`desc_status != SUCCESS`) on Tab5. Stop now matches `bulk_pause_and_drain`:
+  shared `drain_live_urbs()` polls `live_urbs`→0, halt/flush/clear only if still
+  live, polls again, and **does not** call `free_bulk_pool` until `live_urbs==0`
+  (on drain timeout: skip free, keep `pause_resubmit`, return
+  `ESP_RTL_SDR_ERR_TIMEOUT`, state FAULT). `free_bulk_pool` also refuses while
+  `live_urbs>0`. Uninstall may clear a stuck counter only after host teardown.
+
 ## 0.7.13 (2026-09-05)
 
 ### Added

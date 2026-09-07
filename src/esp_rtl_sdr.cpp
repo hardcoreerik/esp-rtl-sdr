@@ -118,7 +118,10 @@ struct esp_rtl_sdr_handle {
     uint32_t bulk_num = 0;
     uint32_t bulk_len = 0;
     volatile bool streaming = false;
-    /** Live bulk URBs currently submitted (not yet completed without resubmit). */
+    /** Live bulk URBs currently submitted (not yet completed without resubmit).
+     * Free-pool gate: free_bulk_pool / stop / reset refuse while >0.
+     * Relies on aligned 32-bit loads plus USB callback serialization
+     * (bulk_cb vs stop/reset under handle lock / streaming=false). */
     volatile uint32_t live_urbs = 0;
     /** When true, bulk_cb must not resubmit (stop or retune drain). */
     volatile bool pause_resubmit = false;
@@ -771,8 +774,9 @@ static bool drain_live_urbs(esp_rtl_sdr_handle *h, uint32_t poll_ms, uint32_t fl
         return true;
     }
     if (poll_ms > 0 && h->live_urbs > 0) {
-        const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(poll_ms);
-        while (h->live_urbs > 0 && xTaskGetTickCount() < deadline) {
+        const TickType_t start = xTaskGetTickCount();
+        const TickType_t wait = pdMS_TO_TICKS(poll_ms);
+        while (h->live_urbs > 0 && (xTaskGetTickCount() - start) < wait) {
             vTaskDelay(pdMS_TO_TICKS(2));
         }
     }
@@ -781,8 +785,9 @@ static bool drain_live_urbs(esp_rtl_sdr_handle *h, uint32_t poll_ms, uint32_t fl
         usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
         usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
         if (flush_poll_ms > 0) {
-            const TickType_t d2 = xTaskGetTickCount() + pdMS_TO_TICKS(flush_poll_ms);
-            while (h->live_urbs > 0 && xTaskGetTickCount() < d2) {
+            const TickType_t start2 = xTaskGetTickCount();
+            const TickType_t wait2 = pdMS_TO_TICKS(flush_poll_ms);
+            while (h->live_urbs > 0 && (xTaskGetTickCount() - start2) < wait2) {
                 vTaskDelay(pdMS_TO_TICKS(2));
             }
         }
@@ -1763,11 +1768,23 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         handle->client_registered = false;
     }
     if (handle->owns_host && handle->host_installed) {
-        usb_host_uninstall();
+        const esp_err_t uerr = usb_host_uninstall();
+        if (uerr != ESP_OK) {
+            /* Fail-closed: do not clear live_urbs or free the pool while the
+             * host may still own transfers. Leave handle intact for retry. */
+            ESP_LOGE(TAG, "usb_host_uninstall failed (%s); keep pool/live_urbs",
+                     esp_err_to_name(uerr));
+            {
+                HandleLock lk(handle, kUninstallLockTicks);
+                (void)lk.ok();
+                handle->destroying = false; /* allow uninstall retry */
+            }
+            return ESP_RTL_SDR_ERR_USB;
+        }
         handle->host_installed = false;
     }
 
-    /* Host/HCD torn down — safe to clear a stuck live_urbs so pool can free. */
+    /* Host/HCD torn down (or never owned) - safe to clear stuck live_urbs. */
     if (handle->live_urbs > 0) {
         ESP_LOGW(TAG, "uninstall: clearing stuck live_urbs=%u after host teardown",
                  static_cast<unsigned>(handle->live_urbs));
@@ -2240,10 +2257,22 @@ esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle)
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
         return ESP_RTL_SDR_ERR_BUSY;
     }
+    /* After timed-out stop (FAULT, live_urbs>0, pool kept): refuse reset so
+     * start cannot alloc_bulk_pool -> free_bulk_pool orphan the old array
+     * while callbacks may still fire. Caller should retry stop until drain. */
+    if (handle->live_urbs > 0) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+        return ESP_RTL_SDR_ERR_BUSY;
+    }
+    /* live_urbs==0 but pool still allocated (e.g. odd FAULT path): free it. */
+    if (handle->bulk != nullptr) {
+        free_bulk_pool(handle);
+    }
     handle->state = ESP_RTL_SDR_STATE_IDLE;
     std::memset(&handle->metrics, 0, sizeof(handle->metrics));
     set_error_unlocked(handle, ESP_OK);
     return ESP_OK;
+}
 }
 
 esp_err_t esp_rtl_sdr_release_iq_block(esp_rtl_sdr_handle_t handle,

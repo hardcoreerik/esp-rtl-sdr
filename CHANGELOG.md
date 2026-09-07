@@ -18,6 +18,13 @@
   (on drain timeout: skip free, keep `pause_resubmit`, return
   `ESP_RTL_SDR_ERR_TIMEOUT`, state FAULT). `free_bulk_pool` also refuses while
   `live_urbs>0`. Uninstall may clear a stuck counter only after host teardown.
+- **reset refuses while live URBs outstanding:** `esp_rtl_sdr_reset()` returns
+  `ESP_RTL_SDR_ERR_BUSY` and keeps FAULT when `live_urbs>0` (after timed-out
+  stop) so start cannot orphan the old transfer pool while callbacks may still
+  fire; caller retries stop until drain, then reset.
+- **uninstall does not free pool if host uninstall fails:** check
+  `usb_host_uninstall()` return; only clear stuck `live_urbs` / `free_bulk_pool`
+  after success; on failure leave pool, clear `destroying`, return ERR_USB.
 
 ## 0.7.13 (2026-09-05)
 

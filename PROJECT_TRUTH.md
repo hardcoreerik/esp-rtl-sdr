@@ -6,7 +6,7 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-05**  
+Snapshot date: **2026-09-07**  
 Version: **0.7.14** (stop drains live URBs before free_bulk_pool; public windowed metrics/health; USB soak still operator work - not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  

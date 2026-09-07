@@ -87,7 +87,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 13
+#define ESP_RTL_SDR_VERSION_PATCH 14
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -696,13 +696,22 @@ esp_err_t esp_rtl_sdr_retune_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_
 /**
  * Stop stream and run cleanup. Idempotent if already idle.
  * Blocks up to timeout_ms for USB cleanup (0 = DEFAULT_STOP_TIMEOUT_MS).
+ * Drains live bulk URBs (same order as retune pause) before freeing the
+ * transfer pool; returns ESP_RTL_SDR_ERR_TIMEOUT and leaves FAULT if drain
+ * cannot reach live_urbs==0 (pool is not freed while transfers may be in
+ * flight - avoids Tab5 HCD assert on stop->start).
+ * On TIMEOUT: interface may remain claimed, bulk pool may be kept, and full
+ * idle cleanup is not performed (retry stop until drain succeeds).
  * Emits EVT_STOPPED once when leaving STREAMING/STOPPING/FAULT-with-stream.
  */
 esp_err_t esp_rtl_sdr_stop(esp_rtl_sdr_handle_t handle, uint32_t timeout_ms);
 
 /**
  * Clear FAULT back to IDLE if hardware allows (no open stream).
- * If still streaming, returns ERR_BUSY. Clears metrics counters on success.
+ * If still streaming / starting / stopping, returns ERR_BUSY.
+ * Refuses while live URBs are outstanding (ERR_BUSY) and keeps FAULT; does
+ * not clear state/metrics. Caller should retry esp_rtl_sdr_stop() until drain
+ * succeeds, then reset. Clears metrics counters on success.
  */
 esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle);
 

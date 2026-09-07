@@ -3,7 +3,7 @@
 **Make an RTL-SDR Blog V4 a first-class peripheral on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.7.13-green)
+![Status](https://img.shields.io/badge/version-0.7.14-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
@@ -67,7 +67,7 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
 | **Dongle** | **RTL-SDR Blog V4** — USB **`0bda:2838`**, mfg/product strings `RTLSDRBlog` / `Blog V4` |
-| **Tooling** | ESP-IDF **≥ 5.3** with `esp32p4` support |
+| **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
 **Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, random eBay RTL sticks, production warranty.  

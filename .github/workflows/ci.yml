@@ -71,8 +71,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # P4 USB host path: IDF 5.3+; pin known release tags for reproducibility
-        idf_ver: ["v5.3.2", "v5.4.1"]
+        # Match OrcSDR Tab5 floor (IDF 5.5.x); build the same pin OrcSDR locks
+        idf_ver: ["v5.5.4"]
     steps:
       - uses: actions/checkout@v4
 

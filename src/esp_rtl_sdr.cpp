@@ -118,7 +118,10 @@ struct esp_rtl_sdr_handle {
     uint32_t bulk_num = 0;
     uint32_t bulk_len = 0;
     volatile bool streaming = false;
-    /** Live bulk URBs currently submitted (not yet completed without resubmit). */
+    /** Live bulk URBs currently submitted (not yet completed without resubmit).
+     * Free-pool gate: free_bulk_pool / stop / reset refuse while >0.
+     * Relies on aligned 32-bit loads plus USB callback serialization
+     * (bulk_cb vs stop/reset under handle lock / streaming=false). */
     volatile uint32_t live_urbs = 0;
     /** When true, bulk_cb must not resubmit (stop or retune drain). */
     volatile bool pause_resubmit = false;
@@ -759,6 +762,39 @@ static void bulk_cb(usb_transfer_t *xfer)
     }
 }
 
+/**
+ * Poll live_urbs after pause_resubmit / streaming=false is set.
+ * If still live after poll_ms, halt/flush/clear the bulk IN endpoint and poll
+ * again for flush_poll_ms. Does not force the counter and does not free the pool.
+ * @return true if live_urbs == 0 when finished.
+ */
+static bool drain_live_urbs(esp_rtl_sdr_handle *h, uint32_t poll_ms, uint32_t flush_poll_ms)
+{
+    if (h == nullptr) {
+        return true;
+    }
+    if (poll_ms > 0 && h->live_urbs > 0) {
+        const TickType_t start = xTaskGetTickCount();
+        const TickType_t wait = pdMS_TO_TICKS(poll_ms);
+        while (h->live_urbs > 0 && (xTaskGetTickCount() - start) < wait) {
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+    }
+    if (h->live_urbs > 0 && h->dev != nullptr) {
+        usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        if (flush_poll_ms > 0) {
+            const TickType_t start2 = xTaskGetTickCount();
+            const TickType_t wait2 = pdMS_TO_TICKS(flush_poll_ms);
+            while (h->live_urbs > 0 && (xTaskGetTickCount() - start2) < wait2) {
+                vTaskDelay(pdMS_TO_TICKS(2));
+            }
+        }
+    }
+    return h->live_urbs == 0;
+}
+
 /** Pause bulk IN and drain live URBs so EP0 is safe (retune / gain / bias). */
 static void bulk_pause_and_drain(esp_rtl_sdr_handle *h)
 {
@@ -766,18 +802,8 @@ static void bulk_pause_and_drain(esp_rtl_sdr_handle *h)
         return;
     }
     h->pause_resubmit = true;
-    const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(800);
-    while (h->live_urbs > 0 && xTaskGetTickCount() < deadline) {
-        vTaskDelay(pdMS_TO_TICKS(2));
-    }
-    if (h->live_urbs > 0 && h->dev != nullptr) {
-        usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        const TickType_t d2 = xTaskGetTickCount() + pdMS_TO_TICKS(300);
-        while (h->live_urbs > 0 && xTaskGetTickCount() < d2) {
-            vTaskDelay(pdMS_TO_TICKS(2));
-        }
+    if (!drain_live_urbs(h, 800, 300)) {
+        /* Pool is kept for resume; force counter so EP0 path can proceed. */
         h->live_urbs = 0;
     }
 }
@@ -1190,6 +1216,16 @@ static void delivery_task_fn(void *arg)
 
 static void free_bulk_pool(esp_rtl_sdr_handle *h)
 {
+    if (h == nullptr) {
+        return;
+    }
+    /* Never free usb_transfer_t while IDF DWC HCD may still own a bulk desc
+     * (Tab5 _buffer_parse_bulk assert: desc_status != SUCCESS). */
+    if (h->live_urbs > 0) {
+        ESP_LOGW(TAG, "free_bulk_pool refused: live_urbs=%u",
+                 static_cast<unsigned>(h->live_urbs));
+        return;
+    }
     if (h->bulk != nullptr) {
         for (uint32_t i = 0; i < h->bulk_num; ++i) {
             if (h->bulk[i] != nullptr) {
@@ -1732,10 +1768,28 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         handle->client_registered = false;
     }
     if (handle->owns_host && handle->host_installed) {
-        usb_host_uninstall();
+        const esp_err_t uerr = usb_host_uninstall();
+        if (uerr != ESP_OK) {
+            /* Fail-closed: do not clear live_urbs or free the pool while the
+             * host may still own transfers. Leave handle intact for retry. */
+            ESP_LOGE(TAG, "usb_host_uninstall failed (%s); keep pool/live_urbs",
+                     esp_err_to_name(uerr));
+            {
+                HandleLock lk(handle, kUninstallLockTicks);
+                (void)lk.ok();
+                handle->destroying = false; /* allow uninstall retry */
+            }
+            return ESP_RTL_SDR_ERR_USB;
+        }
         handle->host_installed = false;
     }
 
+    /* Host/HCD torn down (or never owned) - safe to clear stuck live_urbs. */
+    if (handle->live_urbs > 0) {
+        ESP_LOGW(TAG, "uninstall: clearing stuck live_urbs=%u after host teardown",
+                 static_cast<unsigned>(handle->live_urbs));
+        handle->live_urbs = 0;
+    }
     free_bulk_pool(handle);
     if (handle->ctrl_xfer) {
         usb_host_transfer_free(handle->ctrl_xfer);
@@ -1863,32 +1917,52 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->pending_rtl_agc = false;
     h->ep0_sideband_busy = false;
 
-    if (h->dev != nullptr && h->bulk_num > 0) {
-        usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+    /* Same order as bulk_pause_and_drain (shared drain_live_urbs): poll natural
+     * completions first, halt/flush/clear only if still live, poll again.
+     * stop clears streaming before drain, so call the helper directly (pause
+     * early-returns when !streaming). Never free_bulk_pool while live_urbs>0
+     * — that races Tab5 DWC HCD (_buffer_parse_bulk desc_status assert) on
+     * band-switch stop->start (e.g. POCSAG). */
+    uint32_t poll_ms = 800;
+    uint32_t flush_ms = 300;
+    if (timeout_ms < poll_ms + flush_ms) {
+        flush_ms = timeout_ms / 4;
+        poll_ms = timeout_ms - flush_ms;
+    }
+    const bool drained = drain_live_urbs(h, poll_ms, flush_ms);
+
+    if (drained) {
+        /* Hygiene for next start after live_urbs is verified 0. */
+        if (h->bulk_done_sem != nullptr) {
+            while (xSemaphoreTake(h->bulk_done_sem, 0) == pdTRUE) {
+            }
+        }
+        h->live_urbs = 0;
+        h->pause_resubmit = false;
+    } else {
+        ESP_LOGW(TAG, "stop: drain timeout live_urbs=%u; skip free_bulk_pool",
+                 static_cast<unsigned>(h->live_urbs));
+        /* Keep pause_resubmit so late bulk_cb does not resubmit. */
     }
 
-    /* Drain completion callbacks (bounded). */
-    const uint32_t need = h->bulk_num > 0 ? h->bulk_num : 1;
-    const TickType_t slice = pdMS_TO_TICKS(timeout_ms / need + 20);
-    for (uint32_t i = 0; i < need; ++i) {
-        (void)xSemaphoreTake(h->bulk_done_sem, slice);
-    }
-    h->live_urbs = 0;
-    h->pause_resubmit = false;
-
-    if (h->iface_claimed && h->dev != nullptr) {
+    if (drained && h->iface_claimed && h->dev != nullptr) {
         run_cleanup_best_effort(h);
         usb_host_interface_release(h->client, h->dev, 0);
         h->iface_claimed = false;
     }
 
-    free_bulk_pool(h);
+    if (drained) {
+        free_bulk_pool(h);
+    }
     pull_ring_reset(h);
     h->stream_start_ms = 0;
-    h->state = ESP_RTL_SDR_STATE_IDLE;
-    set_error_unlocked(h, ESP_OK);
+    if (drained) {
+        h->state = ESP_RTL_SDR_STATE_IDLE;
+        set_error_unlocked(h, ESP_OK);
+    } else {
+        h->state = ESP_RTL_SDR_STATE_FAULT;
+        set_error_unlocked(h, ESP_RTL_SDR_ERR_TIMEOUT);
+    }
 
     if (was_streaming && !h->destroying) {
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
@@ -1897,7 +1971,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
             emit_after_unlock(h, ESP_RTL_SDR_EVT_STOPPED, nullptr, cb, ctx);
         }
     }
-    return ESP_OK;
+    return drained ? ESP_OK : ESP_RTL_SDR_ERR_TIMEOUT;
 }
 
 esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
@@ -2182,6 +2256,17 @@ esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle)
         handle->state == ESP_RTL_SDR_STATE_STARTING) {
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
         return ESP_RTL_SDR_ERR_BUSY;
+    }
+    /* After timed-out stop (FAULT, live_urbs>0, pool kept): refuse reset so
+     * start cannot alloc_bulk_pool -> free_bulk_pool orphan the old array
+     * while callbacks may still fire. Caller should retry stop until drain. */
+    if (handle->live_urbs > 0) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
+        return ESP_RTL_SDR_ERR_BUSY;
+    }
+    /* live_urbs==0 but pool still allocated (e.g. odd FAULT path): free it. */
+    if (handle->bulk != nullptr) {
+        free_bulk_pool(handle);
     }
     handle->state = ESP_RTL_SDR_STATE_IDLE;
     std::memset(&handle->metrics, 0, sizeof(handle->metrics));

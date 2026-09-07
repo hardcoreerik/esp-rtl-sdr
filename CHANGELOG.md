@@ -4,6 +4,10 @@
 
 ## 0.7.14 (2026-09-07)
 
+### Changed
+
+- **ESP-IDF floor raised to 5.5.0** (CI builds `v5.5.4`, same floor as OrcSDR Tab5).
+
 ### Fixed
 
 - **stop drains live URBs before free_bulk_pool (Tab5 HCD race):**

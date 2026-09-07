@@ -67,7 +67,7 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
 | **Dongle** | **RTL-SDR Blog V4** — USB **`0bda:2838`**, mfg/product strings `RTLSDRBlog` / `Blog V4` |
-| **Tooling** | ESP-IDF **≥ 5.3** with `esp32p4` support |
+| **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
 **Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, random eBay RTL sticks, production warranty.  

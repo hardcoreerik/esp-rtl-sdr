@@ -11,7 +11,7 @@ Truth of claims: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 |---|---|
 | `esp_rtl_sdr.h` not found | Component on `EXTRA_COMPONENT_DIRS` or under `components/esp_rtl_sdr`; `REQUIRES esp_rtl_sdr` |
 | Wrong target | `idf.py set-target esp32p4` — P4 only claimed |
-| IDF too old | Need **≥ 5.3** with esp32p4 |
+| IDF too old | Need **≥ 5.5** with esp32p4 |
 | Host tests fail | `tests/scripts/run_host_tests.ps1` (or `.sh`); no IDF required |
 
 ---

@@ -2273,7 +2273,6 @@ esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle)
     set_error_unlocked(handle, ESP_OK);
     return ESP_OK;
 }
-}
 
 esp_err_t esp_rtl_sdr_release_iq_block(esp_rtl_sdr_handle_t handle,
                                           const esp_rtl_sdr_iq_block_t *block)

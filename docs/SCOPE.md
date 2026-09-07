@@ -12,7 +12,7 @@ This project **fails closed** on unsupported hardware. Narrow support is a
 | **MCU** | ESP32-**P4** High-Speed USB Host | e.g. M5Stack Tab5, Waveshare P4 kits |
 | **Dongle** | RTL-SDR **Blog V4** | USB `0bda:2838`, mfg/product `RTLSDRBlog` / `Blog V4` |
 | **IQ** | Continuous CU8 multi-URB | CAP_STREAM |
-| **Tooling** | ESP-IDF ≥ 5.3, `esp32p4` | CI builds smoke on 5.3.2 + 5.4.1 |
+| **Tooling** | ESP-IDF ≥ 5.5, `esp32p4` | CI builds smoke on 5.5.4 |
 
 Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 

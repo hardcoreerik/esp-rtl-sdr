@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.7.15 (2026-09-09)
+
+### Fixed — Blog V4 HF hardware routing (hardware acceptance pending)
+
+- Completes capture-derived Cable-2 (`R828D 0x06=0x38`) and RTL2832 GPIO5-low selection for HF; restores GPIO5-high and VHF/UHF input masks outside HF.
+- Composes GPIO0 Bias-T state with GPIO5 routing and keeps `GPOE=0x39`, so Bias-T changes cannot undo the selected RF path.
+- Composes manual/AUTO register-05 low bits with the HF/VHF/UHF input masks, preserving gain state across retunes and routing across gain changes.
+- Uses the same complete route application for startup, hot retune, gain/AUTO, and Bias-T, and marks the applied route valid only after every required write succeeds.
+- Selects the HF Cable-2 route at exactly 28.8 MHz while applying the 28.8 MHz LO offset only below that frequency.
+- Host tests and ESP-IDF compilation do not constitute physical reception acceptance; GPIO, raw-IQ, AM, Shortwave, VHF, and UHF tests remain open.
+
 ## 0.7.14 (2026-09-07)
 
 ### Changed

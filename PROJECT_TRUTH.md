@@ -6,8 +6,8 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-07**  
-Version: **0.7.14** (stop drains live URBs before free_bulk_pool; public windowed metrics/health; USB soak still operator work - not production-ready)
+Snapshot date: **2026-09-09**
+Version: **0.7.15** (Blog V4 HF/VHF/UHF route composition implemented; GPIO and RF acceptance still operator work - not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -94,7 +94,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |
 | Gain / bias-T hardware | **Implemented** (tables from PC USBPcap) | Lab 2026-08-12; **not** yet Hardware-verified from *this* tree on P4; no multimeter DC |
-| HF upconverter path CAP | **Implemented (0.7.7)** | RF&lt;28.8 MHz → tuner RF+28.8e6; CAP_HF_UPCONVERTER; FE soak open |
+| HF upconverter path CAP | **Implemented (routing corrected 0.7.15)** | RF&lt;28.8 MHz → tuner RF+28.8e6; RF≤28.8 MHz → Cable-2/GPIO5-low; host/build verified, physical FE soak open |
 | R828D stage gain / input / notches | **Planned** | |
 | Adaptive USB URB | **Planned** | |
 | Beacon ppm learn | **Planned** | |
@@ -124,6 +124,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.12** | Smoke SOAK evidence is scoped to the drain window (not pre-soak ring overflow) |
 | **0.7.13** | Public metrics_delta / health_from_window from metric snapshots (honest soak/app window) |
 | **0.7.14** | stop_stream_internal drains live URBs (shared with pause) before free_bulk_pool; avoids Tab5 HCD assert on band-switch stop→start |
+| **0.7.15** | Composed Blog V4 Cable-2/GPIO5/Bias-T/gain routing; physical GPIO and RF acceptance pending |
 
 ---
 

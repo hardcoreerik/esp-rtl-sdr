@@ -13,7 +13,7 @@ Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.m
 | 8–9 | Tuner gain | modes / steps | Manual ladder + Tuner AUTO (`CAP_GAIN_AUTO`) + RTL AGC | **Done (0.7.8)** |
 | 11 | ppm | yes | software LO offset | **Done** |
 | 12 | Bias-T | common | Measured SYS EP0 (CAP_BIAS_TEE); DC re-soak open | **3 partial** |
-| 13 | Direct sampling / HF | forks | **HF upconverter CAP** (RF+28.8e6); not direct sampling | **Done (0.7.7)** |
+| 13 | Direct sampling / HF | forks | **HF upconverter CAP** (RF+28.8e6 below boundary; Cable-2/GPIO5 route corrected); not direct sampling | **Implemented (0.7.15), hardware acceptance open** |
 | 15 | Multi-device | index/serial | yes | **Done** |
 | 19 | Metrics | app-side | `get_metrics` | **Done (stronger)** |
 | 20 | Capability bits | weak | `get_capabilities` | **Done (stronger)** |

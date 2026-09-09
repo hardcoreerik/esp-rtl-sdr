@@ -3,7 +3,7 @@
 **Make an RTL-SDR Blog V4 a first-class peripheral on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.7.14-green)
+![Status](https://img.shields.io/badge/version-0.7.15-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
@@ -246,9 +246,9 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `set_tuner_gain_mode(MANUAL\|AUTO)` | MANUAL ladder; AUTO measured R828D AGC (`CAP_GAIN_AUTO`, 0.7.8+). Streaming = async EP0. |
 | `set/get_rtl_agc` | RTL2832 digital AGC (`CAP_RTL_AGC`); not tuner AUTO. **get** = requested shadow, not readback. |
 | `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
-| HF (0.7.7) | **500 kHz…1766 MHz**; RF&lt;28.8 MHz uses +28.8 MHz upconverter (`CAP_HF_UPCONVERTER`) |
+| HF (0.7.15 routing correction) | **500 kHz…1766 MHz**; RF&lt;28.8 MHz uses +28.8 MHz LO, RF≤28.8 MHz selects Cable-2 and GPIO5-low (`CAP_HF_UPCONVERTER`) |
 
-Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md). P4 RF soak of HF FE / AUTO still open.
+Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md), and the checked-in clean-room transfer table. The 0.7.15 routing composition is host/build verified only; P4 GPIO and RF acceptance remain open.
 
 ### Typical rates (macros)
 

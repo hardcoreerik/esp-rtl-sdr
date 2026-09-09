@@ -422,7 +422,7 @@ Named presets **ignore** `frequency_hz` in the stream config.
 | `NEED_FM` | FM-class: ~960k @ preferred LO |
 | `NEED_ADSB` | 1090 MHz, 2.048 MSPS |
 | `NEED_WX` | NOAA WX 162.400 MHz, 960k |
-| `NEED_HF` | Stores HF LO intent; full upconverter CAP still open |
+| `NEED_HF` | Stores HF LO intent; V4 routing is applied when streaming starts |
 | `NEED_MAX_STABLE` | Passport `best_stable_sps` if valid, else 2.048M |
 | `NEED_LISTEN` | Lowest-drop default: 960k, keep LO |
 

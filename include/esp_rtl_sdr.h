@@ -87,7 +87,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 14
+#define ESP_RTL_SDR_VERSION_PATCH 15
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -205,13 +205,13 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 /**
  * Frequency policy (Hz) — Blog V4 full advertised span (public DS / product page).
  * Below HF_UPCONV_LO_HZ the driver programs the R828D at RF+28.8 MHz (built-in
- * SA612 upconverter) and selects the HF triplexer input.
+ * SA612 upconverter). The Cable-2 route remains selected through exactly 28.8 MHz.
  */
 #define ESP_RTL_SDR_FREQ_MIN_HZ        500000u
 #define ESP_RTL_SDR_FREQ_MAX_HZ        1766000000u
 /** Built-in HF upconverter LO (Blog V4 public: SA612 @ 28.8 MHz). */
 #define ESP_RTL_SDR_HF_UPCONV_LO_HZ    28800000u
-/** Triplexer band edges (public V4 product page): HF | VHF | UHF+. */
+/** Triplexer edges: HF is <= VHF_MIN_HZ; VHF begins immediately above it. */
 #define ESP_RTL_SDR_BAND_VHF_MIN_HZ    28800000u
 #define ESP_RTL_SDR_BAND_UHF_MIN_HZ    250000000u
 /** Quantization applied by retune_hz / start (Hz). */
@@ -576,8 +576,8 @@ esp_err_t esp_rtl_sdr_get_supported_rates(uint32_t *out_rates,
 bool esp_rtl_sdr_normalize_frequency(uint32_t in_hz, uint32_t *out_hz);
 
 /**
- * True if RF is in the Blog V4 HF upconverter band (RF < 28.8 MHz).
- * Public product page: SA612 LO 28.8 MHz; software adds the offset.
+ * True when the 28.8 MHz LO offset is required (RF < 28.8 MHz).
+ * At exactly 28.8 MHz the HF Cable-2 route is selected without adding the LO.
  */
 bool esp_rtl_sdr_frequency_uses_hf_upconverter(uint32_t rf_hz);
 
@@ -827,7 +827,7 @@ esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const ch
 
 /**
  * Apply a mission intent: sets preferred LO + sample rate (quantized).
- * Does not start streaming. NEED_HF stores HF LO; full upconverter CAP still open.
+ * Does not start streaming. NEED_HF stores HF LO; V4 routing is applied when streaming starts.
  * NEED_MAX_STABLE uses last successful passport best_stable_sps when valid.
  */
 esp_err_t esp_rtl_sdr_apply_need(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_need_t need);

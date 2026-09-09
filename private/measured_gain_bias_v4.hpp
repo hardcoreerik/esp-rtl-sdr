@@ -16,7 +16,7 @@
  *   SYS block:      wValue=0x30xx, wIndex=0x0210, data[0]=value
  *
  * Re-validated from decode TSV payloads: all 28 (reg05,reg07) pairs present;
- * bias ON/OFF clusters match kMeasuredV4BiasOn/Off exactly (3001 0x19 vs 0x18).
+ * bias ON/OFF clusters establish GPIO0 while band transitions establish GPIO5.
  */
 
 #include <cstddef>
@@ -30,6 +30,46 @@ struct MeasuredV4GainStep {
     uint8_t reg05; /**< measured via 0x0074 write pair {0x05, val} */
     uint8_t reg07; /**< measured via 0x0074 write pair {0x07, val} */
 };
+
+enum class MeasuredV4FrontendBand : uint8_t { HF, VHF, UHF };
+
+struct MeasuredV4FrontendPlan {
+    MeasuredV4FrontendBand band;
+    bool bias_tee;
+    uint8_t reg05_low_bits;
+    uint8_t reg05;
+    uint8_t reg06;
+    uint8_t gpd;
+    uint8_t gpoe;
+    uint8_t gpo;
+};
+
+/** Capture-derived Blog V4 route. Exactly 28.8 MHz remains on Cable-2. */
+constexpr MeasuredV4FrontendBand measured_v4_frontend_band(uint32_t rf_hz)
+{
+    return rf_hz <= 28800000u ? MeasuredV4FrontendBand::HF
+                              : (rf_hz >= 250000000u ? MeasuredV4FrontendBand::UHF
+                                                     : MeasuredV4FrontendBand::VHF);
+}
+
+constexpr MeasuredV4FrontendPlan measured_v4_frontend_plan(uint32_t rf_hz, bool bias_tee,
+                                                            uint8_t raw_reg05)
+{
+    const MeasuredV4FrontendBand band = measured_v4_frontend_band(rf_hz);
+    const uint8_t input = band == MeasuredV4FrontendBand::HF
+                              ? 0xa0
+                              : (band == MeasuredV4FrontendBand::UHF ? 0x80 : 0xe0);
+    const uint8_t low = raw_reg05 & 0x1f;
+    return {band,
+            bias_tee,
+            low,
+            static_cast<uint8_t>(input | low),
+            static_cast<uint8_t>(band == MeasuredV4FrontendBand::HF ? 0x38 : 0x30),
+            0x06,
+            0x39,
+            static_cast<uint8_t>((band == MeasuredV4FrontendBand::HF ? 0x18 : 0x38) |
+                                 (bias_tee ? 0x01 : 0x00))};
+}
 
 /**
  * Full ladder from SDR# RF Gain 0.0 → 49.6 dB (lab 2026-08-12).
@@ -96,30 +136,6 @@ constexpr uint16_t kMeasuredV4RtlAgcWvalue = 0x1920;
 constexpr uint16_t kMeasuredV4RtlAgcWindex = 0x0010;
 constexpr uint8_t kMeasuredV4RtlAgcOn = 0x25;
 constexpr uint8_t kMeasuredV4RtlAgcOff = 0x05;
-
-/**
- * Bias-T SYS sequence measured from rtl_biast clusters (toggle groups).
- * ON:  3001 data 0x19   OFF: 3001 data 0x18  (LSB differs)
- * Companion writes 3004/3003/3000 match every observed toggle cluster.
- */
-constexpr RtlControlRecord kMeasuredV4BiasOn[] = {
-    {0x3004, 0x0210, 0x40, 1, {0x06, 0, 0, 0, 0, 0, 0, 0}},
-    {0x3003, 0x0210, 0x40, 1, {0x19, 0, 0, 0, 0, 0, 0, 0}},
-    {0x3001, 0x0210, 0x40, 1, {0x19, 0, 0, 0, 0, 0, 0, 0}},
-    {0x3000, 0x0210, 0x40, 1, {0x20, 0, 0, 0, 0, 0, 0, 0}},
-};
-
-constexpr RtlControlRecord kMeasuredV4BiasOff[] = {
-    {0x3004, 0x0210, 0x40, 1, {0x06, 0, 0, 0, 0, 0, 0, 0}},
-    {0x3003, 0x0210, 0x40, 1, {0x19, 0, 0, 0, 0, 0, 0, 0}},
-    {0x3001, 0x0210, 0x40, 1, {0x18, 0, 0, 0, 0, 0, 0, 0}},
-    {0x3000, 0x0210, 0x40, 1, {0x20, 0, 0, 0, 0, 0, 0, 0}},
-};
-
-constexpr size_t kMeasuredV4BiasOnCount =
-    sizeof(kMeasuredV4BiasOn) / sizeof(kMeasuredV4BiasOn[0]);
-constexpr size_t kMeasuredV4BiasOffCount =
-    sizeof(kMeasuredV4BiasOff) / sizeof(kMeasuredV4BiasOff[0]);
 
 /** Build 0x0074 / 0x0610 write for IR register pair (measured encoding). */
 inline RtlControlRecord measured_v4_ir_reg_write(uint8_t reg, uint8_t value)

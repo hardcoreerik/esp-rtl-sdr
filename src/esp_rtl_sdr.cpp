@@ -178,6 +178,10 @@ struct esp_rtl_sdr_handle {
     bool bias_tee_want = false;
     bool rtl_agc_want = false;
     bool tuner_auto_applied = false; /* true after AUTO trio actually written */
+    uint8_t tuner_reg05_low_bits = 0x03;
+    uint8_t tuner_reg07 = 0x75;
+    MeasuredV4FrontendPlan frontend_applied{};
+    bool frontend_applied_valid = false;
 
     /** Sync-read pull ring (CU8 bytes). Filled by delivery task. */
     uint8_t *pull_buf = nullptr;
@@ -583,94 +587,77 @@ static esp_err_t run_records(esp_rtl_sdr_handle *h, const RtlControlRecord *tab,
     return ESP_OK;
 }
 
-static esp_err_t run_uhf_frontend(esp_rtl_sdr_handle *h)
+static const char *frontend_band_name(MeasuredV4FrontendBand band)
 {
-    constexpr RtlControlRecord kUhf[] = {
-        {0x0074, 0x0610, 0x40, 2, {0x17, 0x28}},
-        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x68}},
-        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x00}},
-        {0x0074, 0x0610, 0x40, 2, {0x05, 0x83}},
-        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x6b}},
-    };
-    return run_records(h, kUhf, std::size(kUhf));
+    return band == MeasuredV4FrontendBand::HF
+               ? "HF"
+               : (band == MeasuredV4FrontendBand::UHF ? "UHF" : "VHF");
 }
 
-/**
- * HF triplexer path.
- * Full path writes reg05=0xa3 (measured init mid-transition family).
- * filters_only skips reg05 so CAP_GAIN ladder is not clobbered after gain EP0.
- */
-static esp_err_t run_hf_frontend(esp_rtl_sdr_handle *h, bool filters_only)
+/** Apply one complete capture-derived route; caller owns any bulk-pause window. */
+static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz,
+                                   uint8_t raw_reg05, uint8_t reg07, uint8_t reg0c,
+                                   bool bias_companion = false)
 {
-    constexpr RtlControlRecord kHfFull[] = {
-        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
-        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
-        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x00}},
-        {0x0074, 0x0610, 0x40, 2, {0x05, 0xa3}},
-        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
+    const MeasuredV4FrontendPlan plan =
+        measured_v4_frontend_plan(rf_hz, h->bias_tee_want, raw_reg05);
+    const bool uhf = plan.band == MeasuredV4FrontendBand::UHF;
+    const bool hf = plan.band == MeasuredV4FrontendBand::HF;
+    const RtlControlRecord records[] = {
+        measured_v4_ir_reg_write(0x17, uhf ? 0x28 : 0x20),
+        measured_v4_ir_reg_write(0x1a, uhf ? 0x68 : 0x2a),
+        measured_v4_ir_reg_write(0x1b, hf || uhf ? 0x00 : 0x34),
+        measured_v4_ir_reg_write(0x06, plan.reg06),
+        {0x3004, 0x0210, 0x40, 1, {plan.gpd, 0, 0, 0, 0, 0, 0, 0}},
+        {0x3003, 0x0210, 0x40, 1, {plan.gpoe, 0, 0, 0, 0, 0, 0, 0}},
+        {0x3001, 0x0210, 0x40, 1, {plan.gpo, 0, 0, 0, 0, 0, 0, 0}},
     };
-    constexpr RtlControlRecord kHfFilt[] = {
-        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
-        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
-        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x00}},
-        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
-    };
-    return filters_only ? run_records(h, kHfFilt, std::size(kHfFilt))
-                        : run_records(h, kHfFull, std::size(kHfFull));
+
+    h->frontend_applied_valid = false;
+    esp_err_t err = run_records(h, records, std::size(records));
+    if (err == ESP_OK && bias_companion) {
+        constexpr RtlControlRecord companion =
+            {0x3000, 0x0210, 0x40, 1, {0x20, 0, 0, 0, 0, 0, 0, 0}};
+        err = run_record(h, companion, false);
+    }
+    if (err == ESP_OK) {
+        err = run_record(h, measured_v4_ir_reg_write(0x05, plan.reg05), false);
+    }
+    if (err == ESP_OK) {
+        err = run_record(h, measured_v4_ir_reg_write(0x07, reg07), false);
+    }
+    if (err == ESP_OK) {
+        err = run_record(h, measured_v4_ir_reg_write(0x0c, reg0c), false);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "front-end route failed rf=%u band=%s: %s",
+                 static_cast<unsigned>(rf_hz), frontend_band_name(plan.band),
+                 esp_rtl_sdr_err_to_name(err));
+        return err;
+    }
+
+    h->tuner_reg05_low_bits = plan.reg05_low_bits;
+    h->tuner_reg07 = reg07;
+    h->frontend_applied = plan;
+    h->frontend_applied_valid = true;
+    ESP_LOGI(TAG,
+             "front-end route rf=%u band=%s r6=%02x r5=%02x gpio=%02x bias=%d reg05_low=%02x",
+             static_cast<unsigned>(rf_hz), frontend_band_name(plan.band), plan.reg06,
+             plan.reg05, plan.gpo, plan.bias_tee ? 1 : 0, plan.reg05_low_bits);
+    return ESP_OK;
 }
 
-/** VHF restore after HF/UHF (measured init tail family, reg05=0xe3). */
-static esp_err_t run_vhf_frontend(esp_rtl_sdr_handle *h, bool filters_only)
-{
-    constexpr RtlControlRecord kVhfFull[] = {
-        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
-        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
-        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x34}},
-        {0x0074, 0x0610, 0x40, 2, {0x05, 0xe3}},
-        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
-    };
-    constexpr RtlControlRecord kVhfFilt[] = {
-        {0x0074, 0x0610, 0x40, 2, {0x17, 0x20}},
-        {0x0074, 0x0610, 0x40, 2, {0x1a, 0x2a}},
-        {0x0074, 0x0610, 0x40, 2, {0x1b, 0x34}},
-        {0x0074, 0x0610, 0x40, 2, {0x0c, 0x68}},
-    };
-    return filters_only ? run_records(h, kVhfFilt, std::size(kVhfFilt))
-                        : run_records(h, kVhfFull, std::size(kVhfFull));
-}
-
-/** Select triplexer band for user RF (not tuner LO). */
 static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz)
 {
-    if (rf_hz < ESP_RTL_SDR_BAND_VHF_MIN_HZ) {
-        ESP_LOGI(TAG, "band FE HF rf=%u", static_cast<unsigned>(rf_hz));
-        return run_hf_frontend(h, false);
-    }
-    if (rf_hz >= ESP_RTL_SDR_BAND_UHF_MIN_HZ) {
-        ESP_LOGI(TAG, "band FE UHF rf=%u", static_cast<unsigned>(rf_hz));
-        return run_uhf_frontend(h);
-    }
-    ESP_LOGI(TAG, "band FE VHF rf=%u", static_cast<unsigned>(rf_hz));
-    return run_vhf_frontend(h, false);
+    const bool uhf = measured_v4_frontend_band(rf_hz) == MeasuredV4FrontendBand::UHF;
+    const uint8_t reg0c = (h->tuner_auto_applied || uhf) ? kMeasuredV4TunerAgcReg0c
+                                                        : kMeasuredV4GainReg0c;
+    return run_band_frontend(h, rf_hz, h->tuner_reg05_low_bits, h->tuner_reg07, reg0c);
 }
 
-/** After gain EP0: refresh band filters without clobbering reg05 gain ladder. */
-static esp_err_t run_band_frontend_after_gain(esp_rtl_sdr_handle *h, uint32_t rf_hz)
+static uint32_t frontend_rf_hz(const esp_rtl_sdr_handle *h)
 {
-    if (rf_hz < ESP_RTL_SDR_BAND_VHF_MIN_HZ) {
-        return run_hf_frontend(h, true);
-    }
-    if (rf_hz >= ESP_RTL_SDR_BAND_UHF_MIN_HZ) {
-        /* UHF measured path includes reg05 — skip full rewrite; filters only. */
-        constexpr RtlControlRecord kUhfFilt[] = {
-            {0x0074, 0x0610, 0x40, 2, {0x17, 0x28}},
-            {0x0074, 0x0610, 0x40, 2, {0x1a, 0x68}},
-            {0x0074, 0x0610, 0x40, 2, {0x1b, 0x00}},
-            {0x0074, 0x0610, 0x40, 2, {0x0c, 0x6b}},
-        };
-        return run_records(h, kUhfFilt, std::size(kUhfFilt));
-    }
-    return run_vhf_frontend(h, true);
+    return h->frequency_hz != 0 ? h->frequency_hz : h->preferred_frequency_hz;
 }
 
 static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
@@ -869,6 +856,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     const uint32_t tune_hz =
         (h->pending_retune_hz != 0) ? h->pending_retune_hz : freq;
 
+    h->frontend_applied_valid = false;
     esp_err_t err = run_tune(h, tune_hz);
     if (err == ESP_OK) {
         err = run_band_frontend(h, tune_hz);
@@ -884,7 +872,8 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
                  static_cast<unsigned>(tune_hz),
                  static_cast<unsigned>(esp_rtl_sdr_tuner_frequency_hz(tune_hz)));
     } else {
-        ESP_LOGW(TAG, "hot retune EP0 failed: %s (keep LO)", esp_rtl_sdr_err_to_name(err));
+        ESP_LOGW(TAG, "hot retune EP0 failed: %s (PLL/route may be partially applied)",
+                 esp_rtl_sdr_err_to_name(err));
         if (h->pending_retune_hz == tune_hz) {
             h->pending_retune_hz = 0;
         }
@@ -1910,6 +1899,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->state = ESP_RTL_SDR_STATE_STOPPING;
     h->pause_resubmit = true;
     h->streaming = false;
+    h->frontend_applied_valid = false;
     h->pending_retune_hz = 0;
     h->pending_gain = false;
     h->pending_gain_mode = false;
@@ -3130,24 +3120,18 @@ esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
 /* Phase 3 — gain / bias (clean-room measured Blog V4 2026-08-12)             */
 /* -------------------------------------------------------------------------- */
 
-/** IR gain writes only (caller owns bulk pause). Retries full trio on STALL/USB. */
+/** Apply manual gain and the current route together (caller owns bulk pause). */
 static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *applied_tenth)
 {
     const size_t idx = measured_v4_nearest_gain_index(tenth_db);
     const MeasuredV4GainStep &st = kMeasuredV4GainSteps[idx];
-    const RtlControlRecord w05 = measured_v4_ir_reg_write(0x05, st.reg05);
-    const RtlControlRecord w07 = measured_v4_ir_reg_write(0x07, st.reg07);
-    const RtlControlRecord w0c = measured_v4_ir_reg_write(0x0c, kMeasuredV4GainReg0c);
+    const uint32_t rf_hz = frontend_rf_hz(h);
+    const bool uhf = measured_v4_frontend_band(rf_hz) == MeasuredV4FrontendBand::UHF;
+    const uint8_t reg0c = uhf ? kMeasuredV4TunerAgcReg0c : kMeasuredV4GainReg0c;
 
     esp_err_t err = ESP_FAIL;
     for (int pass = 0; pass < 3; ++pass) {
-        err = run_record(h, w05, false);
-        if (err == ESP_OK) {
-            err = run_record(h, w07, false);
-        }
-        if (err == ESP_OK) {
-            err = run_record(h, w0c, false);
-        }
+        err = run_band_frontend(h, rf_hz, st.reg05, st.reg07, reg0c);
         if (err == ESP_OK) {
             break;
         }
@@ -3163,26 +3147,14 @@ static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *ap
     return ESP_OK;
 }
 
-/** Tuner AGC AUTO trio (caller owns bulk pause). Do not run band FE after — it
- *  would clobber measured reg0c=0x6B back to the manual 0x68 on VHF/HF. */
+/** Apply tuner AUTO and the current route together (caller owns bulk pause). */
 static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h)
 {
-    const RtlControlRecord w05 =
-        measured_v4_ir_reg_write(0x05, kMeasuredV4TunerAgcReg05);
-    const RtlControlRecord w07 =
-        measured_v4_ir_reg_write(0x07, kMeasuredV4TunerAgcReg07);
-    const RtlControlRecord w0c =
-        measured_v4_ir_reg_write(0x0c, kMeasuredV4TunerAgcReg0c);
-
     esp_err_t err = ESP_FAIL;
+    const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 3; ++pass) {
-        err = run_record(h, w05, false);
-        if (err == ESP_OK) {
-            err = run_record(h, w07, false);
-        }
-        if (err == ESP_OK) {
-            err = run_record(h, w0c, false);
-        }
+        err = run_band_frontend(h, rf_hz, kMeasuredV4TunerAgcReg05,
+                                kMeasuredV4TunerAgcReg07, kMeasuredV4TunerAgcReg0c);
         if (err == ESP_OK) {
             return ESP_OK;
         }
@@ -3210,21 +3182,18 @@ static esp_err_t apply_rtl_agc_records(esp_rtl_sdr_handle *h, bool enable)
     return err;
 }
 
-/** SYS bias sequence only (caller owns bulk pause). Settle after GPIO writes. */
+/** Apply Bias-T and the current route together (caller owns bulk pause). */
 static esp_err_t apply_bias_records(esp_rtl_sdr_handle *h, bool enable)
 {
-    const RtlControlRecord *tab = enable ? kMeasuredV4BiasOn : kMeasuredV4BiasOff;
-    const size_t n = enable ? kMeasuredV4BiasOnCount : kMeasuredV4BiasOffCount;
-
     esp_err_t err = ESP_OK;
+    const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 2; ++pass) {
-        err = ESP_OK;
-        for (size_t i = 0; i < n; ++i) {
-            err = run_record(h, tab[i], false);
-            if (err != ESP_OK) {
-                break;
-            }
-        }
+        const bool uhf = measured_v4_frontend_band(rf_hz) == MeasuredV4FrontendBand::UHF;
+        const uint8_t reg0c = (h->tuner_auto_applied || uhf) ? kMeasuredV4TunerAgcReg0c
+                                                            : kMeasuredV4GainReg0c;
+        h->bias_tee_want = enable;
+        err = run_band_frontend(h, rf_hz, h->tuner_reg05_low_bits,
+                                h->tuner_reg07, reg0c, true);
         if (err == ESP_OK) {
             /* SYS GPIO path needs a beat before IR gain or bulk resume. */
             vTaskDelay(pdMS_TO_TICKS(40));
@@ -3306,7 +3275,6 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
             h->gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL;
             h->tuner_auto_applied = false;
             ESP_LOGI(TAG, "tuner gain applied %d (0.1 dB) [async]", applied);
-            (void)run_band_frontend_after_gain(h, h->frequency_hz);
         } else {
             ESP_LOGW(TAG, "tuner gain EP0 failed req=%d: %s", tenth,
                      esp_rtl_sdr_err_to_name(gerr));
@@ -3385,7 +3353,6 @@ static esp_err_t apply_measured_v4_gain_mode(esp_rtl_sdr_handle *h,
     if (err == ESP_OK) {
         h->gain_tenth_db = applied;
         h->tuner_auto_applied = false;
-        (void)run_band_frontend_after_gain(h, h->frequency_hz);
     }
     return err;
 }

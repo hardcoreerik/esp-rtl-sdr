@@ -6,7 +6,7 @@
 
 ### Fixed
 
-- Queues hotplug addresses for a dedicated probe worker in both USB-host ownership modes.
+- Queues hotplug addresses for ordered processing by the USB client task in both USB-host ownership modes.
 - Clears passport state on detach so a replacement dongle cannot inherit rate evidence.
 - Keeps the Blog V4 initialization trace unchanged while excluding known V4-only board
   control values (`0x3001`, `0x3003`, `0x3004`) from provisional R820T2/R860 profiles.

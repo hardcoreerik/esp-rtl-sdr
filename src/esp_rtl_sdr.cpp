@@ -50,7 +50,6 @@ static constexpr UBaseType_t kUsbPrio = 20;
 static constexpr UBaseType_t kClientPrio = 19;
 /* Delivery only posts IQ; app audio task should be >= this and graphics much lower. */
 static constexpr UBaseType_t kDeliveryPrio = 18;
-static constexpr UBaseType_t kProbePrio = 19;
 static constexpr size_t kProbeQueueDepth = 8;
 
 static constexpr uint16_t kVid = ESP_RTL_SDR_USB_VID;
@@ -107,7 +106,6 @@ struct esp_rtl_sdr_handle {
 
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
-    TaskHandle_t probe_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
     /** Set during uninstall; worker tasks notify this task before vTaskDelete. */
     TaskHandle_t join_waiter = nullptr;
@@ -492,8 +490,21 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t d
             final_err = ESP_RTL_SDR_ERR_USB;
             break;
         }
-        if (xSemaphoreTake(h->ctrl_sem, pdMS_TO_TICKS(h->cfg.control_timeout_ms + 200)) !=
-            pdTRUE) {
+        bool completed = false;
+        const TickType_t wait_ticks = pdMS_TO_TICKS(h->cfg.control_timeout_ms + 200);
+        if (xTaskGetCurrentTaskHandle() == h->client_task) {
+            const TickType_t started = xTaskGetTickCount();
+            do {
+                if (xSemaphoreTake(h->ctrl_sem, 0) == pdTRUE) {
+                    completed = true;
+                    break;
+                }
+                (void)usb_host_client_handle_events(h->client, pdMS_TO_TICKS(5));
+            } while (xTaskGetTickCount() - started < wait_ticks);
+        } else {
+            completed = xSemaphoreTake(h->ctrl_sem, wait_ticks) == pdTRUE;
+        }
+        if (!completed) {
             final_err = ESP_RTL_SDR_ERR_TIMEOUT;
             break;
         }
@@ -1492,12 +1503,7 @@ static RtlProfileId identify_profile(esp_rtl_sdr_handle *h, usb_device_handle_t 
     RtlProfileProbeResult probe{};
     RtlProfileId profile = rtl_profile_from_descriptors(dd->idVendor, dd->idProduct, mfg, prod);
     if (profile == RtlProfileId::Unknown && dd->idVendor == kVid && dd->idProduct == kPid) {
-        /* Client task must keep dispatching USB callbacks; defer active I2C
-         * probes to install/refresh/select/host-lib callers outside this task. */
-        if (h != nullptr && h->client_task != nullptr &&
-            xTaskGetCurrentTaskHandle() == h->client_task) {
-            return RtlProfileId::Unknown;
-        }
+        /* ctrl_submit_device pumps client events when probing from client_task. */
         (void)probe_blog_v3_tuner(h, dev, &probe);
         profile = rtl_profile_select(dd->idVendor, dd->idProduct, mfg, prod, probe);
     }
@@ -1709,25 +1715,6 @@ static void host_lib_task_fn(void *arg)
     worker_task_exit(h);
 }
 
-static void probe_task_fn(void *arg)
-{
-    auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
-    while (h->tasks_run) {
-        uint8_t addr = 0;
-        if (xQueueReceive(h->probe_q, &addr, pdMS_TO_TICKS(50)) == pdTRUE) {
-            if (addr == 0) {
-                ESP_LOGI(TAG, "usb probe_rescan");
-                rebuild_candidate_list(h);
-                open_selected_candidate(h);
-            } else {
-                ESP_LOGI(TAG, "usb probe_begin addr=%u", static_cast<unsigned>(addr));
-                try_open_device(h, addr);
-            }
-        }
-    }
-    worker_task_exit(h);
-}
-
 static void client_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
@@ -1757,6 +1744,17 @@ static void client_task_fn(void *arg)
             void *ctx = h->cfg.event_ctx;
             if (cb) {
                 emit_after_unlock(h, ESP_RTL_SDR_EVT_DISCONNECTED, nullptr, cb, ctx);
+            }
+        }
+        uint8_t addr = 0;
+        while (xQueueReceive(h->probe_q, &addr, 0) == pdTRUE) {
+            if (addr == 0) {
+                ESP_LOGI(TAG, "usb probe_rescan");
+                rebuild_candidate_list(h);
+                open_selected_candidate(h);
+            } else {
+                ESP_LOGI(TAG, "usb probe_begin addr=%u", static_cast<unsigned>(addr));
+                try_open_device(h, addr);
             }
         }
     }
@@ -1815,15 +1813,11 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
     }
     h->worker_task_count++;
 
-    if (xTaskCreatePinnedToCore(probe_task_fn, "rtl_usb_probe", 4096, h, kProbePrio,
-                                &h->probe_task, core) != pdPASS) {
+    /* Scan already-attached devices from the registered client's task. */
+    const uint8_t rescan = 0;
+    if (xQueueSend(h->probe_q, &rescan, 0) != pdTRUE) {
         return ESP_ERR_NO_MEM;
     }
-    h->worker_task_count++;
-
-    /* Scan already-attached devices and open preferred candidate. */
-    rebuild_candidate_list(h);
-    open_selected_candidate(h, true);
     return ESP_OK;
 }
 
@@ -1930,7 +1924,6 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     handle->join_waiter = nullptr;
     handle->host_task = nullptr;
     handle->client_task = nullptr;
-    handle->probe_task = nullptr;
     handle->delivery_task = nullptr;
     handle->worker_task_count = 0;
 

@@ -2222,11 +2222,14 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         }
         handle->iface_claimed = true;
 
-        if (handle->profile == RtlProfileId::BlogV3) {
+        if (rtl_profile_uses_r820t2_i2c_remap(handle->profile)) {
+            /* Provisional R820T2 path (Blog V3 + Nooelec): same USB IR template
+             * remapping 0x74→0x34. Experimental/community soak — not Hardware-verified.
+             * No V4 HF Cable-2/GPIO5; RF < 24 MHz already rejected above. */
             ESP_LOGW(TAG,
-                     "blog_v3_r820t2 identified; no init table — streaming unsupported");
-            ret = ESP_RTL_SDR_ERR_UNSUPPORTED;
-            break;
+                     "%s: provisional R820T2 stream (I2C 0x34 remap); "
+                     "maintainer-unverified — please report soak results",
+                     rtl_profile_name(handle->profile));
         }
         ret = run_init_table(handle);
         if (ret != ESP_OK) {

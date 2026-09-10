@@ -6,8 +6,8 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-09**
-Version: **0.7.15** (Blog V4 HF/VHF/UHF route composition implemented; GPIO and RF acceptance still operator work - not production-ready)
+Snapshot date: **2026-09-10**
+Version: **0.8.0-rc1** (EXPERIMENTAL multi-dongle profiles; Blog V4 routing preserved; Nooelec provisional; V3 identity-only; not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -67,7 +67,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Area | State | Boundary |
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
-| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 profile |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 **provisional**; Blog V3 **not streaming** |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
@@ -89,7 +89,10 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Sync `read()` | **Implemented** | |
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
 | Multi-device select | **Implemented** | |
-| Blog V4 filter `0bda:2838` | **Implemented** | |
+| Blog V4 filter `0bda:2838` | **Implemented** | Exact `RTLSDRBlog` / `Blog V4` only — never bare VID/PID |
+| Nooelec NESDR SMArt v5 `0bda:2838` | **Provisional / unverified by maintainer** | Exact `Nooelec` + product contains `NESDR SMArt v5`; I2C `0x34`; HF<24 MHz rejected |
+| Blog V3 / R820T2 identity probe | **Experimental / unverified** | Exact V3 descriptors or completed chip-id; `CAP_STREAM` false |
+| Blog V3 IQ streaming | **Not implemented** | Requires first-party V3 USB capture |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |
@@ -125,6 +128,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.13** | Public metrics_delta / health_from_window from metric snapshots (honest soak/app window) |
 | **0.7.14** | stop_stream_internal drains live URBs (shared with pause) before free_bulk_pool; avoids Tab5 HCD assert on band-switch stop→start |
 | **0.7.15** | Composed Blog V4 Cable-2/GPIO5/Bias-T/gain routing; physical GPIO and RF acceptance pending |
+| **0.8.0-rc1** | Unified multi-dongle profiles (V4 + provisional Nooelec + V3 identity); EXPERIMENTAL prerelease |
 
 ---
 

@@ -117,7 +117,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.0** | Continuous rates + need + health + passport + docs (vision/silicon/lab) |
 | **0.7.1** | Host tests / CI spine expansion |
 | **0.7.2** | Runtime hardening (STARTING, join, ring transactional, Kconfig) |
-| **0.7.3** | True async retune from event callback + `EVT_RETUNED` |
+| **0.7.3** | True async retune from callback + `EVT_RETUNED` |
 | **0.7.4** | Delivery modes BOTH/CALLBACK/READ + lazy pull ring |
 | **0.7.5** | Measured Blog V4 gain ladder + bias-T SYS EP0; CAP_GAIN/BIAS on |
 | **0.7.6** | Async mid-stream gain/bias (bulk-pause queue); stall retries; desktop-gap map |
@@ -170,7 +170,7 @@ unless a task explicitly says otherwise.
 ## Hardware matrix (hosts)
 
 | Host | USB | Dongle | State |
-|---|---|---|
+|---|---|---|---|
 | ESP32-P4 Tab5 | HS | Blog V4 | **Provenance** |
 | ESP32-P4 Waveshare | HS | Blog V4 | **Provenance** |
 | ESP32-S3/S2 | FS | — | **Not claimed** |

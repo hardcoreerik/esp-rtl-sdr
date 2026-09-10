@@ -1,6 +1,6 @@
 {
   "name": "esp_rtl_sdr",
-  "version": "0.7.15",
+  "version": "0.8.0-rc1",
   "description": "Clean-room ESP USB Host client for RTL2832U-class SDR (Blog V4 profile first)",
   "keywords": "sdr, rtl-sdr, rtl2832u, usb, esp32-p4, esp_rtl_sdr",
   "license": "AGPL-3.0-only",
@@ -8,14 +8,21 @@
     "type": "git",
     "url": "https://github.com/hardcoreerik/esp-rtl-sdr.git"
   },
-  "frameworks": ["arduino", "espidf"],
-  "platforms": ["espressif32"],
+  "authors": [
+    {
+      "name": "hardcoreerik",
+      "url": "https://github.com/hardcoreerik"
+    }
+  ],
+  "frameworks": "espidf",
+  "platforms": "espressif32",
+  "headers": "include/esp_rtl_sdr.h",
   "build": {
     "includeDir": "include",
     "srcDir": "src",
-    "flags": [
-      "-Iprivate",
-      "-std=gnu++17"
+    "srcFilter": [
+      "+<*>",
+      "-<../examples/>"
     ]
   }
 }

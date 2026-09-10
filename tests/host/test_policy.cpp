@@ -75,10 +75,15 @@ static void test_version(void)
     EXPECT_TRUE(vs[0] != '\0');
     EXPECT_STREQ(vs, ESP_RTL_SDR_VERSION_STRING);
 
+    EXPECT_STREQ(vs, ESP_RTL_SDR_VERSION_STRING);
+#if ESP_RTL_SDR_VERSION_IS_PRERELEASE
+    EXPECT_TRUE(std::strstr(vs, "-rc") != nullptr);
+#else
     char expect[32];
     std::snprintf(expect, sizeof(expect), "%u.%u.%u", ESP_RTL_SDR_VERSION_MAJOR,
                   ESP_RTL_SDR_VERSION_MINOR, ESP_RTL_SDR_VERSION_PATCH);
     EXPECT_STREQ(vs, expect);
+#endif
 
     const uint32_t packed = esp_rtl_sdr_get_version();
     EXPECT_EQ_U((packed >> 16) & 0xff, ESP_RTL_SDR_VERSION_MAJOR);

@@ -2,9 +2,11 @@
  * @file esp_rtl_sdr.h
  * @brief esp_rtl_sdr — production public C API (best-in-class contract)
  *
- * Standalone ESP-IDF USB Host client for the official RTL-SDR Blog V4
- * (USB 0bda:2838). Transfer sequences are clean-room / measured — this is
- * not a librtlsdr port.
+ * Standalone ESP-IDF USB Host client for RTL2832U-class SDR dongles.
+ * Blog V4 (R828D) is the measured streaming path. Nooelec NESDR SMArt v5 is
+ * provisional. Blog V3 identity probing is experimental and does not claim
+ * streaming. Transfer sequences are clean-room / measured where stated —
+ * this is not a librtlsdr port.
  *
  * ---------------------------------------------------------------------------
  * Design principles (must work every time)
@@ -60,7 +62,7 @@
  * Ownership
  * ---------------------------------------------------------------------------
  *
- * - One handle owns one logical V4 session (interface 0).
+ * - One handle owns one logical accepted-profile session (interface 0).
  * - If host_library_already_installed is false, the driver installs/uninstalls
  *   the USB Host stack for that handle; if true, the app owns install and must
  *   keep the stack alive for the handle lifetime.
@@ -86,8 +88,12 @@ extern "C" {
 
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
-#define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 15
+#define ESP_RTL_SDR_VERSION_MINOR 8
+#define ESP_RTL_SDR_VERSION_PATCH 0
+/** 1 while experimental prerelease; 0 for stable X.Y.Z. */
+#define ESP_RTL_SDR_VERSION_IS_PRERELEASE 1
+/** Token for prerelease suffix (stringized into VERSION_STRING). */
+#define ESP_RTL_SDR_VERSION_PRERELEASE rc1
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -99,10 +105,18 @@ extern "C" {
  */
 #define ESP_RTL_SDR_VERSION_STRING_XSTR(s) #s
 #define ESP_RTL_SDR_VERSION_STRING_STR(s) ESP_RTL_SDR_VERSION_STRING_XSTR(s)
+#if ESP_RTL_SDR_VERSION_IS_PRERELEASE
+#define ESP_RTL_SDR_VERSION_STRING                                      \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MAJOR) "."    \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MINOR) "."    \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_PATCH) "-"    \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_PRERELEASE)
+#else
 #define ESP_RTL_SDR_VERSION_STRING                                      \
     ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MAJOR) "."    \
     ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MINOR) "."    \
     ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_PATCH)
+#endif
 
 /**
  * Packed version: (major << 16) | (minor << 8) | patch.
@@ -110,7 +124,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.7.0". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.8.0-rc1". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */
@@ -149,7 +163,10 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 /* Constants (policy)                                                         */
 /* -------------------------------------------------------------------------- */
 
-/** Official Blog V4 USB identity (measured). */
+/**
+ * Shared Realtek RTL2832U USB identity. Many sticks reuse 0bda:2838 —
+ * never treat VID/PID alone as Blog V4. Driver matches descriptors / probe.
+ */
 #define ESP_RTL_SDR_USB_VID            0x0BDA
 #define ESP_RTL_SDR_USB_PID            0x2838
 
@@ -343,6 +360,17 @@ typedef enum {
     ESP_RTL_SDR_HEALTH_RF_WEAK = 5,       /**< very low sample swing */
 } esp_rtl_sdr_health_t;
 
+/**
+ * Hardware profile selected by the driver (plug-and-play; no app picker).
+ * Identity ≠ tuner family ≠ board front-end. Apps consume capabilities.
+ */
+typedef enum {
+    ESP_RTL_SDR_PROFILE_UNKNOWN = 0,          /**< default until identified / after detach */
+    ESP_RTL_SDR_PROFILE_BLOG_V4 = 1,          /**< RTL-SDR Blog V4 / R828D + HF upconverter */
+    ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / R820T2 identity only (no stream) */
+    ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5 = 3, /**< NESDR SMArt v5 / R820T2-R860 provisional */
+} esp_rtl_sdr_profile_t;
+
 typedef struct {
     uint16_t vid;
     uint16_t pid;
@@ -350,7 +378,7 @@ typedef struct {
     char manufacturer[48];
     char product[48];
     bool high_speed;
-    bool present; /**< false if no V4 currently attached */
+    bool present; /**< false if no accepted profile currently attached */
 } esp_rtl_sdr_device_info_t;
 
 typedef struct {
@@ -594,8 +622,26 @@ uint32_t esp_rtl_sdr_tuner_frequency_hz(uint32_t rf_hz);
 esp_err_t esp_rtl_sdr_preset_frequency_hz(esp_rtl_sdr_preset_t preset,
                                              uint32_t *out_hz);
 
-/** Capability bitmask for this binary (see esp_rtl_sdr_cap_t). */
+/**
+ * Capability bitmask for this binary's Blog V4 feature set (see esp_rtl_sdr_cap_t).
+ * For the *attached* dongle, prefer esp_rtl_sdr_get_device_capabilities().
+ */
 uint32_t esp_rtl_sdr_get_capabilities(void);
+
+/**
+ * Active hardware profile for the open device.
+ * Returns UNKNOWN for NULL/stale handles or when nothing accepted is attached.
+ */
+esp_rtl_sdr_profile_t esp_rtl_sdr_get_profile(esp_rtl_sdr_handle_t handle);
+
+/**
+ * Capability bitmask for the currently attached profile.
+ * Detached / UNKNOWN → 0. Blog V3 omits CAP_STREAM. Nooelec omits HF/gain/bias.
+ */
+uint32_t esp_rtl_sdr_get_device_capabilities(esp_rtl_sdr_handle_t handle);
+
+/** Stable profile name string. Never NULL. */
+const char *esp_rtl_sdr_profile_to_name(esp_rtl_sdr_profile_t profile);
 
 /** True if mode emits EVT_IQ_BLOCK for bulk IQ. */
 bool esp_rtl_sdr_delivery_mode_uses_callback_iq(esp_rtl_sdr_delivery_mode_t mode);
@@ -640,7 +686,7 @@ esp_rtl_sdr_state_t esp_rtl_sdr_get_state(esp_rtl_sdr_handle_t handle);
 esp_err_t esp_rtl_sdr_get_last_error(esp_rtl_sdr_handle_t handle);
 
 /**
- * Copy device info. present=false if no accepted V4 is attached.
+ * Copy device info. present=false if no accepted profile is attached.
  * Thread-safe snapshot. out_info is not modified on failure.
  */
 esp_err_t esp_rtl_sdr_get_device_info(esp_rtl_sdr_handle_t handle,
@@ -793,7 +839,7 @@ esp_err_t esp_rtl_sdr_set_freq_correction(esp_rtl_sdr_handle_t handle, int ppm);
 esp_err_t esp_rtl_sdr_get_freq_correction(esp_rtl_sdr_handle_t handle, int *out_ppm);
 
 /**
- * Rescan USB for accepted profile devices (Blog V4 identity today).
+ * Rescan USB for accepted profile devices (Blog V4 / provisional Nooelec / V3 id).
  * Updates internal candidate list used by get_device_count / select_*.
  * Does not close the currently open device unless it vanished.
  */

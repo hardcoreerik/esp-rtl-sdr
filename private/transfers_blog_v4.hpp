@@ -1,15 +1,9 @@
 #pragma once
 
+#include "rtl_control.hpp"
+
 #include <cstddef>
 #include <cstdint>
-
-struct RtlControlRecord {
-  uint16_t value;
-  uint16_t index;
-  uint8_t request_type;
-  uint8_t length;
-  uint8_t data[8];
-};
 
 constexpr RtlControlRecord kRtlInitTransfers[] = {
     {0x2000, 0x0110, 0x40, 1, {0x09, 0, 0, 0, 0, 0, 0, 0}},

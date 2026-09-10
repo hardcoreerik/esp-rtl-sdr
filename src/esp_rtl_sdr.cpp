@@ -29,6 +29,8 @@
 #include "freertos/task.h"
 #include "usb/usb_host.h"
 
+#include "rtl_profile.hpp"
+#include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
 #include "measured_gain_bias_v4.hpp"
 #include "reentrancy.hpp"
@@ -51,8 +53,6 @@ static constexpr UBaseType_t kDeliveryPrio = 18;
 
 static constexpr uint16_t kVid = ESP_RTL_SDR_USB_VID;
 static constexpr uint16_t kPid = ESP_RTL_SDR_USB_PID;
-static constexpr char kMfg[] = "RTLSDRBlog";
-static constexpr char kProduct[] = "Blog V4";
 
 /** Extra high-band steps when passport recommended_only == false. */
 static const uint32_t kPassportExtraRates[] = {
@@ -62,6 +62,7 @@ static const uint32_t kPassportExtraRates[] = {
 struct DeviceCandidate {
     uint8_t addr = 0;
     esp_rtl_sdr_device_info_t info{};
+    RtlProfileId profile = RtlProfileId::Unknown;
     bool valid = false;
 };
 
@@ -80,6 +81,8 @@ struct esp_rtl_sdr_handle {
     SemaphoreHandle_t lock = nullptr;
     esp_rtl_sdr_config_t cfg{};
     esp_rtl_sdr_device_info_t info{};
+    RtlProfileId profile = RtlProfileId::Unknown;
+    uint32_t device_caps = 0;
     esp_rtl_sdr_metrics_t metrics{};
     esp_rtl_sdr_state_t state = ESP_RTL_SDR_STATE_UNINSTALLED;
     esp_err_t last_error = ESP_OK;
@@ -414,11 +417,44 @@ static void ctrl_cb(usb_transfer_t *xfer)
     xSemaphoreGive(h->ctrl_sem);
 }
 
-static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest,
-                             uint16_t wValue, uint16_t wIndex, const uint8_t *data,
-                             uint16_t wLength, bool expect_stall)
+static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
 {
-    if (h->ctrl_xfer == nullptr || h->dev == nullptr) {
+    if (h == nullptr) {
+        return;
+    }
+    h->profile = RtlProfileId::Unknown;
+    h->device_caps = 0;
+    h->frontend_applied_valid = false;
+    h->frontend_applied = MeasuredV4FrontendPlan{};
+    h->tuner_reg05_low_bits = 0x03;
+    h->tuner_reg07 = 0x75;
+    h->tuner_auto_applied = false;
+    h->bias_tee_want = false;
+    h->rtl_agc_want = false;
+    h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
+    h->gain_tenth_db = 0;
+    h->pending_retune_hz = 0;
+    h->pending_gain = false;
+    h->pending_gain_mode = false;
+    h->pending_bias = false;
+    h->pending_rtl_agc = false;
+}
+
+static void apply_profile_to_handle(esp_rtl_sdr_handle *h, RtlProfileId profile,
+                                    const esp_rtl_sdr_device_info_t &info)
+{
+    h->profile = profile;
+    h->device_caps = rtl_profile_device_capabilities(profile);
+    h->info = info;
+    h->info.present = (profile != RtlProfileId::Unknown);
+}
+
+static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t dev, uint8_t bm,
+                                    uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
+                                    const uint8_t *data, uint16_t wLength, bool expect_stall,
+                                    uint8_t *response = nullptr, uint16_t response_length = 0)
+{
+    if (h->ctrl_xfer == nullptr || dev == nullptr) {
         return ESP_RTL_SDR_ERR_USB;
     }
     xSemaphoreTake(h->ctrl_mutex, portMAX_DELAY);
@@ -436,7 +472,7 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
             std::memcpy(x->data_buffer + sizeof(usb_setup_packet_t), data, wLength);
         }
         x->num_bytes = sizeof(usb_setup_packet_t) + wLength;
-        x->device_handle = h->dev;
+        x->device_handle = dev;
         x->bEndpointAddress = 0;
         x->callback = ctrl_cb;
         x->context = h;
@@ -457,6 +493,12 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
             break;
         }
         if (h->ctrl_status == ESP_OK) {
+            if ((bm & USB_BM_REQUEST_TYPE_DIR_IN) != 0 && response != nullptr &&
+                response_length > 0) {
+                const uint16_t copy_length =
+                    (response_length < wLength) ? response_length : wLength;
+                std::memcpy(response, x->data_buffer + sizeof(usb_setup_packet_t), copy_length);
+            }
             final_err = ESP_OK;
             break;
         }
@@ -465,7 +507,7 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
                 final_err = ESP_OK;
                 break;
             }
-            /* V4 EP0 STALL: recover then retry (common after bulk pause / SYS writes). */
+            /* EP0 STALL: recover then retry (common after bulk pause / SYS writes). */
             vTaskDelay(pdMS_TO_TICKS(attempt == 0 ? 25 : 50));
             continue;
         }
@@ -477,11 +519,67 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
     return final_err;
 }
 
+static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest,
+                             uint16_t wValue, uint16_t wIndex, const uint8_t *data,
+                             uint16_t wLength, bool expect_stall)
+{
+    return ctrl_submit_device(h, h != nullptr ? h->dev : nullptr, bm, bRequest, wValue, wIndex,
+                              data, wLength, expect_stall);
+}
+
+static uint16_t tuner_i2c_value_for_handle(const esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr) {
+        return kBlogV4TunerI2cValue;
+    }
+    const uint16_t v = rtl_profile_tuner_i2c_value(h->profile);
+    return v != 0 ? v : kBlogV4TunerI2cValue;
+}
+
+static RtlControlRecord map_tuner_record_for_profile(esp_rtl_sdr_handle *h,
+                                                     const RtlControlRecord &rec)
+{
+    RtlControlRecord mapped = rec;
+    const uint16_t tuner_addr = tuner_i2c_value_for_handle(h);
+    if (tuner_addr != kBlogV4TunerI2cValue &&
+        (mapped.index == 0x0610 || mapped.index == 0x0600) &&
+        (mapped.value & 0x00ffu) == kBlogV4TunerI2cValue) {
+        mapped.value = static_cast<uint16_t>((mapped.value & 0xff00u) | tuner_addr);
+    }
+    return mapped;
+}
+
 static esp_err_t run_record(esp_rtl_sdr_handle *h, const RtlControlRecord &rec,
                             bool expect_stall)
 {
-    return ctrl_submit(h, rec.request_type, 0, rec.value, rec.index, rec.data, rec.length,
-                       expect_stall);
+    const RtlControlRecord mapped = map_tuner_record_for_profile(h, rec);
+    return ctrl_submit(h, mapped.request_type, 0, mapped.value, mapped.index, mapped.data,
+                       mapped.length, expect_stall);
+}
+
+static bool probe_blog_v3_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
+                                RtlProfileProbeResult *out_probe)
+{
+    if (out_probe == nullptr) {
+        return false;
+    }
+    *out_probe = {};
+    if (ctrl_submit_device(h, dev, kBlogV3ProbeSelect.request_type, 0,
+                           kBlogV3ProbeSelect.value, kBlogV3ProbeSelect.index,
+                           kBlogV3ProbeSelect.data, kBlogV3ProbeSelect.length,
+                           false) != ESP_OK) {
+        return false;
+    }
+    uint8_t chip_id = 0;
+    if (ctrl_submit_device(h, dev, kBlogV3ProbeRead.request_type, 0, kBlogV3ProbeRead.value,
+                           kBlogV3ProbeRead.index, kBlogV3ProbeRead.data,
+                           kBlogV3ProbeRead.length, false, &chip_id,
+                           sizeof(chip_id)) != ESP_OK) {
+        return false;
+    }
+    out_probe->completed = true;
+    out_probe->chip_id = chip_id;
+    return rtl_profile_v3_probe_matches(*out_probe);
 }
 
 static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
@@ -531,14 +629,21 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
  */
 static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
 {
-    const uint32_t tuner_base = esp_rtl_sdr_tuner_frequency_hz(frequency_hz);
+    if (h != nullptr && !rtl_profile_supports_rf_hz(h->profile, frequency_hz)) {
+        ESP_LOGW(TAG, "profile %s rejects rf=%u",
+                 rtl_profile_name(h->profile), static_cast<unsigned>(frequency_hz));
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
+    }
+    const RtlProfileId profile = h != nullptr ? h->profile : RtlProfileId::BlogV4;
+    const uint32_t tuner_base = rtl_profile_tuner_frequency_hz(profile, frequency_hz);
     const uint32_t tune_hz =
         apply_freq_correction_hz(tuner_base, h != nullptr ? h->freq_correction_ppm : 0);
     uint8_t r16_setup = 0, r16_active = 0, r20 = 0, r21 = 0, r22 = 0;
     if (!encode_r820_pll(tune_hz, &r16_setup, &r16_active, &r20, &r21, &r22)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
-    const bool hf = esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz);
+    const bool hf = rtl_profile_uses_v4_hf_routing(profile) &&
+                    esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz);
     ESP_LOGI(TAG,
              "tune rf=%u Hz tuner=%u Hz ppm=%d hf_upconv=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x",
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
@@ -599,6 +704,13 @@ static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz,
                                    uint8_t raw_reg05, uint8_t reg07, uint8_t reg0c,
                                    bool bias_companion = false)
 {
+    /* Blog V4 Cable-2 / GPIO5 / Bias-T composition only. Other profiles skip. */
+    if (h == nullptr || !rtl_profile_uses_v4_hf_routing(h->profile)) {
+        if (h != nullptr) {
+            h->frontend_applied_valid = false;
+        }
+        return ESP_OK;
+    }
     const MeasuredV4FrontendPlan plan =
         measured_v4_frontend_plan(rf_hz, h->bias_tee_want, raw_reg05);
     const bool uhf = plan.band == MeasuredV4FrontendBand::UHF;
@@ -662,6 +774,9 @@ static uint32_t frontend_rf_hz(const esp_rtl_sdr_handle *h)
 
 static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
 {
+    if (h == nullptr || h->profile != RtlProfileId::BlogV4) {
+        return;
+    }
     for (const auto &rec : kRtlCleanupTransfers) {
         (void)run_record(h, rec, true);
     }
@@ -1344,18 +1459,32 @@ static void str_desc_ascii(const usb_str_desc_t *d, char *out, size_t out_sz)
     out[n] = '\0';
 }
 
-static bool accept_blog_v4(const usb_device_desc_t *dd, const usb_device_info_t *info,
-                           esp_rtl_sdr_device_info_t *out)
+static RtlProfileId identify_profile(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
+                                     const usb_device_desc_t *dd, const usb_device_info_t *info,
+                                     esp_rtl_sdr_device_info_t *out)
 {
-    if (dd->idVendor != kVid || dd->idProduct != kPid) {
-        return false;
+    if (dd == nullptr || info == nullptr || out == nullptr) {
+        return RtlProfileId::Unknown;
     }
     char mfg[48]{}, prod[48]{}, ser[32]{};
     str_desc_ascii(info->str_desc_manufacturer, mfg, sizeof(mfg));
     str_desc_ascii(info->str_desc_product, prod, sizeof(prod));
     str_desc_ascii(info->str_desc_serial_num, ser, sizeof(ser));
-    if (std::strcmp(mfg, kMfg) != 0 || std::strcmp(prod, kProduct) != 0) {
-        return false;
+
+    RtlProfileProbeResult probe{};
+    RtlProfileId profile = rtl_profile_from_descriptors(dd->idVendor, dd->idProduct, mfg, prod);
+    if (profile == RtlProfileId::Unknown && dd->idVendor == kVid && dd->idProduct == kPid) {
+        /* Client task must keep dispatching USB callbacks; defer active I2C
+         * probes to install/refresh/select/host-lib callers outside this task. */
+        if (h != nullptr && h->client_task != nullptr &&
+            xTaskGetCurrentTaskHandle() == h->client_task) {
+            return RtlProfileId::Unknown;
+        }
+        (void)probe_blog_v3_tuner(h, dev, &probe);
+        profile = rtl_profile_select(dd->idVendor, dd->idProduct, mfg, prod, probe);
+    }
+    if (profile == RtlProfileId::Unknown) {
+        return RtlProfileId::Unknown;
     }
     out->vid = dd->idVendor;
     out->pid = dd->idProduct;
@@ -1364,7 +1493,7 @@ static bool accept_blog_v4(const usb_device_desc_t *dd, const usb_device_info_t 
     std::snprintf(out->manufacturer, sizeof(out->manufacturer), "%s", mfg);
     std::snprintf(out->product, sizeof(out->product), "%s", prod);
     std::snprintf(out->serial, sizeof(out->serial), "%s", ser);
-    return true;
+    return profile;
 }
 
 /** Probe address; if accepted profile, fill candidate and close unless keep_open. */
@@ -1378,6 +1507,7 @@ static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate
     if (h->dev != nullptr && h->open_addr == addr) {
         out->addr = addr;
         out->info = h->info;
+        out->profile = h->profile;
         out->valid = true;
         return true;
     }
@@ -1393,17 +1523,19 @@ static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate
         return false;
     }
     esp_rtl_sdr_device_info_t di{};
-    if (!accept_blog_v4(dd, &info, &di)) {
+    const RtlProfileId profile = identify_profile(h, dev, dd, &info, &di);
+    if (profile == RtlProfileId::Unknown) {
         usb_host_device_close(h->client, dev);
         return false;
     }
     out->addr = addr;
     out->info = di;
+    out->profile = profile;
     out->valid = true;
     if (keep_open && h->dev == nullptr) {
         h->dev = dev;
         h->open_addr = addr;
-        h->info = di;
+        apply_profile_to_handle(h, profile, di);
         return true;
     }
     usb_host_device_close(h->client, dev);
@@ -1470,6 +1602,8 @@ static void open_selected_candidate(esp_rtl_sdr_handle *h, bool fire_events = tr
     ESP_LOGI(TAG, "open %s %s serial=%s hs=%d index=%u", cand.info.manufacturer,
              cand.info.product, cand.info.serial, static_cast<int>(cand.info.high_speed),
              static_cast<unsigned>(idx));
+    ESP_LOGI(TAG, "profile=%s caps=0x%08x", rtl_profile_name(cand.profile),
+             static_cast<unsigned>(rtl_profile_device_capabilities(cand.profile)));
 
     if (fire_events) {
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
@@ -1515,6 +1649,8 @@ static void try_open_device(esp_rtl_sdr_handle *h, uint8_t addr)
         h->preferred_device_index = match_idx;
         ESP_LOGI(TAG, "open %s %s serial=%s hs=%d", cand.info.manufacturer, cand.info.product,
                  cand.info.serial, static_cast<int>(cand.info.high_speed));
+        ESP_LOGI(TAG, "profile=%s caps=0x%08x", rtl_profile_name(cand.profile),
+                 static_cast<unsigned>(rtl_profile_device_capabilities(cand.profile)));
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
         void *ctx = h->cfg.event_ctx;
         if (cb) {
@@ -1545,6 +1681,12 @@ static void host_lib_task_fn(void *arg)
         uint32_t flags = 0;
         /* 50 ms: faster join on uninstall than 100 ms. */
         usb_host_lib_handle_events(pdMS_TO_TICKS(50), &flags);
+        /* Open/probe outside client_task so EP0 probe callbacks can complete. */
+        if (h->pending_addr != 0) {
+            const uint8_t a = h->pending_addr;
+            h->pending_addr = 0;
+            try_open_device(h, a);
+        }
     }
     worker_task_exit(h);
 }
@@ -1554,11 +1696,6 @@ static void client_task_fn(void *arg)
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
         usb_host_client_handle_events(h->client, pdMS_TO_TICKS(20));
-        if (h->pending_addr != 0) {
-            const uint8_t a = h->pending_addr;
-            h->pending_addr = 0;
-            try_open_device(h, a);
-        }
         if (h->device_gone) {
             h->device_gone = false;
             h->streaming = false;
@@ -1571,6 +1708,8 @@ static void client_task_fn(void *arg)
                 h->dev = nullptr;
                 h->open_addr = 0;
             }
+            clear_profile_runtime_state(h);
+            h->info = {};
             h->info.present = false;
             h->state = ESP_RTL_SDR_STATE_IDLE;
             esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
@@ -1678,10 +1817,9 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
         h->cfg = full;
     }
     h->state = ESP_RTL_SDR_STATE_IDLE;
-    h->info.vid = kVid;
-    h->info.pid = kPid;
-    std::snprintf(h->info.manufacturer, sizeof(h->info.manufacturer), "%s", kMfg);
-    std::snprintf(h->info.product, sizeof(h->info.product), "%s", kProduct);
+    clear_profile_runtime_state(h);
+    h->info = {};
+    h->info.present = false;
 
     if (usb_host_transfer_alloc(kCtrlXferBytes, 0, &h->ctrl_xfer) != ESP_OK) {
         h->magic = 0;
@@ -1836,6 +1974,30 @@ esp_err_t esp_rtl_sdr_get_last_error(esp_rtl_sdr_handle_t handle)
         return ESP_RTL_SDR_ERR_TIMEOUT;
     }
     return handle->last_error;
+}
+
+esp_rtl_sdr_profile_t esp_rtl_sdr_get_profile(esp_rtl_sdr_handle_t handle)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_PROFILE_UNKNOWN;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_PROFILE_UNKNOWN;
+    }
+    return rtl_profile_to_public(handle->profile);
+}
+
+uint32_t esp_rtl_sdr_get_device_capabilities(esp_rtl_sdr_handle_t handle)
+{
+    if (!handle_ok(handle)) {
+        return 0;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return 0;
+    }
+    return handle->device_caps;
 }
 
 esp_err_t esp_rtl_sdr_get_device_info(esp_rtl_sdr_handle_t handle,
@@ -2034,6 +2196,18 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
         return ESP_RTL_SDR_ERR_NO_DEVICE;
     }
+    if (handle->profile == RtlProfileId::Unknown) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE);
+        return ESP_RTL_SDR_ERR_UNSUPPORTED_DEVICE;
+    }
+    if (!rtl_profile_supports_stream(handle->profile)) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
+    if (!rtl_profile_supports_rf_hz(handle->profile, freq)) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_FREQ);
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
+    }
     handle->state = ESP_RTL_SDR_STATE_STARTING;
 
     /* USB work without holding API mutex across long EP0 sequences */
@@ -2048,6 +2222,12 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         }
         handle->iface_claimed = true;
 
+        if (handle->profile == RtlProfileId::BlogV3) {
+            ESP_LOGW(TAG,
+                     "blog_v3_r820t2 identified; no init table — streaming unsupported");
+            ret = ESP_RTL_SDR_ERR_UNSUPPORTED;
+            break;
+        }
         ret = run_init_table(handle);
         if (ret != ESP_OK) {
             break;
@@ -2181,6 +2361,10 @@ esp_err_t esp_rtl_sdr_retune_hz(esp_rtl_sdr_handle_t handle, uint32_t frequency_
         if (handle->state != ESP_RTL_SDR_STATE_STREAMING || !handle->streaming) {
             set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_STREAMING);
             return ESP_RTL_SDR_ERR_NOT_STREAMING;
+        }
+        if (!rtl_profile_supports_rf_hz(handle->profile, q)) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_BAD_FREQ);
+            return ESP_RTL_SDR_ERR_BAD_FREQ;
         }
         handle->pending_retune_hz = q;
         {
@@ -2639,6 +2823,8 @@ esp_err_t esp_rtl_sdr_select_device(esp_rtl_sdr_handle_t handle, size_t index)
             usb_host_device_close(handle->client, handle->dev);
             handle->dev = nullptr;
             handle->open_addr = 0;
+            clear_profile_runtime_state(handle);
+            handle->info = {};
             handle->info.present = false;
         }
         open_selected_candidate(handle, false); /* no callback under lock */
@@ -2710,6 +2896,8 @@ esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const ch
             usb_host_device_close(handle->client, handle->dev);
             handle->dev = nullptr;
             handle->open_addr = 0;
+            clear_profile_runtime_state(handle);
+            handle->info = {};
             handle->info.present = false;
         }
         open_selected_candidate(handle, false);
@@ -3366,6 +3554,9 @@ esp_err_t esp_rtl_sdr_set_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
     if (mode != ESP_RTL_SDR_GAIN_MODE_AUTO && mode != ESP_RTL_SDR_GAIN_MODE_MANUAL) {
         return ESP_ERR_INVALID_ARG;
     }
+    if ((handle->device_caps & (ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO)) == 0) {
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
     if (check_not_reentrant(handle) != ESP_OK) {
         return ESP_RTL_SDR_ERR_REENTRANT;
     }
@@ -3428,6 +3619,9 @@ esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_GAIN) == 0) {
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
     if (check_not_reentrant(handle) != ESP_OK) {
         return ESP_RTL_SDR_ERR_REENTRANT;
     }
@@ -3488,6 +3682,10 @@ esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gain
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_GAIN) == 0) {
+        *out_count = 0;
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
     *out_count = kMeasuredV4GainStepCount;
     if (out_gains_tenth_db == nullptr || max_count == 0) {
         return ESP_OK; /* size query */
@@ -3505,6 +3703,9 @@ esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
 {
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) == 0) {
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
     if (check_not_reentrant(handle) != ESP_OK) {
         return ESP_RTL_SDR_ERR_REENTRANT;

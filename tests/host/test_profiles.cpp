@@ -74,9 +74,6 @@ static void test_unknown_reject_and_v3_probe(void)
     EXPECT_EQ_U((unsigned)rtl_profile_select(0x0BDA, 0x2838, "RTL2832U", "Generic",
                                              {false, 0x96}),
                 (unsigned)RtlProfileId::Unknown);
-    EXPECT_EQ_U((unsigned)rtl_profile_select(0x0BDA, 0x2838, "RTL2832U", "Generic",
-                                             {true, 0x00}),
-                (unsigned)RtlProfileId::Unknown);
     EXPECT_EQ_U((unsigned)rtl_profile_select(0x1234, 0x2838, "RTLSDRBlog", "Blog V4", {}),
                 (unsigned)RtlProfileId::Unknown);
 
@@ -127,9 +124,18 @@ static void test_frequency_policy(void)
                 100000000u);
     EXPECT_TRUE(!rtl_profile_uses_v4_hf_routing(RtlProfileId::NooelecSmartV5));
 
-    /* V3: identified but no RF/stream path yet. */
-    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV3, 100000000u));
-    EXPECT_TRUE(!rtl_profile_supports_stream(RtlProfileId::BlogV3));
+    /* V3 provisional: same R820T2 floor as Nooelec; no V4 HF LO offset. */
+    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV3, 10000000u));
+    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV3, 23999999u));
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV3, 24000000u));
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV3, 100000000u));
+    EXPECT_TRUE(rtl_profile_supports_stream(RtlProfileId::BlogV3));
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV3, 100000000u),
+                100000000u);
+    EXPECT_TRUE(!rtl_profile_uses_v4_hf_routing(RtlProfileId::BlogV3));
+    EXPECT_TRUE(rtl_profile_uses_r820t2_i2c_remap(RtlProfileId::BlogV3));
+    EXPECT_TRUE(rtl_profile_uses_r820t2_i2c_remap(RtlProfileId::NooelecSmartV5));
+    EXPECT_TRUE(!rtl_profile_uses_r820t2_i2c_remap(RtlProfileId::BlogV4));
     EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::Unknown, 100000000u));
 }
 
@@ -145,9 +151,11 @@ static void test_capability_matrix(void)
     EXPECT_TRUE((v4 & ESP_RTL_SDR_CAP_GAIN) != 0);
     EXPECT_TRUE((v4 & ESP_RTL_SDR_CAP_BIAS_TEE) != 0);
 
-    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_STREAM) == 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_STREAM) != 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_RETUNE) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
-    EXPECT_TRUE(v3 != 0); /* still reports hotplug/metrics-class caps */
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN) == 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
 
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_STREAM) != 0);
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_RETUNE) != 0);
@@ -189,7 +197,8 @@ static void test_profile_transition_matrix(void)
 
     cur = RtlProfileId::BlogV3;
     caps = rtl_profile_device_capabilities(cur);
-    EXPECT_TRUE((caps & ESP_RTL_SDR_CAP_STREAM) == 0);
+    EXPECT_TRUE((caps & ESP_RTL_SDR_CAP_STREAM) != 0);
+    EXPECT_TRUE((caps & ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
 
     cur = RtlProfileId::BlogV4;
     caps = rtl_profile_device_capabilities(cur);

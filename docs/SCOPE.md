@@ -12,7 +12,7 @@ This project **fails closed** on unsupported hardware. Narrow support is a
 | **MCU** | ESP32-**P4** High-Speed USB Host | e.g. M5Stack Tab5, Waveshare P4 kits |
 | **Dongle** | RTL-SDR **Blog V4** (primary) | Exact `RTLSDRBlog` / `Blog V4` |
 | **Nooelec** | NESDR SMArt v5 provisional | Exact descriptors; maintainer-unverified |
-| **V3** | Identity probe only | No streaming claim |
+| **V3** | Provisional stream | R820T2 remap; community soak; not Hardware-verified |
 | **IQ** | Continuous CU8 multi-URB | CAP_STREAM |
 | **Tooling** | ESP-IDF ≥ 5.5, `esp32p4` | CI builds smoke on 5.5.4 |
 

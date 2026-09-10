@@ -5,6 +5,11 @@
 A **profile** is a measured package of identity rules + USB control sequences +
 tuner policy for one dongle class. The core host client stays shared.
 
+**esp_rtl_sdr is becoming a general RTL2832U-class SDR driver.** These dongles
+share the RTL2832U USB chip; profiles capture board/tuner differences (Blog V4
+R828D + HF routing vs R820T2/R860 without V4 HF). Capability-driven —
+**no user picker**.
+
 **Identity is not tuner family is not board front-end.** Sharing an R820T2/R860
 I2C address does not imply the same init, GPIO, or HF path.
 
@@ -30,22 +35,23 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 
 | Field | Value |
 |---|---|
-| Status | **Provisional / not maintainer-verified** |
+| Status | **Provisional** — contributor-tested; maintainer soak pending |
 | USB | Shared `0bda:2838` + exact `Nooelec` + product contains `NESDR SMArt v5` |
 | Tuner | R820T2/R860 @ I2C `0x34` (mapped from Blog V4 IR records) |
 | HF | **Rejected** below 24 MHz; no V4 HF routing |
 | Caps | STREAM/RETUNE/etc. without HF_UPCONVERTER / GAIN / BIAS_TEE |
-| Evidence | Contributor/OrcSDR tester reports; clean-room remap only |
+| Evidence | Contributor/OrcSDR tester reports; clean-room remap only; community soak welcome |
 
-### `blog_v3` (RTL-SDR Blog V3 / R820T2) — IDENTITY ONLY
+### `blog_v3` (RTL-SDR Blog V3 / R820T2) — PROVISIONAL STREAM
 
 | Field | Value |
 |---|---|
-| Status | **Experimental / unverified** — identity probe only |
+| Status | **Provisional / experimental / maintainer-unverified** — community soak |
 | USB | Exact V3 descriptors, or completed R820T2 chip-id `0x96`/`0x69` on ambiguous `0bda:2838` |
-| Tuner | Probe only; **no** init table |
-| Caps | **CAP_STREAM false**; `start` -> `ERR_UNSUPPORTED` |
-| Evidence | No physical V3 capture in this tree |
+| Tuner | R820T2/R860 @ I2C `0x34` (same USB IR template remap as Nooelec provisional) |
+| HF | **Rejected** below 24 MHz; **no** V4 HF upconverter / Cable-2 / GPIO5 |
+| Caps | STREAM/RETUNE/etc. without HF_UPCONVERTER / GAIN / BIAS_TEE |
+| Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`; no unique V3 init tables measured — shared R820T2 remap only. **Not** Hardware-verified |
 
 ## Fail closed
 

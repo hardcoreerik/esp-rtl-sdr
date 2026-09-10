@@ -33,7 +33,7 @@ the outcome.**
 | Stand-alone ESP-IDF component | **Yes** — this repo |
 | Clean-room Blog V4 USB path | **Yes** — measured tables; **not** a copy of librtlsdr / rtl-sdr-blog source |
 | Drop-in librtlsdr / `rtl-sdr.h` ABI | **No** — never a goal |
-| Every RTL2832U dongle works | **No** — profile-based; Blog V4 primary; Nooelec provisional; V3 identity-only |
+| Every RTL2832U dongle works | **No** — profile-based; Blog V4 primary; Nooelec + Blog V3 provisional stream |
 | All rates “P4 proven” | **No** — only 960k / 2.048M have **provenance** under OrcSDR; passport learns the rest **on your host** |
 | Re-soaked from *this* tree on hardware | **Open** — 0.8.0-rc1 keeps 0.7.15 V4 routing; Nooelec/V3 not maintainer-soaked; tracked in [PROJECT_TRUTH.md](../PROJECT_TRUTH.md) |
 | Formal third-party security audit | **No** |

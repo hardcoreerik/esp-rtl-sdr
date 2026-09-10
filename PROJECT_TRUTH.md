@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-09-10**
-Version: **0.8.0-rc1** (EXPERIMENTAL multi-dongle profiles; Blog V4 routing preserved; Nooelec + Blog V3 provisional stream; not production-ready)
+Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Nooelec + Blog V3 provisional stream; not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -131,6 +131,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.14** | stop_stream_internal drains live URBs (shared with pause) before free_bulk_pool; avoids Tab5 HCD assert on band-switch stop→start |
 | **0.7.15** | Composed Blog V4 Cable-2/GPIO5/Bias-T/gain routing; physical GPIO and RF acceptance pending |
 | **0.8.0-rc1** | Unified multi-dongle profiles (V4 + provisional Nooelec + provisional V3 stream); EXPERIMENTAL prerelease |
+| **0.8.0-rc2** | Hotplug/lifecycle hardening and removal of V4-only board controls from provisional R820T2/R860 initialization; hardware acceptance pending |
 
 ---
 

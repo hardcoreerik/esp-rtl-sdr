@@ -50,6 +50,8 @@ static constexpr UBaseType_t kUsbPrio = 20;
 static constexpr UBaseType_t kClientPrio = 19;
 /* Delivery only posts IQ; app audio task should be >= this and graphics much lower. */
 static constexpr UBaseType_t kDeliveryPrio = 18;
+static constexpr UBaseType_t kProbePrio = 19;
+static constexpr size_t kProbeQueueDepth = 8;
 
 static constexpr uint16_t kVid = ESP_RTL_SDR_USB_VID;
 static constexpr uint16_t kPid = ESP_RTL_SDR_USB_PID;
@@ -100,11 +102,12 @@ struct esp_rtl_sdr_handle {
     usb_host_client_handle_t client = nullptr;
     usb_device_handle_t dev = nullptr;
     bool iface_claimed = false;
-    uint8_t pending_addr = 0;
+    QueueHandle_t probe_q = nullptr;
     bool device_gone = false;
 
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
+    TaskHandle_t probe_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
     /** Set during uninstall; worker tasks notify this task before vTaskDelete. */
     TaskHandle_t join_waiter = nullptr;
@@ -438,6 +441,8 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->pending_gain_mode = false;
     h->pending_bias = false;
     h->pending_rtl_agc = false;
+    h->passport = {};
+    h->passport_valid = false;
 }
 
 static void apply_profile_to_handle(esp_rtl_sdr_handle *h, RtlProfileId profile,
@@ -584,15 +589,28 @@ static bool probe_blog_v3_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
 
 static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
 {
+    ESP_LOGI(TAG, "init begin profile=%s records=%u", rtl_profile_name(h->profile),
+             static_cast<unsigned>(std::size(kRtlInitTransfers)));
+    size_t skipped = 0;
     for (size_t i = 0; i < std::size(kRtlInitTransfers); ++i) {
+        if (!rtl_profile_allows_init_record(h->profile, kRtlInitTransfers[i])) {
+            skipped++;
+            continue;
+        }
         const bool stall = i >= kRtlInitExpectedStallFirst && i <= kRtlInitExpectedStallLast;
         esp_err_t e = run_record(h, kRtlInitTransfers[i], stall);
         if (e != ESP_OK) {
-            ESP_LOGE(TAG, "init record %u failed: %s", static_cast<unsigned>(i),
+            ESP_LOGE(TAG,
+                     "init failed profile=%s record=%u value=0x%04x index=0x%04x result=%s",
+                     rtl_profile_name(h->profile), static_cast<unsigned>(i),
+                     static_cast<unsigned>(kRtlInitTransfers[i].value),
+                     static_cast<unsigned>(kRtlInitTransfers[i].index),
                      esp_rtl_sdr_err_to_name(e));
             return e;
         }
     }
+    ESP_LOGI(TAG, "init complete profile=%s skipped_v4_board=%u",
+             rtl_profile_name(h->profile), static_cast<unsigned>(skipped));
     return ESP_OK;
 }
 
@@ -1667,7 +1685,13 @@ static void client_event_cb(const usb_host_client_event_msg_t *event, void *arg)
         return;
     }
     if (event->event == USB_HOST_CLIENT_EVENT_NEW_DEV) {
-        h->pending_addr = event->new_dev.address;
+        const uint8_t addr = event->new_dev.address;
+        const bool queued = h->probe_q != nullptr && xQueueSend(h->probe_q, &addr, 0) == pdTRUE;
+        ESP_LOGI(TAG, "usb new_device addr=%u queued=%d", static_cast<unsigned>(addr),
+                 static_cast<int>(queued));
+        if (!queued) {
+            ESP_LOGE(TAG, "usb probe_queue_full addr=%u", static_cast<unsigned>(addr));
+        }
     } else if (event->event == USB_HOST_CLIENT_EVENT_DEV_GONE &&
                event->dev_gone.dev_hdl == h->dev) {
         h->device_gone = true;
@@ -1681,11 +1705,24 @@ static void host_lib_task_fn(void *arg)
         uint32_t flags = 0;
         /* 50 ms: faster join on uninstall than 100 ms. */
         usb_host_lib_handle_events(pdMS_TO_TICKS(50), &flags);
-        /* Open/probe outside client_task so EP0 probe callbacks can complete. */
-        if (h->pending_addr != 0) {
-            const uint8_t a = h->pending_addr;
-            h->pending_addr = 0;
-            try_open_device(h, a);
+    }
+    worker_task_exit(h);
+}
+
+static void probe_task_fn(void *arg)
+{
+    auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
+    while (h->tasks_run) {
+        uint8_t addr = 0;
+        if (xQueueReceive(h->probe_q, &addr, pdMS_TO_TICKS(50)) == pdTRUE) {
+            if (addr == 0) {
+                ESP_LOGI(TAG, "usb probe_rescan");
+                rebuild_candidate_list(h);
+                open_selected_candidate(h);
+            } else {
+                ESP_LOGI(TAG, "usb probe_begin addr=%u", static_cast<unsigned>(addr));
+                try_open_device(h, addr);
+            }
         }
     }
     worker_task_exit(h);
@@ -1698,6 +1735,8 @@ static void client_task_fn(void *arg)
         usb_host_client_handle_events(h->client, pdMS_TO_TICKS(20));
         if (h->device_gone) {
             h->device_gone = false;
+            ESP_LOGW(TAG, "usb disconnected profile=%s addr=%u",
+                     rtl_profile_name(h->profile), static_cast<unsigned>(h->open_addr));
             h->streaming = false;
             if (h->iface_claimed && h->dev != nullptr) {
                 usb_host_interface_release(h->client, h->dev, 0);
@@ -1712,6 +1751,8 @@ static void client_task_fn(void *arg)
             h->info = {};
             h->info.present = false;
             h->state = ESP_RTL_SDR_STATE_IDLE;
+            const uint8_t rescan = 0;
+            (void)xQueueSend(h->probe_q, &rescan, 0);
             esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
             void *ctx = h->cfg.event_ctx;
             if (cb) {
@@ -1727,6 +1768,10 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
     h->tasks_run = true;
     h->worker_task_count = 0;
     h->owns_host = !h->cfg.host_library_already_installed;
+    h->probe_q = xQueueCreate(kProbeQueueDepth, sizeof(uint8_t));
+    if (h->probe_q == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
 
     if (h->owns_host) {
         usb_host_config_t hc{};
@@ -1766,6 +1811,12 @@ static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
         (h->cfg.usb_task_core_id == 0xFF) ? kUsbCore : h->cfg.usb_task_core_id;
     if (xTaskCreatePinnedToCore(client_task_fn, "rtl_usb_cli", 6144, h, prio, &h->client_task,
                                 core) != pdPASS) {
+        return ESP_ERR_NO_MEM;
+    }
+    h->worker_task_count++;
+
+    if (xTaskCreatePinnedToCore(probe_task_fn, "rtl_usb_probe", 4096, h, kProbePrio,
+                                &h->probe_task, core) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     h->worker_task_count++;
@@ -1879,6 +1930,7 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     handle->join_waiter = nullptr;
     handle->host_task = nullptr;
     handle->client_task = nullptr;
+    handle->probe_task = nullptr;
     handle->delivery_task = nullptr;
     handle->worker_task_count = 0;
 
@@ -1924,6 +1976,10 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     }
     destroy_iq_ring(handle);
     destroy_pull_ring_unlocked(handle);
+    if (handle->probe_q) {
+        vQueueDelete(handle->probe_q);
+        handle->probe_q = nullptr;
+    }
 
     HandleLock lk(handle, kUninstallLockTicks);
     handle->magic = 0;

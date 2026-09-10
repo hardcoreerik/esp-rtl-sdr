@@ -5,7 +5,7 @@
 /*
  * Provisional, non-invasive R820T2 identity trace (register 0 chip-id).
  *
- * Blog V3 streaming (0.8.0-rc1) is experimental/provisional: when selected, the
+ * Blog V3 streaming (0.8.0-rc2) is experimental/provisional: when selected, the
  * driver reuses the evidence-backed R820T2 USB IR value remap (0x74→0x34) that
  * Nooelec provisional uses for the same tuner-address template — not invented
  * V3-unique silicon init tables. No first-party V3 capture exists yet; this is

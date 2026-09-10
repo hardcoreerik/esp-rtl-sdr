@@ -41,7 +41,7 @@ uint32_t esp_rtl_sdr_get_capabilities(void)
     /* MEASURED_2026_08_12: CAP_GAIN + CAP_BIAS_TEE from lab USBPcap (Blog V4).
      * 0.7.7/0.7.15: CAP_HF_UPCONVERTER — public V4 HF path + composed Cable-2/GPIO5.
      * MEASURED_2026_08_26: CAP_GAIN_AUTO + CAP_RTL_AGC (tuner 05/07/0c + demod 0x19).
-     * 0.8.0-rc1: binary Blog V4 feature set; use get_device_capabilities() for
+     * 0.8.0-rc2: binary Blog V4 feature set; use get_device_capabilities() for
      * the attached profile (V3 omits STREAM; Nooelec omits HF/gain/bias). */
     return rtl_profile_library_capabilities();
 }

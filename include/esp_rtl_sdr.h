@@ -93,7 +93,7 @@ extern "C" {
 /** 1 while experimental prerelease; 0 for stable X.Y.Z. */
 #define ESP_RTL_SDR_VERSION_IS_PRERELEASE 1
 /** Token for prerelease suffix (stringized into VERSION_STRING). */
-#define ESP_RTL_SDR_VERSION_PRERELEASE rc1
+#define ESP_RTL_SDR_VERSION_PRERELEASE rc2
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -124,7 +124,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.8.0-rc1". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.8.0-rc2". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */

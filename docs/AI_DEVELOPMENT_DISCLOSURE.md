@@ -35,7 +35,7 @@ the outcome.**
 | Drop-in librtlsdr / `rtl-sdr.h` ABI | **No** — never a goal |
 | Every RTL2832U dongle works | **No** — profile-based; Blog V4 primary; Nooelec + Blog V3 provisional stream |
 | All rates “P4 proven” | **No** — only 960k / 2.048M have **provenance** under OrcSDR; passport learns the rest **on your host** |
-| Re-soaked from *this* tree on hardware | **Open** — 0.8.0-rc1 keeps 0.7.15 V4 routing; Nooelec/V3 not maintainer-soaked; tracked in [PROJECT_TRUTH.md](../PROJECT_TRUTH.md) |
+| Re-soaked from *this* tree on hardware | **Open** — 0.8.0-rc2 keeps 0.7.15 V4 routing; Nooelec/V3 not maintainer-soaked; tracked in [PROJECT_TRUTH.md](../PROJECT_TRUTH.md) |
 | Formal third-party security audit | **No** |
 
 If a README or release note sounds stronger than the table above, treat that as a

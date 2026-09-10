@@ -9,7 +9,7 @@
 
 **Not a librtlsdr port.** Clean-room Blog V4 USB profile · provisional Nooelec SMArt v5 · provisional Blog V3 stream · stand-alone ESP-IDF component · fail-closed lifecycle
 
-**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.8.0-rc1** experimental — early, public, honest.
+**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.8.0-rc2** experimental — early, public, honest.
 
 ---
 
@@ -66,7 +66,7 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | Item | Notes |
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.8.0-rc1** also recognizes provisional **Nooelec NESDR SMArt v5** and provisional **Blog V3** stream (R820T2 `0x34` remap; community soak). Bare `0bda:2838` is never assumed V4. |
+| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.8.0-rc2** also recognizes provisional **Nooelec NESDR SMArt v5** and provisional **Blog V3** stream (R820T2 `0x34` remap; community soak). Bare `0bda:2838` is never assumed V4. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 

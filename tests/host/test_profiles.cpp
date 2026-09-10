@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 
 static int g_failed = 0;
 static int g_passed = 0;
@@ -107,6 +108,24 @@ static void test_tuner_isolation(void)
     RtlControlRecord v4_ir = {0x0074, 0x0610, 0x40, 2, {0x05, 0xa3}};
     EXPECT_EQ_U(v4_ir.value & 0xff, kBlogV4TunerI2cValue);
     EXPECT_TRUE(kRtlFinalTuneTemplate[0].value == 0x0074);
+
+    size_t v4_allowed = 0;
+    size_t v3_allowed = 0;
+    size_t nooelec_allowed = 0;
+    for (const auto &record : kRtlInitTransfers) {
+        v4_allowed += rtl_profile_allows_init_record(RtlProfileId::BlogV4, record) ? 1 : 0;
+        v3_allowed += rtl_profile_allows_init_record(RtlProfileId::BlogV3, record) ? 1 : 0;
+        nooelec_allowed +=
+            rtl_profile_allows_init_record(RtlProfileId::NooelecSmartV5, record) ? 1 : 0;
+        if (record.value == 0x3001 || record.value == 0x3003 || record.value == 0x3004) {
+            EXPECT_TRUE(rtl_profile_allows_init_record(RtlProfileId::BlogV4, record));
+            EXPECT_TRUE(!rtl_profile_allows_init_record(RtlProfileId::BlogV3, record));
+            EXPECT_TRUE(!rtl_profile_allows_init_record(RtlProfileId::NooelecSmartV5, record));
+        }
+    }
+    EXPECT_EQ_U(v4_allowed, std::size(kRtlInitTransfers));
+    EXPECT_TRUE(v3_allowed < v4_allowed);
+    EXPECT_EQ_U(v3_allowed, nooelec_allowed);
 }
 
 static void test_frequency_policy(void)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esp_rtl_sdr.h"
+#include "rtl_control.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -172,6 +173,16 @@ inline bool rtl_profile_uses_v4_hf_routing(RtlProfileId profile)
 inline bool rtl_profile_uses_r820t2_i2c_remap(RtlProfileId profile)
 {
     return profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5;
+}
+
+/** Blog V4 vendor board controls must never run on plain R820T2/R860 sticks. */
+inline bool rtl_profile_allows_init_record(RtlProfileId profile,
+                                           const RtlControlRecord &record)
+{
+    if (!rtl_profile_uses_r820t2_i2c_remap(profile)) {
+        return true;
+    }
+    return record.value != 0x3001 && record.value != 0x3003 && record.value != 0x3004;
 }
 
 inline bool rtl_profile_supports_rf_hz(RtlProfileId profile, uint32_t frequency_hz)

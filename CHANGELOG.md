@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.8.0-rc2 (2026-09-10) — EXPERIMENTAL stabilization
+
+### Fixed
+
+- Queues hotplug addresses for a dedicated probe worker in both USB-host ownership modes.
+- Clears passport state on detach so a replacement dongle cannot inherit rate evidence.
+- Keeps the Blog V4 initialization trace unchanged while excluding known V4-only board
+  control values (`0x3001`, `0x3003`, `0x3004`) from provisional R820T2/R860 profiles.
+- Adds profile-aware initialization, hotplug, and disconnect diagnostics.
+
+### Known hardware status
+
+- Blog V4 remains the non-regression baseline; RC2 hardware acceptance is pending.
+- One Blog V3 tester reported a reboot loop on insertion with RC1.
+- One Nooelec V5 tester reported static/intermittent waterfall but no received stations.
+- V3 and Nooelec reception remain provisional and unverified by the maintainer.
+
 ## 0.8.0-rc1 (2026-09-10) — EXPERIMENTAL multi-dongle
 
 ### Added

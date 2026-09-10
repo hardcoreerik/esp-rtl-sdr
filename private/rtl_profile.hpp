@@ -134,8 +134,9 @@ inline uint32_t rtl_profile_library_capabilities(void)
 
 /**
  * Active-device capability mask. Identity ≠ tuner family ≠ board front-end.
- * Unknown / detached → 0. BlogV3 is identified but CAP_STREAM is false.
- * Nooelec is provisional VHF/UHF stream without V4 HF / measured gain/bias.
+ * Unknown / detached → 0.
+ * BlogV3 and Nooelec share provisional VHF/UHF stream (R820T2 I2C remap) without
+ * V4 HF / measured gain/bias. Maintainer-unverified; community soak requested.
  */
 inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
 {
@@ -149,12 +150,10 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
     case RtlProfileId::BlogV4:
         return rtl_profile_library_capabilities();
     case RtlProfileId::NooelecSmartV5:
-        /* Provisional: stream/retune/sync-read/passport only; no V4 HF or measured gain/bias. */
+    case RtlProfileId::BlogV3:
+        /* Provisional: stream/retune/sync-read/passport; no V4 HF or measured gain/bias. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT;
-    case RtlProfileId::BlogV3:
-        /* Identity recovered; streaming unsupported until first-party capture. */
-        return common;
     default:
         return 0;
     }
@@ -170,13 +169,17 @@ inline bool rtl_profile_uses_v4_hf_routing(RtlProfileId profile)
     return profile == RtlProfileId::BlogV4;
 }
 
+inline bool rtl_profile_uses_r820t2_i2c_remap(RtlProfileId profile)
+{
+    return profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5;
+}
+
 inline bool rtl_profile_supports_rf_hz(RtlProfileId profile, uint32_t frequency_hz)
 {
-    if (profile == RtlProfileId::NooelecSmartV5 && frequency_hz < kR820T2NativeMinHz) {
+    /* R820T2-family provisional paths: fail-closed below native floor (~24 MHz).
+     * No V4 HF upconverter / Cable-2 / GPIO5. */
+    if (rtl_profile_uses_r820t2_i2c_remap(profile) && frequency_hz < kR820T2NativeMinHz) {
         return false;
-    }
-    if (profile == RtlProfileId::BlogV3) {
-        return false; /* no stream path yet */
     }
     if (profile == RtlProfileId::Unknown) {
         return false;

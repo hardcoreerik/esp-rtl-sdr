@@ -3,11 +3,13 @@
 #include "rtl_control.hpp"
 
 /*
- * Provisional, non-invasive R820T2 identity trace.
+ * Provisional, non-invasive R820T2 identity trace (register 0 chip-id).
  *
- * Register 0 is the public R820T2 chip-id checkpoint. This is intentionally
- * only a probe — not an invented initialization table. Blog V3 streaming
- * remains unavailable until a first-party V3 USB capture supplies startup.
+ * Blog V3 streaming (0.8.0-rc1) is experimental/provisional: when selected, the
+ * driver reuses the evidence-backed R820T2 USB IR value remap (0x74→0x34) that
+ * Nooelec provisional uses for the same tuner-address template — not invented
+ * V3-unique silicon init tables. No first-party V3 capture exists yet; this is
+ * community hardware soak, not Hardware-verified.
  */
 constexpr RtlControlRecord kBlogV3ProbeSelect = {
     0x0034, 0x0610, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}};

@@ -67,7 +67,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Area | State | Boundary |
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
-| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 profile |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 profile; Nooelec SMArt v5 R820T2/R860 profile scaffold is code/host-test only until P4 hardware soak |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
@@ -89,7 +89,8 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Sync `read()` | **Implemented** | |
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
 | Multi-device select | **Implemented** | |
-| Blog V4 filter `0bda:2838` | **Implemented** | |
+| Blog V4 filter `0bda:2838` | **Implemented** | Exact `RTLSDRBlog` / `Blog V4` descriptors |
+| Nooelec NESDR SMArt v5 filter `0bda:2838` | **Implemented (unverified)** | Exact `Nooelec` / `NESDR SMArt v5` descriptors; R820T2/R860 tuner records use I²C `0x34`; HF/direct sampling below 24 MHz rejected |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |

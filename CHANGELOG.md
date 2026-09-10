@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- **Nooelec NESDR SMArt v5 R820T2/R860 profile scaffold:** accept explicit
+  `Nooelec` / `NESDR SMArt v5` USB descriptors on the shared RTL2832U
+  `0bda:2838` identity, map R82xx tuner-control records from the Blog V4 R828D
+  I²C value `0x74` to the R820T2/R860 value `0x34`, and reject Nooelec HF
+  requests below 24 MHz until direct sampling has measured support. This is
+  build/host-test verified only; physical Nooelec + P4 soak is still required
+  before a release can claim hardware support.
+
 ## 0.7.14 (2026-09-07)
 
 ### Changed

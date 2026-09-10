@@ -661,6 +661,18 @@ static std::string slurp_repo_file(const char *rel)
                        std::istreambuf_iterator<char>());
 }
 
+
+static void test_nooelec_smart_v5_profile_scaffold(void)
+{
+    const std::string src = slurp_repo_file("src/esp_rtl_sdr.cpp");
+    EXPECT_TRUE(src.find("Nooelec") != std::string::npos);
+    EXPECT_TRUE(src.find("NESDR SMArt v5") != std::string::npos);
+    EXPECT_TRUE(src.find("kR820T2TunerI2cValue = 0x0034") != std::string::npos);
+    EXPECT_TRUE(src.find("map_tuner_record_for_profile") != std::string::npos);
+    EXPECT_TRUE(src.find("kR820T2NativeMinHz") != std::string::npos);
+    EXPECT_TRUE(src.find("HF/direct-sampling is not implemented") != std::string::npos);
+}
+
 static void test_smoke_urb_image_isolation(void)
 {
     const std::string cmake = slurp_repo_file("examples/p4_serial_smoke/CMakeLists.txt");
@@ -703,6 +715,7 @@ int main(void)
     test_usb_identity_constants();
     test_error_base_unique();
     test_metrics_window_health();
+    test_nooelec_smart_v5_profile_scaffold();
     test_smoke_urb_image_isolation();
     std::printf("RESULT passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

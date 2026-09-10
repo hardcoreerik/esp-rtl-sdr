@@ -1,13 +1,13 @@
 # esp_rtl_sdr
 
-**Make an RTL-SDR Blog V4 a first-class peripheral on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
+**Make RTL2832U SDR dongles first-class peripherals on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 ![Status](https://img.shields.io/badge/version-0.7.14-green)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
-**Not a librtlsdr port.** Clean-room Blog V4 USB profile · stand-alone ESP-IDF component · fail-closed lifecycle  
+**Not a librtlsdr port.** Clean-room Blog V4 USB profile · provisional Nooelec SMArt v5 R820T2/R860 profile · stand-alone ESP-IDF component · fail-closed lifecycle
 
 **Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.x** — early, public, honest.
 
@@ -66,7 +66,7 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | Item | Notes |
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | **RTL-SDR Blog V4** — USB **`0bda:2838`**, mfg/product strings `RTLSDRBlog` / `Blog V4` |
+| **Dongle** | **RTL-SDR Blog V4** — USB **`0bda:2838`**, mfg/product strings `RTLSDRBlog` / `Blog V4`. Unreleased builds also admit explicit **Nooelec NESDR SMArt v5** descriptors for R820T2/R860 VHF/UHF testing; HF/direct sampling is not claimed. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
@@ -88,7 +88,7 @@ idf.py build
 idf.py -p PORT flash monitor
 ```
 
-Plug the Blog V4 into the P4 **USB Host** port (not the flash/UART port).
+Plug the Blog V4, or a Nooelec NESDR SMArt v5 when testing the unreleased R820T2/R860 profile, into the P4 **USB Host** port (not the flash/UART port).
 
 - **No dongle:** helpers + install should run; `start` → `NO_DEVICE` is OK.  
 - **With dongle:** stream, optional `read()`, health logs, passport if the example runs it.
@@ -213,7 +213,7 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `is_rate_supported` · `get_supported_rates` | Policy / UI lists |
 | `set/get_freq_correction` | Software ppm LO offset (±200) |
 | `apply_need` | `NEED_FM` · `NEED_ADSB` · `NEED_WX` · `NEED_HF` · `NEED_MAX_STABLE` · `NEED_LISTEN` |
-| HF LO map | RF &lt; 28.8 MHz → tuner RF+28.8 MHz (`CAP_HF_UPCONVERTER`, **0.7.7+**) |
+| HF LO map | Blog V4 RF &lt; 28.8 MHz → tuner RF+28.8 MHz (`CAP_HF_UPCONVERTER`, **0.7.7+**). Nooelec SMArt v5 HF/direct sampling is not implemented; requests below 24 MHz fail closed. |
 
 ### Data path
 

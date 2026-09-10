@@ -8,21 +8,14 @@
     "type": "git",
     "url": "https://github.com/hardcoreerik/esp-rtl-sdr.git"
   },
-  "authors": [
-    {
-      "name": "hardcoreerik",
-      "url": "https://github.com/hardcoreerik"
-    }
-  ],
-  "frameworks": "espidf",
-  "platforms": "espressif32",
-  "headers": "include/esp_rtl_sdr.h",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
   "build": {
     "includeDir": "include",
     "srcDir": "src",
-    "srcFilter": [
-      "+<*>",
-      "-<../examples/>"
+    "flags": [
+      "-Iprivate",
+      "-std=gnu++17"
     ]
   }
 }

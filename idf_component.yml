@@ -3,17 +3,19 @@ version: "0.8.0-rc1"
 description: >
   Clean-room ESP-IDF USB Host client for RTL2832U-class SDR dongles.
   Blog V4 (R828D) profile first; profile-based expansion for other tuners.
-  Not a librtlsdr port. AGPL-3.0-only.
+  Not a librtlsdr port. Target: ESP32-P4 High-Speed USB host (measured path).
 url: https://github.com/hardcoreerik/esp-rtl-sdr
-repository: https://github.com/hardcoreerik/esp-rtl-sdr.git
 issues: https://github.com/hardcoreerik/esp-rtl-sdr/issues
-documentation: https://github.com/hardcoreerik/esp-rtl-sdr/blob/master/docs/API.md
-license: AGPL-3.0-only
-maintainers:
-  - name: hardcoreerik
-    url: https://github.com/hardcoreerik
+repository: https://github.com/hardcoreerik/esp-rtl-sdr.git
+license: "AGPL-3.0-only"
+targets:
+  - esp32p4
+tags:
+  - sdr
+  - rtl-sdr
+  - rtl2832u
+  - usb-host
+  - esp32-p4
 dependencies:
   idf:
     version: ">=5.5.0"
-targets:
-  - esp32p4

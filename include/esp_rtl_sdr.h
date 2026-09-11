@@ -710,7 +710,7 @@ esp_err_t esp_rtl_sdr_get_metrics(esp_rtl_sdr_handle_t handle,
  *  - ESP_OK on success
  *  - ESP_ERR_INVALID_ARG / BAD_RATE / BAD_FREQ
  *  - ESP_RTL_SDR_ERR_BUSY if already streaming or stopping
- *  - ESP_RTL_SDR_ERR_NO_DEVICE if no V4
+ *  - ESP_RTL_SDR_ERR_NO_DEVICE if no accepted device is available
  *  - ESP_RTL_SDR_ERR_UNSUPPORTED when the requested path is not built
  *  - ESP_RTL_SDR_ERR_REENTRANT if called from event callback
  *  - ESP_RTL_SDR_ERR_USB / TIMEOUT / FAULT on hardware failure

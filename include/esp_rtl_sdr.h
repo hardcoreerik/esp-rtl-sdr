@@ -155,6 +155,18 @@ const char *esp_rtl_sdr_get_version_string(void);
 #define ESP_RTL_SDR_ERR_NOT_CLAIMED    (ESP_RTL_SDR_ERR_BASE + 14)
 /** Device index or serial selection out of range / not found. */
 #define ESP_RTL_SDR_ERR_BAD_DEVICE     (ESP_RTL_SDR_ERR_BASE + 15)
+/**
+ * install() refused to touch the USB Host peripheral this boot: the fault
+ * guard saw repeated panics during enumeration on prior boots (some 0bda:2838
+ * sticks — including at least one RTL-SDR Blog "V3c" that reports the bare
+ * factory RTL2838UHIDIR descriptor instead of Blog-branded strings — can
+ * STALL EP0 during ESP-IDF's own enumeration before this component's client
+ * ever sees a NEW_DEV event; that STALL has triggered a
+ * usbh_dev_close/num_ctrl_xfers_inflight assert inside stock ESP-IDF 5.5.4
+ * usb_host, i.e. a hard reboot this driver cannot catch or recover from).
+ * See esp_rtl_sdr_usb_fault_guard_reset() / esp_rtl_sdr_usb_safe_mode_active().
+ */
+#define ESP_RTL_SDR_ERR_USB_SAFE_MODE  (ESP_RTL_SDR_ERR_BASE + 16)
 
 /** Convert esp_err_t (including component codes) to a stable string. Never NULL. */
 const char *esp_rtl_sdr_err_to_name(esp_err_t err);
@@ -660,6 +672,10 @@ bool esp_rtl_sdr_delivery_mode_uses_read(esp_rtl_sdr_delivery_mode_t mode);
  *
  * Does not require a dongle present. Device attach is reported via events
  * as devices attach and detach.
+ *
+ * Returns ESP_RTL_SDR_ERR_USB_SAFE_MODE (no handle created, usb_host_install
+ * never called) if the fault guard latched after repeated enumeration-time
+ * panics — see the macro's doc comment and esp_rtl_sdr_usb_fault_guard_reset().
  */
 esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
                                  esp_rtl_sdr_handle_t *out_handle);
@@ -671,6 +687,22 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
  * returns STALE_HANDLE (use-after-free is still undefined — do not retain).
  */
 esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle);
+
+/**
+ * True if this boot's install() (or a prior one this session) refused to
+ * start the USB Host peripheral because the enumeration fault guard latched.
+ * RTC-retained across resets/panics, reset by power loss. Apps can surface
+ * this in UI ("USB disabled after repeated crashes — tap to retry").
+ */
+bool esp_rtl_sdr_usb_safe_mode_active(void);
+
+/**
+ * Clear the enumeration fault guard's retained panic counter and safe-mode
+ * latch so the next esp_rtl_sdr_install() call will attempt usb_host_install
+ * again. Does not affect an already-created handle. Safe to call any time,
+ * including when the guard was never latched (no-op then).
+ */
+esp_err_t esp_rtl_sdr_usb_fault_guard_reset(void);
 
 /* -------------------------------------------------------------------------- */
 /* Queries                                                                    */

@@ -98,6 +98,7 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err)
     case ESP_RTL_SDR_ERR_STALE_HANDLE: return "ESP_RTL_SDR_ERR_STALE_HANDLE";
     case ESP_RTL_SDR_ERR_REENTRANT: return "ESP_RTL_SDR_ERR_REENTRANT";
     case ESP_RTL_SDR_ERR_NOT_CLAIMED: return "ESP_RTL_SDR_ERR_NOT_CLAIMED";
+    case ESP_RTL_SDR_ERR_USB_SAFE_MODE: return "ESP_RTL_SDR_ERR_USB_SAFE_MODE";
     default:
 #if defined(ESP_PLATFORM)
         return esp_err_to_name(err);

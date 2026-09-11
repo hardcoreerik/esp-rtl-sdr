@@ -18,10 +18,12 @@
 #include <iterator>
 #include <new>
 
+#include "esp_attr.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_idf_version.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -54,6 +56,121 @@ static constexpr size_t kProbeQueueDepth = 8;
 
 static constexpr uint16_t kVid = ESP_RTL_SDR_USB_VID;
 static constexpr uint16_t kPid = ESP_RTL_SDR_USB_PID;
+
+/* -------------------------------------------------------------------------- */
+/* USB enumeration fault guard                                                */
+/* -------------------------------------------------------------------------- */
+/*
+ * Some 0bda:2838 sticks — observed on an RTL-SDR Blog "V3c" unit that reports
+ * the bare factory "RTL2838UHIDIR" descriptor instead of Blog-branded
+ * strings — can STALL EP0 during ESP-IDF's OWN enumeration (enum.c), before
+ * this component's client_event_cb ever receives NEW_DEV. That STALL has
+ * been observed to trip stock ESP-IDF 5.5.4 usb_host's internal
+ * "assert(dev_obj->dynamic.num_ctrl_xfers_inflight == 0)" in usbh_dev_close,
+ * which aborts the whole chip. This driver cannot catch or repair that abort
+ * (it happens entirely inside ESP-IDF, before our code runs) — the only
+ * available mitigation is to stop retrying usb_host_install after a handful
+ * of consecutive enumeration-time panics, so an incompatible stick degrades
+ * to "USB disabled this session" instead of an infinite reboot loop.
+ *
+ * RTC_NOINIT_ATTR survives any reset (including the panic/abort above) but
+ * is re-initialized (undefined contents) after a real power-on, so kMagic
+ * doubles as a "was this ever initialized since power-on" guard.
+ */
+static constexpr uint32_t kUsbFaultGuardMagic = 0x46475542u; /* "FGUB" */
+static constexpr uint32_t kUsbFaultGuardPanicThreshold = 3;
+
+struct UsbFaultGuardState {
+    uint32_t magic;
+    uint32_t panic_count;
+    /* Set just before usb_host_install(); cleared once we know enumeration
+     * of at least one device succeeded (NEW_DEV delivered) or the
+     * post-install settle window elapsed with nothing attached. Read once
+     * (and cleared) at the next boot — see usb_fault_guard_boot_check(). */
+    bool pending_risk;
+};
+
+RTC_NOINIT_ATTR static UsbFaultGuardState s_usb_fault_guard;
+static bool s_usb_safe_mode_active_this_boot = false;
+static esp_timer_handle_t s_usb_fault_guard_timer = nullptr;
+
+static void usb_fault_guard_disarm(void)
+{
+    s_usb_fault_guard.pending_risk = false;
+    if (s_usb_fault_guard_timer != nullptr) {
+        esp_timer_stop(s_usb_fault_guard_timer);
+        esp_timer_delete(s_usb_fault_guard_timer);
+        s_usb_fault_guard_timer = nullptr;
+    }
+}
+
+static void usb_fault_guard_timer_cb(void *)
+{
+    /* Settle window elapsed without a crash (device attached slowly, or
+     * nothing is attached at all) — this boot is no longer "at risk". */
+    usb_fault_guard_disarm();
+}
+
+/** Arm the guard just before the risky usb_host_install()/enumeration window. */
+static void usb_fault_guard_arm(void)
+{
+    s_usb_fault_guard.pending_risk = true;
+    const esp_timer_create_args_t args = {
+        .callback = usb_fault_guard_timer_cb,
+        .arg = nullptr,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "rtl_usb_fguard",
+        .skip_unhandled_events = false,
+    };
+    if (esp_timer_create(&args, &s_usb_fault_guard_timer) == ESP_OK) {
+        /* Observed panics land ~3.3-3.4 s after usb_host_install(); 8 s is a
+         * generous margin for a slow-enumerating device before we stop
+         * treating "no crash yet" as still-at-risk. */
+        esp_timer_start_once(s_usb_fault_guard_timer, 8000000);
+    }
+}
+
+/**
+ * Call once near the top of esp_rtl_sdr_install(). Returns true if the guard
+ * is latched and install() should skip usb_host_install for this boot.
+ */
+static bool usb_fault_guard_boot_check(void)
+{
+    if (s_usb_fault_guard.magic != kUsbFaultGuardMagic) {
+        /* First install() since power-on (RTC memory contents undefined). */
+        s_usb_fault_guard.magic = kUsbFaultGuardMagic;
+        s_usb_fault_guard.panic_count = 0;
+        s_usb_fault_guard.pending_risk = false;
+    } else if (s_usb_fault_guard.pending_risk) {
+        /* Last boot crashed (or is otherwise gone) while we were still in
+         * the risky enumeration window. Only count it if the crash was a
+         * genuine panic/abort — a normal power-cycle mid-stream doesn't. */
+        if (esp_reset_reason() == ESP_RST_PANIC) {
+            s_usb_fault_guard.panic_count++;
+        } else {
+            s_usb_fault_guard.panic_count = 0;
+        }
+    } else {
+        /* Previous boot's risky window closed cleanly (or none happened). */
+        s_usb_fault_guard.panic_count = 0;
+    }
+    s_usb_fault_guard.pending_risk = false;
+    return s_usb_fault_guard.panic_count >= kUsbFaultGuardPanicThreshold;
+}
+
+bool esp_rtl_sdr_usb_safe_mode_active(void)
+{
+    return s_usb_safe_mode_active_this_boot;
+}
+
+esp_err_t esp_rtl_sdr_usb_fault_guard_reset(void)
+{
+    s_usb_fault_guard.magic = kUsbFaultGuardMagic;
+    s_usb_fault_guard.panic_count = 0;
+    s_usb_fault_guard.pending_risk = false;
+    s_usb_safe_mode_active_this_boot = false;
+    return ESP_OK;
+}
 
 /** Extra high-band steps when passport recommended_only == false. */
 static const uint32_t kPassportExtraRates[] = {
@@ -1696,6 +1813,9 @@ static void client_event_cb(const usb_host_client_event_msg_t *event, void *arg)
         return;
     }
     if (event->event == USB_HOST_CLIENT_EVENT_NEW_DEV) {
+        /* ESP-IDF's own enumeration (enum.c) survived long enough to deliver
+         * this event, so the fault-guard's risky window is over for now. */
+        usb_fault_guard_disarm();
         const uint8_t addr = event->new_dev.address;
         const bool queued = h->probe_q != nullptr && xQueueSend(h->probe_q, &addr, 0) == pdTRUE;
         ESP_LOGI(TAG, "usb new_device addr=%u queued=%d", static_cast<unsigned>(addr),
@@ -1877,8 +1997,27 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
         return ESP_ERR_NO_MEM;
     }
 
+    if (usb_fault_guard_boot_check()) {
+        s_usb_safe_mode_active_this_boot = true;
+        ESP_LOGE(TAG,
+                 "USB fault guard latched: %u consecutive enumeration-time panics; "
+                 "skipping usb_host_install this boot. Call "
+                 "esp_rtl_sdr_usb_fault_guard_reset() to retry.",
+                 static_cast<unsigned>(s_usb_fault_guard.panic_count));
+        h->magic = 0;
+        usb_host_transfer_free(h->ctrl_xfer);
+        h->ctrl_xfer = nullptr;
+        delete h;
+        return ESP_RTL_SDR_ERR_USB_SAFE_MODE;
+    }
+    s_usb_safe_mode_active_this_boot = false;
+
+    usb_fault_guard_arm();
     esp_err_t ret = start_usb_stack(h);
     if (ret != ESP_OK) {
+        /* Failed for a reason unrelated to a crash (e.g. ENOMEM) — don't
+         * hold the guard armed across a boot where nothing will run. */
+        usb_fault_guard_disarm();
         esp_rtl_sdr_uninstall(h);
         return ret;
     }

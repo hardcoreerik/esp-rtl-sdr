@@ -2,7 +2,46 @@
 
 ## Unreleased
 
-## 0.8.0-rc2 (2026-09-10) — EXPERIMENTAL stabilization
+### Added
+
+- USB enumeration fault guard: `esp_rtl_sdr_install()` now tracks (via
+  RTC-retained state) consecutive boots that panic while a device is
+  attaching. After 3 consecutive enumeration-time panics it skips
+  `usb_host_install()` entirely for that boot instead of retrying forever,
+  returning the new `ESP_RTL_SDR_ERR_USB_SAFE_MODE`. Apps can query
+  `esp_rtl_sdr_usb_safe_mode_active()` and clear the latch with
+  `esp_rtl_sdr_usb_fault_guard_reset()`. This does not fix the underlying
+  crash (see below) — it turns an infinite reboot loop into "USB disabled
+  this session" on an incompatible stick.
+
+### Root cause investigation — enumeration-time EP0 stall panic
+
+- Root-caused a hard reboot loop (previously reported as "One Blog V3 tester
+  reported a reboot loop on insertion with RC1" in the 0.8.0-rc2 entry below)
+  against a physical RTL-SDR Blog "V3c" unit. Confirmed via live serial
+  monitor + ESP-IDF source reading, not guesswork:
+  - The unit's USB descriptors report **`RTL2838UHIDIR`** (the bare factory
+    RTL2838 string) rather than the `RTLSDRBlog`/`Blog V3` EEPROM strings
+    this driver's `rtl_profile_from_descriptors()` looks for.
+  - The panic happens **before** `client_event_cb` ever receives
+    `USB_HOST_CLIENT_EVENT_NEW_DEV` (no `usb new_device addr=...` log line
+    precedes it) — i.e. entirely inside stock ESP-IDF 5.5.4's own
+    enumeration (`components/usb/enum.c`), not in this component's probe
+    code (`probe_blog_v3_tuner` / `identify_profile` never run).
+  - Sequence, reproduced deterministically on every boot with the stick
+    attached: `BOOT_STAGE rtl_enumerating` → `E (…) USBH: Dev 1 EP 0 STALL`
+    → `assert failed: usbh_dev_close usbh.c:1058
+    (dev_obj->dynamic.num_ctrl_xfers_inflight == 0)` → coredump → reboot.
+  - The crash's own backtrace past frame 2 (`ep_wrapper_alloc` /
+    `interface_claim` / `usb_host_interface_claim`) is not trustworthy:
+    those functions (read from the installed ESP-IDF 5.5.4 source) never
+    call `usbh_dev_close`, and register `T0..T6`/`A6..A7` in the dump
+    decode as ASCII fragments of the assert string itself, not real
+    pointers — the unwinder walked stale/corrupted stack past that point.
+  - This is a stock ESP-IDF `usb_host`/`enum.c` robustness gap triggered by
+    this stick's EP0 behavior during enumeration; it cannot be fixed from
+    this component's application-level code, hence the fault guard above
+    as the available mitigation.
 
 ### Fixed
 

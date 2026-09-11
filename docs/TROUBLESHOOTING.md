@@ -29,6 +29,7 @@ Truth of claims: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 | `ERR_USB` / `TIMEOUT` | Control or bulk path | Cable, power, hub; retry; check logs |
 | `ERR_FAULT` | Handle faulted | `reset` if idle, else `uninstall` |
 | Start fails, state still IDLE | Fail-closed success path | Expected — no half-open claim |
+| Reboot loop a few seconds after boot, `install v0.8.0-…` logs but no `open RTLSDRBlog…` line before the crash | `assert failed: usbh_dev_close usbh.c:1058 (dev_obj->dynamic.num_ctrl_xfers_inflight == 0)` — an EP0 STALL during **stock ESP-IDF's own enumeration**, before this component's client sees `NEW_DEV`. Confirmed on an RTL-SDR Blog "V3c" reporting the bare `RTL2838UHIDIR` descriptor; see CHANGELOG "Root cause investigation". Not fixable from this component (happens inside ESP-IDF `usb_host`/`enum.c`) | The fault guard latches after 3 consecutive panics and returns `ESP_RTL_SDR_ERR_USB_SAFE_MODE` from `install()` instead of retrying forever — unplug the stick, or call `esp_rtl_sdr_usb_fault_guard_reset()` to retry |
 
 ---
 

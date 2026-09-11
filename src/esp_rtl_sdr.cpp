@@ -927,16 +927,18 @@ static bool drain_live_urbs(esp_rtl_sdr_handle *h, uint32_t poll_ms, uint32_t fl
 }
 
 /** Pause bulk IN and drain live URBs so EP0 is safe (retune / gain / bias). */
-static void bulk_pause_and_drain(esp_rtl_sdr_handle *h)
+static bool bulk_pause_and_drain(esp_rtl_sdr_handle *h)
 {
     if (h == nullptr || !h->streaming) {
-        return;
+        return true;
     }
     h->pause_resubmit = true;
-    if (!drain_live_urbs(h, 800, 300)) {
-        /* Pool is kept for resume; force counter so EP0 path can proceed. */
-        h->live_urbs = 0;
+    const bool drained = drain_live_urbs(h, 800, 300);
+    if (!drained) {
+        ESP_LOGW(TAG, "bulk pause timeout live_urbs=%u; defer EP0/resume",
+                 static_cast<unsigned>(h->live_urbs));
     }
+    return drained;
 }
 
 /** Resume multi-URB bulk IN after a paused EP0 window. */
@@ -985,7 +987,10 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     }
     h->retune_busy = true;
 
-    bulk_pause_and_drain(h);
+    if (!bulk_pause_and_drain(h)) {
+        h->retune_busy = false;
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
 
     if (!h->streaming) {
         h->pause_resubmit = false;
@@ -3476,7 +3481,14 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
     h->pending_gain_mode = false;
     h->pending_rtl_agc = false;
 
-    bulk_pause_and_drain(h);
+    if (!bulk_pause_and_drain(h)) {
+        h->pending_bias |= do_bias;
+        h->pending_gain |= do_gain;
+        h->pending_gain_mode |= do_mode;
+        h->pending_rtl_agc |= do_rtl;
+        h->ep0_sideband_busy = false;
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
 
     esp_err_t err = ESP_OK;
     if (do_bias) {

@@ -35,6 +35,7 @@
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
 #include "measured_gain_bias_v4.hpp"
+#include "interpolated_gain_r820t2.hpp"
 #include "reentrancy.hpp"
 
 static const char *TAG = "esp_rtl_sdr";
@@ -3533,9 +3534,48 @@ esp_err_t esp_rtl_sdr_probe_rates(esp_rtl_sdr_handle_t handle,
 /* Phase 3 — gain / bias (clean-room measured Blog V4 2026-08-12)             */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * R820T2/R860 manual gain: write reg05 then reg07 directly (no V4
+ * board frontend/GPIO routing -- this tuner family's board has 1 RF input,
+ * not V4's 3-input triplexer, so run_band_frontend()'s GPIO/Cable-2 logic
+ * does not apply here). See private/interpolated_gain_r820t2.hpp for the
+ * evidence behind these values -- two hardware-confirmed anchors, 27
+ * interpolated points, NOT a full measured table.
+ */
+static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
+                                           int *applied_tenth)
+{
+    const size_t idx = r820t2_nearest_gain_index(tenth_db);
+    const R820T2GainStep &st = kR820T2InterpolatedGainSteps[idx];
+
+    esp_err_t err = ESP_FAIL;
+    for (int pass = 0; pass < 3; ++pass) {
+        err = run_record(h, measured_v4_ir_reg_write(0x05, st.reg05), false);
+        if (err == ESP_OK) {
+            err = run_record(h, measured_v4_ir_reg_write(0x07, st.reg07), false);
+        }
+        if (err == ESP_OK) {
+            break;
+        }
+        ESP_LOGW(TAG, "R820T2 gain EP0 pass %d failed: %s", pass, esp_rtl_sdr_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(30 + pass * 20));
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (applied_tenth != nullptr) {
+        *applied_tenth = st.tenth_db;
+    }
+    return ESP_OK;
+}
+
 /** Apply manual gain and the current route together (caller owns bulk pause). */
 static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *applied_tenth)
 {
+    if (rtl_profile_uses_r820t2_i2c_remap(h->profile)) {
+        return apply_r820t2_gain_records(h, tenth_db, applied_tenth);
+    }
+
     const size_t idx = measured_v4_nearest_gain_index(tenth_db);
     const MeasuredV4GainStep &st = kMeasuredV4GainSteps[idx];
     const uint32_t rf_hz = frontend_rf_hz(h);

@@ -150,8 +150,17 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
     switch (profile) {
     case RtlProfileId::BlogV4:
         return rtl_profile_library_capabilities();
-    case RtlProfileId::NooelecSmartV5:
     case RtlProfileId::BlogV3:
+        /* Manual gain (2026-09-11): apply_r820t2_gain_records() writes
+         * reg05/07 directly from private/interpolated_gain_r820t2.hpp --
+         * two hardware-confirmed anchors, 27 interpolated points, NOT a
+         * full measured table (see that header + docs/captures/NOTES.md).
+         * Still no AUTO/RTL_AGC/BIAS_TEE/HF_UPCONVERTER -- unimplemented
+         * for this tuner family, not just unverified. */
+        return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
+               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
+               ESP_RTL_SDR_CAP_GAIN;
+    case RtlProfileId::NooelecSmartV5:
         /* Provisional: stream/retune/sync-read/passport; no V4 HF or measured gain/bias. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT;

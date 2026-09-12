@@ -436,7 +436,31 @@ The runners and Windows CI now use CTest. Current local results are:
 - truth hygiene: passed for 0.8.0-rc2;
 - ESP32-P4 driver smoke compile: passed with ESP-IDF 5.5.4.
 
-Hardware acceptance is still required on the exact OrcSDR candidate image. It
-must prove matching display/audio/RDS at 96.1 and 99.1 on V3c for cold start,
-hot retune, and unplug/replug, followed by the same station and lifecycle checks
-on Blog V4. Gain calibration remains a separate issue.
+### First hardware result from the exact candidate
+
+Driver commit `ae100781af355dfa5caf182fcddcb479789491e5` was overlaid without
+changing OrcSDR's manifest/lockfile, built against OrcSDR
+`4a13305790f3e13abcd29d38f76199d3d8fa7249` using ESP-IDF 5.5.4, and flashed as
+an application image with SHA-256
+`8513b586a160d90f20f52537cdca29433dc90059ef47ffb100bbf891eb8c3794`.
+
+The first exact-frequency V3c test passed:
+
+```
+RTL_FM_ENTER display=99100000
+tune rf=99113000 Hz ... pll_if_hz=3570000
+RTL_HOT_TUNE display=99100000 lo=99113000 ok
+RTL_FREQ_STATUS band=FM frequency_hz=99100000 mode=WBFM
+RDS_STATUS ... block_locked=1 ... ps="EUGENE  "
+  rt="99.1 The Beat of Eugene " pi=355F ...
+  driver_overruns=0 driver_drops=0
+```
+
+The +13 kHz internal LO nudge is normal FM auto-centering and is inside the
+existing +/-40 kHz limit. It is not the former 1.755028 MHz IF mismatch. IQ byte
+and block counters advanced between status polls, with zero overruns/drops.
+
+This proves V3c 99.1 MHz hot-retune display/reception/RDS alignment on the exact
+candidate. It does not yet prove the remaining acceptance matrix: 96.1 MHz,
+cold start, V3c unplug/replug, or the Blog V4 regression. Gain calibration also
+remains separate.

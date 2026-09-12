@@ -95,7 +95,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Nooelec NESDR SMArt v5 `0bda:2838` | **Provisional — contributor-tested; maintainer soak pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; I2C `0x34`; HF&lt;24 MHz rejected |
 | Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |
 | Blog V3 IQ streaming (device up, no crash) | **Hardware-verified** (2026-09-11) | Streams without crash across repeated V4↔V3-family hot-swap and cold-boot testing on a real V3c unit |
-| Blog V3 tune accuracy | **Repair implemented; hardware acceptance open** | Measured 28.8 MHz crystal; tuner PLL and RTL2832 demodulator now matched at 3.570 MHz using the official-capture `38/11/12` restore. Host tests and ESP32-P4 compile pass; 96.1/99.1 cold/hot/hotplug and V4 regression still required. |
+| Blog V3 tune accuracy | **99.1 MHz hot-retune hardware-verified; full acceptance open** | Measured 28.8 MHz crystal; tuner PLL and RTL2832 demodulator matched at 3.570 MHz using official-capture `38/11/12`. Exact candidate displayed 99.100 MHz and locked RDS for The Beat with +13 kHz auto-centering and zero drops. 96.1, cold start, V3c hotplug, and V4 regression remain. |
 | Blog V3 gain accuracy | **Provisional / maintainer-unverified** | Manual gain capability and existing R820T2 path are present but calibration remains separate; no AUTO/RTL AGC/Bias-T claim. |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |

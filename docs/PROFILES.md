@@ -46,7 +46,7 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 
 | Field | Value |
 |---|---|
-| Status | Identification and streaming **hardware-verified** (2026-09-11, real V3c unit, R860 tuner per packaging). The 3.570 MHz matched-IF tuning repair is host/build-verified; physical 96.1/99.1 acceptance and Blog V4 regression remain open. Gain accuracy remains provisional. |
+| Status | Identification and streaming **hardware-verified** (2026-09-11, real V3c unit, R860 tuner per packaging). The 3.570 MHz matched-IF repair has passed a physical 99.1 MHz hot-retune/RDS check; 96.1, cold-start, V3c hotplug, and Blog V4 regression remain open. Gain accuracy remains provisional. |
 | USB | Exact V3 descriptors, or completed R820T2 chip-id `0x96`/`0x69` on ambiguous `0bda:2838` (the tested V3c unit reports the bare factory `RTL2838UHIDIR` descriptor, not `RTLSDRBlog`/`Blog V3` — identified via the ambiguous-descriptor chip-id probe, not string match) |
 | Tuner | R820T2/R860 @ I2C `0x34` (same USB IR template remap as Nooelec provisional; R860 is pin/register-compatible with R820T2, same profile covers both — no separate profile needed) |
 | HF | **Rejected** below 24 MHz; **no** V4 HF upconverter / Cable-2 / GPIO5 |

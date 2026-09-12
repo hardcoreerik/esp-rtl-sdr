@@ -6,8 +6,8 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-10**
-Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Nooelec + Blog V3 provisional stream; not production-ready)
+Snapshot date: **2026-09-11**
+Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Blog V3/V3c/R860 identification+streaming hardware-verified; tune/gain accuracy and Nooelec still provisional; not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -69,7 +69,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Area | State | Boundary |
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
-| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 **provisional**; Blog V3 **provisional** (community soak) |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 **provisional**; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional** |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
@@ -93,8 +93,9 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Multi-device select | **Implemented** | |
 | Blog V4 filter `0bda:2838` | **Implemented** | Exact `RTLSDRBlog` / `Blog V4` only — never bare VID/PID |
 | Nooelec NESDR SMArt v5 `0bda:2838` | **Provisional — contributor-tested; maintainer soak pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; I2C `0x34`; HF&lt;24 MHz rejected |
-| Blog V3 / R820T2 identity probe | **Experimental / unverified** | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) |
-| Blog V3 IQ streaming | **Provisional / maintainer-unverified** | Same R820T2 I2C `0x34` IR remap as Nooelec provisional; RF&lt;24 MHz reject; no V4 HF; community soak requested — **not** Hardware-verified |
+| Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |
+| Blog V3 IQ streaming (device up, no crash) | **Hardware-verified** (2026-09-11) | Streams without crash across repeated V4↔V3-family hot-swap and cold-boot testing on a real V3c unit |
+| Blog V3 tune/gain accuracy | **Provisional / maintainer-unverified** | Same R820T2 I2C `0x34` IR remap as Nooelec provisional; RF&lt;24 MHz reject; no V4 HF; static observed with no station lock on real hardware — **not** Hardware-verified |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |

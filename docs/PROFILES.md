@@ -42,16 +42,16 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 | Caps | STREAM/RETUNE/etc. without HF_UPCONVERTER / GAIN / BIAS_TEE |
 | Evidence | Contributor/OrcSDR tester reports; clean-room remap only; community soak welcome |
 
-### `blog_v3` (RTL-SDR Blog V3 / R820T2) — PROVISIONAL STREAM
+### `blog_v3` (RTL-SDR Blog V3 / V3c / R820T2 / R860) — IDENTIFICATION+STREAM VERIFIED, TUNING PROVISIONAL
 
 | Field | Value |
 |---|---|
-| Status | **Provisional / experimental / maintainer-unverified** — community soak |
-| USB | Exact V3 descriptors, or completed R820T2 chip-id `0x96`/`0x69` on ambiguous `0bda:2838` |
-| Tuner | R820T2/R860 @ I2C `0x34` (same USB IR template remap as Nooelec provisional) |
+| Status | Identification and streaming **hardware-verified** (2026-09-11, real V3c unit, R860 tuner per packaging) after the demod-bring-up fix (see CHANGELOG). Actual RF tuning/gain accuracy **still provisional / not Hardware-verified** — community soak wanted |
+| USB | Exact V3 descriptors, or completed R820T2 chip-id `0x96`/`0x69` on ambiguous `0bda:2838` (the tested V3c unit reports the bare factory `RTL2838UHIDIR` descriptor, not `RTLSDRBlog`/`Blog V3` — identified via the ambiguous-descriptor chip-id probe, not string match) |
+| Tuner | R820T2/R860 @ I2C `0x34` (same USB IR template remap as Nooelec provisional; R860 is pin/register-compatible with R820T2, same profile covers both — no separate profile needed) |
 | HF | **Rejected** below 24 MHz; **no** V4 HF upconverter / Cable-2 / GPIO5 |
 | Caps | STREAM/RETUNE/etc. without HF_UPCONVERTER / GAIN / BIAS_TEE |
-| Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`; no unique V3 init tables measured — shared R820T2 remap only. **Not** Hardware-verified |
+| Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`. Identification/streaming verified via repeated cold-boot and hot-swap testing (V4 ↔ V3-family, both directions) with zero crashes after the demod-bring-up fix. Tune/gain register math still **not** Hardware-verified — no unique V3/R860 tables measured yet, shared R820T2/Nooelec remap only; static-with-no-station-lock observed on real hardware. Next: PLL register readback capture vs. Rafael Micro's public R820T2 datasheet formula |
 
 ## Fail closed
 

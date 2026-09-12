@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Root cause of the V3/Nooelec "not Hardware-verified" status, and of the
+  reboot loop reported against real V3-family hardware ("One Blog V3 tester
+  reported a reboot loop on insertion with RC1", 0.8.0-rc2 below; also
+  reproduced independently against a physical unit sold as RTL-SDR Blog
+  "V3c", R860 tuner per packaging): `probe_blog_v3_tuner()` tried to read
+  the tuner's I2C chip-id register *before* the RTL2832U demod's own
+  SYS/DEMOD bring-up had run. Proven with a PC/pyusb capture (not
+  inference): the same chip-id read command genuinely STALLs — on a real
+  PC, independent of ESP32-P4 — against **every** candidate tuner I2C
+  address, including a real Blog V4's own correct R828D address (0x74),
+  when sent cold. Replaying just `kRtlInitTransfers[0..86)` (the same
+  demod-generic prefix that table already runs, unconditionally, before
+  its own internal tuner auto-detect sweep at `kRtlInitTransfers[86..]`)
+  first makes the identical probe succeed immediately after, on both V4
+  and the V3-family unit. `probe_blog_v3_tuner()` now calls the new
+  `run_demod_bringup()` (replays that same measured prefix) before its
+  chip-id read. **This is why V3/Nooelec identification could never have
+  been verified before**: the identification method itself could not
+  succeed against any real hardware, independent of what tuner was
+  actually attached. Confirmed hardware-verified after this fix: the V3c
+  test unit now identifies as `blog_v3_r820t2` and streams, across
+  repeated hot-swap (V4 ↔ V3-family, both directions) and cold-boot
+  cycles, with zero crashes. Actual RF tuning accuracy for the R820T2/R860
+  path is **still not verified** — see "Open hardware gates" below; this
+  fix only repairs identification and streaming.
+
 ### Added
 
 - USB enumeration fault guard: `esp_rtl_sdr_install()` now tracks (via
@@ -10,38 +38,35 @@
   `usb_host_install()` entirely for that boot instead of retrying forever,
   returning the new `ESP_RTL_SDR_ERR_USB_SAFE_MODE`. Apps can query
   `esp_rtl_sdr_usb_safe_mode_active()` and clear the latch with
-  `esp_rtl_sdr_usb_fault_guard_reset()`. This does not fix the underlying
-  crash (see below) — it turns an infinite reboot loop into "USB disabled
-  this session" on an incompatible stick.
+  `esp_rtl_sdr_usb_fault_guard_reset()`. Kept as defense-in-depth even
+  after the real fix above: it still protects against a *different*
+  incompatible stick hitting some other panic during enumeration in the
+  future, turning an infinite reboot loop into "USB disabled this
+  session" instead.
 
-### Root cause investigation — enumeration-time EP0 stall panic
+### Open hardware gates
 
-- Root-caused a hard reboot loop (previously reported as "One Blog V3 tester
-  reported a reboot loop on insertion with RC1" in the 0.8.0-rc2 entry below)
-  against a physical RTL-SDR Blog "V3c" unit. Confirmed via live serial
-  monitor + ESP-IDF source reading, not guesswork:
-  - The unit's USB descriptors report **`RTL2838UHIDIR`** (the bare factory
-    RTL2838 string) rather than the `RTLSDRBlog`/`Blog V3` EEPROM strings
-    this driver's `rtl_profile_from_descriptors()` looks for.
-  - The panic happens **before** `client_event_cb` ever receives
-    `USB_HOST_CLIENT_EVENT_NEW_DEV` (no `usb new_device addr=...` log line
-    precedes it) — i.e. entirely inside stock ESP-IDF 5.5.4's own
-    enumeration (`components/usb/enum.c`), not in this component's probe
-    code (`probe_blog_v3_tuner` / `identify_profile` never run).
-  - Sequence, reproduced deterministically on every boot with the stick
-    attached: `BOOT_STAGE rtl_enumerating` → `E (…) USBH: Dev 1 EP 0 STALL`
-    → `assert failed: usbh_dev_close usbh.c:1058
-    (dev_obj->dynamic.num_ctrl_xfers_inflight == 0)` → coredump → reboot.
-  - The crash's own backtrace past frame 2 (`ep_wrapper_alloc` /
-    `interface_claim` / `usb_host_interface_claim`) is not trustworthy:
-    those functions (read from the installed ESP-IDF 5.5.4 source) never
-    call `usbh_dev_close`, and register `T0..T6`/`A6..A7` in the dump
-    decode as ASCII fragments of the assert string itself, not real
-    pointers — the unwinder walked stale/corrupted stack past that point.
-  - This is a stock ESP-IDF `usb_host`/`enum.c` robustness gap triggered by
-    this stick's EP0 behavior during enumeration; it cannot be fixed from
-    this component's application-level code, hence the fault guard above
-    as the available mitigation.
+- The V3c test unit tunes to the requested frequency in the UI but does
+  not lock a clean station (static + waterfall/audio-pipeline activity,
+  no station audio) — the R820T2/R860 tune/gain register math in
+  `transfers_blog_v3.hpp` is borrowed from the Nooelec remap (see its own
+  header comment: "no unique V3 init tables measured... not
+  Hardware-verified") and has never been checked against real R820T2/R860
+  PLL behavior. This is a distinct, scoped follow-up: capture actual PLL
+  register readback after a tune request (same PC/pyusb method used
+  above) and compare against Rafael Micro's public R820T2 datasheet
+  formula, rather than continuing to reuse the Nooelec-derived values.
+- OrcSDR (app-level, separate repo): auto-start-scan-on-attach did not
+  trigger for the `blog_v3_r820t2` profile on hot-swap (manually
+  navigating to the FM screen and back did restore audio/waterfall). Very
+  likely gated on a V4-only capability bit or code path in the app, not a
+  driver issue — needs OrcSDR-side investigation.
+- R860 does not need its own profile: it is Rafael Micro's
+  pin/register-compatible successor to R820T2 (same typical I2C address,
+  0x34), so a genuine V3/V3c should continue to share `blog_v3_r820t2`
+  once its tune/gain tables are corrected above — no new profile or
+  `sdkconfig` entry needed (`sdkconfig` is ESP-IDF build config; it has no
+  mechanism for per-tuner register math).
 
 ### Fixed
 

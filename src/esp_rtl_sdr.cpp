@@ -690,6 +690,34 @@ static esp_err_t run_record(esp_rtl_sdr_handle *h, const RtlControlRecord &rec,
                        mapped.length, expect_stall);
 }
 
+/*
+ * RTL2832U's I2C-passthrough (used for every tuner chip-id probe, including
+ * kBlogV3ProbeSelect/Read below) does not respond to ANY I2C address until
+ * the demod's own SYS/DEMOD bring-up has run -- confirmed by direct PC/pyusb
+ * capture 2026-09-11 against a real RTL-SDR Blog V4: probing the V4's own
+ * correct tuner address (R828D @ 0x74) cold gets the exact same STALL as
+ * every other candidate address; replaying just the measured
+ * kRtlInitTransfers[0..kDemodBringupRecordCount) prefix first (the same
+ * demod-generic writes this table already runs before ITS OWN tuner
+ * auto-detect sweep at kRtlInitTransfers[kDemodBringupRecordCount..]) makes
+ * that same probe succeed immediately after. This bring-up is demod-level,
+ * not V4-board-specific, so it is safe to run ahead of an ambiguous device's
+ * tuner probe. Without it, probe_blog_v3_tuner() below can never succeed
+ * against ANY real hardware, which is why the V3/Nooelec profiles have
+ * stayed "not Hardware-verified" -- the identification method itself could
+ * not have worked, independent of what tuner is actually attached.
+ */
+constexpr size_t kDemodBringupRecordCount = 86;
+
+static void run_demod_bringup(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
+{
+    for (size_t i = 0; i < kDemodBringupRecordCount; ++i) {
+        const RtlControlRecord &rec = kRtlInitTransfers[i];
+        (void)ctrl_submit_device(h, dev, rec.request_type, 0, rec.value, rec.index, rec.data,
+                                 rec.length, false);
+    }
+}
+
 static bool probe_blog_v3_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
                                 RtlProfileProbeResult *out_probe)
 {
@@ -697,6 +725,7 @@ static bool probe_blog_v3_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
         return false;
     }
     *out_probe = {};
+    run_demod_bringup(h, dev);
     if (ctrl_submit_device(h, dev, kBlogV3ProbeSelect.request_type, 0,
                            kBlogV3ProbeSelect.value, kBlogV3ProbeSelect.index,
                            kBlogV3ProbeSelect.data, kBlogV3ProbeSelect.length,

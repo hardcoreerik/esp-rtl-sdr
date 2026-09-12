@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **Tab5 release-image startup RAM regression:** the USB fault guard's timer
+  handle and current-boot flag no longer consume ordinary internal BSS. The
+  final RC4 image added only eight aligned bytes of internal state compared
+  with RC3, but that crossed the ESP-IDF startup allocator's boundary and made
+  the configured 40 KiB internal/DMA reserve fail before `app_main()`. The
+  state now lives in the guard's existing RTC-retained record, preserving the
+  full DMA reserve used by ESP-Hosted and audio. The failure was captured as
+  `Could not reserve internal/DMA pool (error 0x101)` after M5Burner correctly
+  loaded the application from `0x10000`; it was not a partition-layout error.
 - **Blog V3/V3c matched-IF tuning (implementation, host/build, and physical
   hardware verification):**
   the earlier PLL-only repair set the R820T2/R860 tuner to the measured

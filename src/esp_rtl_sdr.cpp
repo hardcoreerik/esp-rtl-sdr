@@ -477,24 +477,20 @@ static uint32_t apply_freq_correction_hz(uint32_t tuner_hz, int32_t ppm)
 }
 
 /**
- * xtal_hz: reference crystal used for the N-divider math below. kRtlXtalHz
- * (28.8 MHz) is a Blog V4/R828D-board measurement, NOT a universal RTL-SDR
- * constant. Direct clean-room capture against a real Blog V3c on 2026-09-11
- * (FM-band sweep, 88.1-106.1 MHz in exact 2 MHz steps) showed reg 0x14's
- * packed N-divider byte advancing by exactly +1 per 2 MHz step -- solving
- * div/(2*xtal)=1/2MHz with div=32 gives xtal=32,000,000 Hz exactly, not
- * 28.8 MHz. See docs/captures/NOTES.md for the raw sweep data. This is
- * V3c-specific; V4's 28.8 MHz value is unaffected and still used for V4.
- * The fractional bytes (r21/r22) are NOT re-derived here -- the same sweep
- * showed them varying in a way that does not correlate cleanly with
- * frequency alone even after correcting the crystal, consistent with a
- * VCO calibration search rather than a static fractional-divider value.
- * That piece remains an open, unverified assumption for V3c.
+ * xtal_hz / if_offset_hz: PLL reference crystal and IF offset. Both are
+ * profile-scoped -- see rtl_profile_pll_xtal_hz()/rtl_profile_pll_if_offset_hz()
+ * in rtl_profile.hpp for the clean-room evidence behind the V3c-specific
+ * IF offset (3.57 MHz, not V4's board-specific 1,814,972 Hz). Verified
+ * against 11 real V3c captures spanning 88.1-107.9 MHz plus 5 repeated
+ * tunes to the same frequency (ruling out a non-deterministic calibration
+ * search): predicted bytes match real hardware to within 1 LSB (~27 Hz)
+ * on every point. See docs/captures/NOTES.md.
  */
-static bool encode_r820_pll(uint32_t frequency_hz, double xtal_hz, uint8_t *r16_setup,
-                            uint8_t *r16_active, uint8_t *r20, uint8_t *r21, uint8_t *r22)
+static bool encode_r820_pll(uint32_t frequency_hz, double xtal_hz, double if_offset_hz,
+                            uint8_t *r16_setup, uint8_t *r16_active, uint8_t *r20, uint8_t *r21,
+                            uint8_t *r22)
 {
-    const double lo_hz = static_cast<double>(frequency_hz) + kRtlIfOffsetHz;
+    const double lo_hz = static_cast<double>(frequency_hz) + if_offset_hz;
     static constexpr uint16_t kMixCandidates[] = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024};
     uint16_t chosen = 0;
     for (const uint16_t candidate : kMixCandidates) {
@@ -831,7 +827,9 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         apply_freq_correction_hz(tuner_base, h != nullptr ? h->freq_correction_ppm : 0);
     uint8_t r16_setup = 0, r16_active = 0, r20 = 0, r21 = 0, r22 = 0;
     const double xtal_hz = rtl_profile_pll_xtal_hz(profile);
-    if (!encode_r820_pll(tune_hz, xtal_hz, &r16_setup, &r16_active, &r20, &r21, &r22)) {
+    const double if_offset_hz = rtl_profile_pll_if_offset_hz(profile);
+    if (!encode_r820_pll(tune_hz, xtal_hz, if_offset_hz, &r16_setup, &r16_active, &r20, &r21,
+                         &r22)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
     const bool hf = rtl_profile_uses_v4_hf_routing(profile) &&

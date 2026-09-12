@@ -216,23 +216,47 @@ inline uint32_t rtl_profile_tuner_frequency_hz(RtlProfileId profile, uint32_t rf
 }
 
 /**
- * PLL reference crystal, Hz. kMeasuredV4XtalHz (28.8 MHz, see
- * transfers_blog_v4.hpp's kRtlXtalHz) is a Blog V4/R828D-board measurement,
- * not a universal constant. Direct clean-room capture against a real Blog
- * V3c (2026-09-11, FM-band sweep in exact 2 MHz steps, 88.1-106.1 MHz)
- * showed the real N-divider register advancing by exactly +1 per 2 MHz
- * step, solving to xtal=32,000,000 Hz for that specific unit -- see
- * docs/captures/NOTES.md. Scoped to BlogV3 only: NooelecSmartV5 shares
+ * PLL reference crystal, Hz. This is 28.8 MHz for every profile tested so
+ * far, V3c included -- see rtl_profile_pll_if_offset_hz() below for the
+ * correction that actually mattered.
+ *
+ * (History: an earlier same-session pass mistakenly concluded V3c used a
+ * 32 MHz crystal, from analyzing the integer N-divider byte (reg 0x14) in
+ * isolation without its fractional carry from reg 0x15/0x16. Once the
+ * fractional bytes were folded in correctly, 28.8 MHz fits all 11 points
+ * of the 2026-09-11 FM-band sweep to within 1 LSB (~27 Hz, a rounding-mode
+ * nuance, not a real error) -- see docs/captures/NOTES.md.)
+ */
+inline double rtl_profile_pll_xtal_hz(RtlProfileId profile)
+{
+    (void)profile;
+    constexpr double kMeasuredXtalHz = 28800000.0;
+    return kMeasuredXtalHz;
+}
+
+/**
+ * PLL IF offset, Hz, added to the user-requested RF frequency before the
+ * N-divider math. kRtlIfOffsetHz (1,814,972 Hz, see transfers_blog_v4.hpp)
+ * is a Blog V4/R828D-board-specific measurement (that board's particular
+ * filter/triplexer design), not a universal RTL-SDR constant.
+ *
+ * Direct clean-room capture against a real Blog V3c (2026-09-11, FM-band
+ * sweep, 88.1-107.9 MHz, plus 5 repeated tunes to the same frequency to
+ * rule out a non-deterministic calibration search) solved to exactly
+ * 3,570,000 Hz -- the well-known standard RTL2832U/R820T default IF,
+ * confirmed independently at three widely-spaced frequencies (88.1, 96.1,
+ * 106.1 MHz) to within a few Hz. See docs/captures/NOTES.md for the full
+ * sweep data and regression. Scoped to BlogV3 only: NooelecSmartV5 shares
  * BlogV3's I2C remap for tuner addressing but has never been hardware
  * tested for PLL math, so it keeps the V4-derived default rather than
  * inheriting an unverified guess.
  */
-inline double rtl_profile_pll_xtal_hz(RtlProfileId profile)
+inline double rtl_profile_pll_if_offset_hz(RtlProfileId profile)
 {
-    constexpr double kMeasuredV3cXtalHz = 32000000.0;
-    constexpr double kMeasuredV4XtalHz = 28800000.0;
+    constexpr double kMeasuredV3cIfOffsetHz = 3570000.0;
+    constexpr double kMeasuredV4IfOffsetHz = 1814972.0;
     if (profile == RtlProfileId::BlogV3) {
-        return kMeasuredV3cXtalHz;
+        return kMeasuredV3cIfOffsetHz;
     }
-    return kMeasuredV4XtalHz;
+    return kMeasuredV4IfOffsetHz;
 }

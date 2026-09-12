@@ -291,3 +291,69 @@ formula, and the next step becomes decoding the read-back byte's bit
 meaning (pair request/response frames properly, e.g. via
 `usb.request_in`) rather than continuing to search for a closed-form
 fractional-N formula that may not exist.
+
+## PLL follow-up — 2026-09-11 (calibration-search theory disproven; real fix found)
+
+The "recommended next angle" above was run the same night. Result:
+**the calibration-search theory was wrong**, and the real bug (and fix)
+is different from what the section above concluded.
+
+### Repeat-frequency test
+
+Captured 5 consecutive `rtl_sdr.exe -f 96100000` runs in a row (fresh
+USBPcap capture each time). Extracted the final-tune register cluster
+from each:
+
+```
+repeat 1-5 (all identical): 10=84 14=4a[14=4a in first sub-cluster]/8a 12=06 16=4a/5f 15=aa/4a
+```
+
+Byte-for-byte **identical across all 5 repeats**. Reg 0x15/0x16 are
+fully deterministic — not a calibration-search artifact. The earlier
+conclusion was wrong; it came from mis-combining the bytes, not from
+genuine non-determinism.
+
+### Corrected regression
+
+Re-analyzed the 11-point FM-band sweep (from the section above) treating
+reg 0x14's packed byte via the SAME `(si2c<<6)|ni2c` unpacking this
+driver already uses (`packed = nint-13`), combined with reg 0x15/0x16 as
+`nfra = (reg16<<8)|reg15` — exactly this driver's existing
+`r22*256+r21` structure. This combined 24-bit value is **perfectly
+linear against frequency** (constant ~72,818/2 MHz step, vs. wildly
+inconsistent when reg 0x14 was checked in isolation without its
+fractional carry — the earlier session's mistake).
+
+Linear regression solves to:
+- **xtal = 28.8 MHz** — confirms the *original*, V4-derived value was
+  correct all along. The previous section's "32 MHz" conclusion was
+  wrong, caused by ignoring the fractional carry from reg 0x15/0x16
+  when checking reg 0x14 alone.
+- **IF offset = 3,570,000 Hz** — confirmed independently at three
+  widely-spaced frequencies (88.1, 96.1, 106.1 MHz), all solving to
+  within a few Hz of exactly 3.57 MHz, the standard RTL2832U/R820T
+  default IF. V4's board-specific 1,814,972 Hz (a different, measured
+  value reflecting V4's triplexer/filter board) was never correct for
+  plain R820T2/V3c hardware.
+
+Plugging both corrected constants back into this driver's *existing*
+`encode_r820_pll()` formula (register assignment, packing, and
+divider-select logic all unchanged) reproduces **6 of 11 real captured
+register bytes exactly**, and the remaining 5 to within **1 LSB
+(~27 Hz)** — a rounding-mode nuance (round-to-nearest vs. some other
+tie-breaking rule in the real chip's own firmware), not a real error.
+27 Hz is far below anything that matters for FM demodulation.
+
+### Conclusion
+
+The only real, load-bearing bug was **`kRtlIfOffsetHz`**, not the
+crystal, and not the register map. Fixed in commit `ff1f07c`:
+`rtl_profile_pll_if_offset_hz()` returns 3.57 MHz for `BlogV3`
+specifically; `rtl_profile_pll_xtal_hz()` now unconditionally returns
+28.8 MHz for all profiles (the 32 MHz branch from commit `3669d88` was
+reverted as incorrect). `NooelecSmartV5` is deliberately left on the
+V4-derived IF offset default — it has never been hardware tested.
+
+Not yet flashed/verified on the real Tab5 as of this note being
+written — next step is exactly that: overlay this commit, rebuild,
+flash, and listen on 96.1 FM with the V3c.

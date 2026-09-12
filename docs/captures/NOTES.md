@@ -70,10 +70,62 @@ before the truncation point decoded cleanly and is unaffected.
    need one (or benefit from one) more than R828D's own freerunning
    internal AGC does.
 
+## Gain-step experiment (SDR#, same V3c unit, two sessions)
+
+Attempted to build a real R820T2/R860 gain-step table (same method used
+historically for `kMeasuredV4GainSteps`): stepped AirSpy SDR# Studio's
+manual RF Gain slider through the standard 28-point R82xx ladder (0.0,
+0.9, 1.4, 2.7, 3.7, 7.7, 8.7, 12.5, 14.4, 15.7, 16.6, 19.7, 20.7, 22.9,
+25.4, 28.0, 29.7, 32.8, 33.8, 36.4, 37.2, 38.6, 40.2, 42.1, 43.4, 43.9,
+44.5, 48.0, 49.6 dB — RTL AGC and Tuner AGC both off), capturing
+throughout, twice: once with the V3c behind a powered USB hub, once
+plugged directly into the PC (to rule out supply-noise as a factor).
+
+**Result: inconclusive for building a gain table, but a real negative
+finding.** Tuner registers `0x05` and `0x07` (LNA/mixer gain in the
+public R82xx scheme, and the pair `kMeasuredV4GainSteps` uses for V4)
+are written repeatedly throughout both sessions, but their values
+increment **monotonically and in lockstep** (`05:0x90→0x91→0x92→...`,
+`07:0x60→0x61→0x62→...`) on a **fixed ~3-5 second timer**, identically
+in both the hub and direct-connection sessions, and independently
+confirmed by re-running with longer pauses between slider moves (same
+drift, same cadence). This rules out: (a) USB hub power-quality as a
+factor (identical behavior direct-connected), and (b) any simple
+correlation between these two registers' values and the manual gain
+slider position.
+
+**Follow-up steady-state test resolved this.** Set gain once to 22.9 dB
+(a value already reached partway through the earlier step sweep) and
+left it completely untouched for ~40 s while capturing: **zero**
+`wValue=0x0034` control-transfer writes of any kind occurred during that
+entire window — not just reg 0x05/0x07, no tuner traffic at all. This
+proves the earlier monotonic drift is **not** an independent background
+timer, an AGC loop, or PPM/housekeeping tick — it only occurs while the
+gain slider is actively being changed. The most likely explanation:
+SDR#'s own gain-control code **ramps/smooths** the transition to a new
+gain value over a few seconds (incrementing reg 0x05/0x07 by small steps
+every ~3-5 s) rather than jumping directly, purely to avoid an audible
+"pop" — a UI/driver-side transition behavior, not continuous tuner-side
+gain management.
+
+**Practical implication**: audible reception on this unit really did
+require manually raising gain in SDR#/SDR++ to work at all (~32.8 dB,
+AGC off) — that observation stands, and reg 0x05/0x07 likely *are* the
+real LNA/mixer gain registers after all (matching V4's scheme). Building
+a correct R820T2/R860 gain table is now a well-understood, mechanical
+task: hold at each of the 28 standard dB steps long enough for the ramp
+to fully settle (confirmed above: no more writes = settled), *then*
+record the resting reg 0x05/0x07 values — not the values seen while the
+ramp is still in flight, which is what the original rapid step-through
+captured. Not done this session; a good, concrete next-session task.
+
 ## Next step (not yet implemented)
 
 Decode the full multi-byte read payloads (not just request shape) from
 both captures to determine what the loop is actually reading (RSSI?
 demod lock/overload flags?) and what decision it drives, then implement
 an equivalent loop in `esp_rtl_sdr.cpp` sourced from this evidence —
-not from librtlsdr source, per `CLEAN_ROOM.md`.
+not from librtlsdr source, per `CLEAN_ROOM.md`. The gain-step experiment
+above suggests this decode is necessary before a gain table can be built
+correctly; simply copying register addresses by inspection was not
+sufficient.

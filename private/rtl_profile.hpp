@@ -150,17 +150,8 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
     switch (profile) {
     case RtlProfileId::BlogV4:
         return rtl_profile_library_capabilities();
-    case RtlProfileId::BlogV3:
-        /* EXPERIMENTAL (2026-09-11, take 2): CAP_GAIN unlocked to test
-         * manual gain against real official-driver evidence (SDR++ needed
-         * ~32.8 dB manual, AGC off, to hear a station on this same unit).
-         * See rtl_profile_uses_v4_hf_routing() above -- without that too,
-         * this capability alone still could not reach the tuner. NOT
-         * Hardware-verified; revert if it doesn't help. */
-        return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
-               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
-               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO;
     case RtlProfileId::NooelecSmartV5:
+    case RtlProfileId::BlogV3:
         /* Provisional: stream/retune/sync-read/passport; no V4 HF or measured gain/bias. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT;
@@ -174,20 +165,9 @@ inline bool rtl_profile_supports_stream(RtlProfileId profile)
     return (rtl_profile_device_capabilities(profile) & ESP_RTL_SDR_CAP_STREAM) != 0;
 }
 
-/**
- * EXPERIMENTAL (2026-09-11, take 2): re-unlocked for BlogV3 specifically to
- * test manual gain -- SDR++/official driver required manually raising gain
- * to ~32.8 dB to hear a real station on this same V3c unit with RTL AGC and
- * Tuner AGC both OFF, which apply_gain_records() (used by
- * esp_rtl_sdr_set_tuner_gain) cannot reach at all while this returns false
- * for BlogV3, since it calls run_band_frontend() which no-ops otherwise.
- * The first attempt at this unlock never actually exercised manual gain
- * (only checked the passive default state), so it could not have found
- * this. NOT a Hardware-verified claim until confirmed by ear.
- */
 inline bool rtl_profile_uses_v4_hf_routing(RtlProfileId profile)
 {
-    return profile == RtlProfileId::BlogV4 || profile == RtlProfileId::BlogV3;
+    return profile == RtlProfileId::BlogV4;
 }
 
 inline bool rtl_profile_uses_r820t2_i2c_remap(RtlProfileId profile)
@@ -195,12 +175,11 @@ inline bool rtl_profile_uses_r820t2_i2c_remap(RtlProfileId profile)
     return profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5;
 }
 
-/** Blog V4 vendor board controls must never run on plain R820T2/R860 sticks
- * -- except BlogV3, unlocked above for the same gain experiment. */
+/** Blog V4 vendor board controls must never run on plain R820T2/R860 sticks. */
 inline bool rtl_profile_allows_init_record(RtlProfileId profile,
                                            const RtlControlRecord &record)
 {
-    if (profile == RtlProfileId::BlogV3 || !rtl_profile_uses_r820t2_i2c_remap(profile)) {
+    if (!rtl_profile_uses_r820t2_i2c_remap(profile)) {
         return true;
     }
     return record.value != 0x3001 && record.value != 0x3003 && record.value != 0x3004;

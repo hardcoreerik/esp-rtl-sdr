@@ -146,3 +146,148 @@ not from librtlsdr source, per `CLEAN_ROOM.md`. The gain-step experiment
 above suggests this decode is necessary before a gain table can be built
 correctly; simply copying register addresses by inspection was not
 sufficient.
+
+## PLL/tuning capture — 2026-09-11 (crystal frequency discovery)
+
+### Purpose
+
+`esp_rtl_sdr`'s PLL programming (`encode_r820_pll()`, `kRtlFinalTuneTemplate`)
+was written and measured entirely against a real Blog V4 (R828D tuner). It
+has been reused unconditionally for every profile, including BlogV3
+(R820T2/R860), with zero independent verification that a different tuner
+chip needs the same reference-crystal constant. Real-hardware test tonight
+("just static" on 96.1 FM at every gain setting after the gain-path fixes)
+raised the question directly: is V3c's PLL landing on the right frequency
+at all? Method: same behavioral-oracle approach as the gain-loop capture
+above — official RTL-SDR Blog Windows driver + USBPcap against the real
+V3c unit, not librtlsdr source.
+
+### Setup
+
+- Host: this PC, Windows, Wireshark/tshark 4.6.8 + USBPcap (`USBPcap4`
+  carried this device's traffic in this session; USBPcap channel numbering
+  is not stable across sessions — identify by traffic volume/vendor ID,
+  don't assume the same interface number next time).
+- Stimulus: official RTL-SDR Blog Windows driver v1.4.0 (`rtl_sdr.exe`),
+  one-shot `-f <freq> -s 2048000 -n <N>` runs, V3c plugged directly into
+  the PC (not the Tab5).
+- Frequencies swept: 88.1, 90.1, 92.1, 94.1, 96.1, 98.1, 100.1, 102.1,
+  104.1, 106.1, 107.9 MHz — the FM broadcast band in exact 2 MHz steps,
+  chosen specifically so the step size matches likely PLL resolution and
+  makes integer-vs-fractional divider behavior easy to separate.
+- Note: `rtl_sdr.exe` briefly logs `[R82XX] PLL not locked!` on every run
+  before settling and printing `Tuned to <freq> Hz` — this is the
+  *official* driver's own transient warning on this specific unit, not
+  something introduced by our driver.
+- Each run's I2C writes to the tuner (I2C addr `0x34`, `wIndex=0x0610`)
+  were extracted with `tshark -Y "usb.bmRequestType==0x40 &&
+  usb.setup.wIndex==0x0610" -T fields -e usb.setup.wValue -e
+  usb.data_fragment`. Each write's data payload is `[register, value]`.
+
+### Findings
+
+Each capture contains two "tune-shaped" register clusters (writes to
+0x10, 0x14, 0x12, 0x16, 0x15 in that order): a **first, frequency-invariant
+calibration cluster** (always `10=8c 14=84 12=06 16=1c 15=72` regardless of
+target frequency — a fixed internal calibration reference, not the user's
+requested frequency) and a **second, frequency-dependent final-tune
+cluster**. Only the second cluster was used below.
+
+Final-tune register values (reg 0x10 / 0x14 / 0x15 / 0x16), by frequency:
+
+| Freq (MHz) | reg0x10 | reg0x14 | reg0x15 | reg0x16 |
+|---|---|---|---|---|
+| 88.1  | 0x84 | 0x49 | 0x82 | 0xed |
+| 90.1  | 0x84 | 0xc9 | 0xf6 | 0x09 |
+| 92.1  | 0x84 | 0x0a | 0x66 | 0x26 |
+| 94.1  | 0x84 | 0x4a | 0xd8 | 0x42 |
+| 96.1  | 0x84 | 0x8a | 0x4a | 0x5f |
+| 98.1  | 0x84 | 0xca | 0xbc | 0x7b |
+| 100.1 | 0x84 | 0x0b | 0x2e | 0x98 |
+| 102.1 | 0x84 | 0x4b | 0x9e | 0xb4 |
+| 104.1 | 0x84 | 0x8b | 0x10 | 0xd1 |
+| 106.1 | 0x84 | 0xcb | 0x82 | 0xed |
+| 107.9 | 0x64 | 0x44 | 0xc2 | 0xf6 |
+
+**Crystal frequency, confirmed.** `esp_rtl_sdr.cpp`'s existing
+`(si2c<<6)|ni2c` packing (already used for reg 0x14, called `r20`
+internally) matches reg 0x14's real bit layout exactly: rotating each
+byte to extract `ni2c`/`si2c` and reconstructing `packed = ni2c*4+si2c`
+gives a value that increases by **exactly +1 per 2 MHz step** across
+92.1-106.1 MHz (8 consecutive points, zero exceptions). Solving
+`div/(2*xtal) = 1/2,000,000 Hz` with `div=32` (the mixer divider active
+across this whole range, confirmed separately below) gives
+`xtal = 32,000,000 Hz` exactly — not the 28.8 MHz value
+(`kRtlXtalHz`/`kMeasuredV4XtalHz`) measured against V4 and reused
+unconditionally until tonight. (88.1 and 90.1 deviate slightly from the
+clean +1/2MHz progression — likely residual settling from being the
+first two tunes right after direct-sampling-mode was disabled; the 8
+consecutive clean points from 92.1-106.1 are the reliable evidence.)
+
+**Register assignment was already correct — this was a live
+misdiagnosis, corrected in the same session.** Earlier in this
+investigation the register *location* was suspected wrong (reg 0x14
+looked "misplaced" when compared against a miscomputed 28.8 MHz
+prediction). Re-checking `kRtlFinalTuneTemplate`'s own patch indices
+confirms index 13 already targets reg 0x14 for the packed N-divider byte,
+exactly matching real hardware. The only actual bug was the crystal
+constant.
+
+**Mixer-divider boundary, confirmed independently.** Reg 0x10 holds
+`active = (((mix_log-1)&7)<<5)|0x04` — this driver's own existing formula
+for the mixer-divider-select byte. It is `0x84` (divider=32) for every
+frequency 88.1-106.1 MHz, then switches to `0x64` (divider=16) at 107.9
+MHz. Plugging divider=32/16 into the existing formula reproduces `0x84`/
+`0x64` exactly. The `1.77e9-3.90e9` Hz VCO candidate window
+(`encode_r820_pll()`'s `kMixCandidates` loop) was NOT independently
+re-derived tonight — it happens to still select the observed real divider
+correctly across this sweep, but the true valid VCO range for R820T2 vs.
+R828D has not been confirmed, so this window may be coincidentally
+correct rather than verified. Flagging as an open assumption.
+
+**NOT resolved — fractional bytes (reg 0x15/0x16).** These do not
+correlate cleanly with frequency even after correcting the crystal
+constant: at an exact 2 MHz step size (which should shift the fractional
+remainder by *zero* if reg 0x14's integer byte alone fully explains the
++1-per-step behavior), reg 0x15/0x16 vary substantially and
+non-monotonically across the sweep (see table above). An interleaved
+single-byte I2C read (`wIndex=0x0600`, response `0x07` observed once)
+immediately follows each write cluster, consistent with a closed-loop VCO
+calibration search (write guess → read lock/cal status → retry) rather
+than a static fractional-divider value — which would also explain the
+official driver's own `[R82XX] PLL not locked!` transient warning on
+every run. This was not decoded further this session (would need
+request/response frame pairing across many more retunes, ideally
+including repeated captures at the *same* frequency to test whether
+these bytes vary run-to-run even with no frequency change, which would
+confirm the calibration-search theory conclusively).
+
+### What was fixed vs. what remains provisional
+
+Fixed in `codex/usb-enum-fault-guard` (commit `3669d88`): the crystal
+constant for BlogV3 only, via new `rtl_profile_pll_xtal_hz()`. This
+should bring V3c's PLL from "wrong crystal, wrong integer N, off by an
+unknown and possibly large amount" to "right crystal, right integer N,
+fractional bytes still using the V4-derived formula/IF-offset guess" —
+i.e. within roughly one fractional-divider step (a few hundred kHz to
+low-MHz, depending on the true IF offset) of the correct frequency,
+not exact.
+
+NOT fixed, still open:
+- The true IF offset (`kRtlIfOffsetHz`) for V3c — still using V4's
+  1,814,972 Hz value, unverified for this chip.
+- The fractional bytes (r21/r22) — still computed via the existing
+  formula, which this sweep shows does not match real hardware's
+  actual reg 0x15/0x16 behavior.
+- The VCO candidate window bounds — coincidentally still selecting the
+  right divider in this sweep, not independently re-derived.
+
+### Recommended next angle
+
+Capture the same frequency 3-5 times in a row (not swept) and diff reg
+0x15/0x16 across repeats. If they vary run-to-run at a *fixed* frequency,
+that conclusively confirms the calibration-search theory over a static
+formula, and the next step becomes decoding the read-back byte's bit
+meaning (pair request/response frames properly, e.g. via
+`usb.request_in`) rather than continuing to search for a closed-form
+fractional-N formula that may not exist.

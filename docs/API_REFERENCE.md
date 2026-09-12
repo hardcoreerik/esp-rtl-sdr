@@ -1,6 +1,6 @@
 # esp_rtl_sdr — API Reference
 
-> **Version tracked:** `0.7.12` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))
+> **Version tracked:** `0.8.0-rc2` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))
 > **Header of record:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
 > **Design contract (invariants, ABI growth):** [`API.md`](API.md)  
 > **What works on hardware right now:** [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) wins on any claim conflict.
@@ -422,7 +422,7 @@ Named presets **ignore** `frequency_hz` in the stream config.
 | `NEED_FM` | FM-class: ~960k @ preferred LO |
 | `NEED_ADSB` | 1090 MHz, 2.048 MSPS |
 | `NEED_WX` | NOAA WX 162.400 MHz, 960k |
-| `NEED_HF` | Stores HF LO intent; full upconverter CAP still open |
+| `NEED_HF` | Stores HF LO intent; V4 routing is applied when streaming starts |
 | `NEED_MAX_STABLE` | Passport `best_stable_sps` if valid, else 2.048M |
 | `NEED_LISTEN` | Lowest-drop default: 960k, keep LO |
 

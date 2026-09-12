@@ -1,15 +1,9 @@
 #pragma once
 
+#include "rtl_control.hpp"
+
 #include <cstddef>
 #include <cstdint>
-
-struct RtlControlRecord {
-  uint16_t value;
-  uint16_t index;
-  uint8_t request_type;
-  uint8_t length;
-  uint8_t data[8];
-};
 
 constexpr RtlControlRecord kRtlInitTransfers[] = {
     {0x2000, 0x0110, 0x40, 1, {0x09, 0, 0, 0, 0, 0, 0, 0}},
@@ -553,6 +547,10 @@ constexpr RtlControlRecord kRtlCleanupTransfers[] = {
 
 static_assert(sizeof(kRtlInitTransfers) / sizeof(kRtlInitTransfers[0]) == 515);
 static_assert(sizeof(kRtlCleanupTransfers) / sizeof(kRtlCleanupTransfers[0]) == 16);
+
+/** Captured RTL2832 3.57 MHz IF restore (write + settle-read pairs). */
+constexpr size_t kRtlStandardIfFirst = 98;
+constexpr size_t kRtlStandardIfLast = 103;
 
 /** Measured sample-rate slice inside init (indices inclusive). */
 constexpr size_t kRtlSampleRateFirst = 462;

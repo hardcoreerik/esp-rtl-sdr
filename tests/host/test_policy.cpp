@@ -75,10 +75,15 @@ static void test_version(void)
     EXPECT_TRUE(vs[0] != '\0');
     EXPECT_STREQ(vs, ESP_RTL_SDR_VERSION_STRING);
 
+    EXPECT_STREQ(vs, ESP_RTL_SDR_VERSION_STRING);
+#if ESP_RTL_SDR_VERSION_IS_PRERELEASE
+    EXPECT_TRUE(std::strstr(vs, "-rc") != nullptr);
+#else
     char expect[32];
     std::snprintf(expect, sizeof(expect), "%u.%u.%u", ESP_RTL_SDR_VERSION_MAJOR,
                   ESP_RTL_SDR_VERSION_MINOR, ESP_RTL_SDR_VERSION_PATCH);
     EXPECT_STREQ(vs, expect);
+#endif
 
     const uint32_t packed = esp_rtl_sdr_get_version();
     EXPECT_EQ_U((packed >> 16) & 0xff, ESP_RTL_SDR_VERSION_MAJOR);
@@ -158,6 +163,99 @@ static void test_measured_agc_tables(void)
     EXPECT_EQ_U(dem.index, 0x0010);
     EXPECT_EQ_U(dem.length, 1);
     EXPECT_EQ_U(dem.data[0], 0x25);
+}
+
+static void test_v4_frontend_composition(void)
+{
+    struct BandCase {
+        uint32_t hz;
+        MeasuredV4FrontendBand band;
+        uint8_t r6;
+        uint8_t r5;
+    };
+    constexpr BandCase cases[] = {
+        {1120000u, MeasuredV4FrontendBand::HF, 0x38, 0xa3},
+        {10000000u, MeasuredV4FrontendBand::HF, 0x38, 0xa3},
+        {28799999u, MeasuredV4FrontendBand::HF, 0x38, 0xa3},
+        {28800000u, MeasuredV4FrontendBand::HF, 0x38, 0xa3},
+        {28800001u, MeasuredV4FrontendBand::VHF, 0x30, 0xe3},
+        {100000000u, MeasuredV4FrontendBand::VHF, 0x30, 0xe3},
+        {249999999u, MeasuredV4FrontendBand::VHF, 0x30, 0xe3},
+        {250000000u, MeasuredV4FrontendBand::UHF, 0x30, 0x83},
+        {1090000000u, MeasuredV4FrontendBand::UHF, 0x30, 0x83},
+    };
+    for (const BandCase &c : cases) {
+        const auto p = measured_v4_frontend_plan(c.hz, false, 0x03);
+        EXPECT_EQ_U((int)p.band, (int)c.band);
+        EXPECT_EQ_U(p.reg06, c.r6);
+        EXPECT_EQ_U(p.reg05, c.r5);
+        EXPECT_EQ_U(p.gpd, 0x06);
+        EXPECT_EQ_U(p.gpoe, 0x39);
+    }
+
+    for (const uint32_t hz : {1120000u, 100000000u, 1090000000u}) {
+        const bool hf = measured_v4_frontend_band(hz) == MeasuredV4FrontendBand::HF;
+        const auto off = measured_v4_frontend_plan(hz, false, 0xf7);
+        const auto on = measured_v4_frontend_plan(hz, true, 0xf7);
+        EXPECT_EQ_U(off.gpo, hf ? 0x18 : 0x38);
+        EXPECT_EQ_U(on.gpo, hf ? 0x19 : 0x39);
+        EXPECT_EQ_U(off.gpo ^ on.gpo, 0x01);
+        EXPECT_EQ_U(off.reg05 & 0x1f, 0x17);
+        EXPECT_EQ_U(on.reg05, off.reg05);
+    }
+
+    EXPECT_EQ_U(measured_v4_frontend_plan(1120000u, false, 0xf7).reg05, 0xb7);
+    EXPECT_EQ_U(measured_v4_frontend_plan(100000000u, false, 0xf7).reg05, 0xf7);
+    EXPECT_EQ_U(measured_v4_frontend_plan(1090000000u, false, 0xf7).reg05, 0x97);
+    EXPECT_EQ_U(measured_v4_frontend_plan(1120000u, false, kMeasuredV4TunerAgcReg05)
+                    .reg05,
+                0xa8);
+    EXPECT_EQ_U(measured_v4_frontend_plan(100000000u, false, kMeasuredV4TunerAgcReg05)
+                    .reg05,
+                0xe8);
+    EXPECT_EQ_U(measured_v4_frontend_plan(1090000000u, false, kMeasuredV4TunerAgcReg05)
+                    .reg05,
+                0x88);
+
+    /* OFF -> ON -> OFF changes only GPIO0, including while HF owns GPIO5. */
+    const auto bias_off = measured_v4_frontend_plan(1120000u, false, 0xf0);
+    const auto bias_on = measured_v4_frontend_plan(1120000u, true, bias_off.reg05_low_bits);
+    const auto bias_off_again =
+        measured_v4_frontend_plan(1120000u, false, bias_on.reg05_low_bits);
+    EXPECT_EQ_U(bias_off.gpo, 0x18);
+    EXPECT_EQ_U(bias_on.gpo, 0x19);
+    EXPECT_EQ_U(bias_off_again.gpo, bias_off.gpo);
+    EXPECT_EQ_U(bias_off_again.reg05, bias_off.reg05);
+
+    /* VHF -> HF -> VHF and HF -> UHF -> HF preserve gain and Bias-T. */
+    const auto vhf = measured_v4_frontend_plan(100000000u, true, 0xf7);
+    const auto hf_from_vhf =
+        measured_v4_frontend_plan(1120000u, true, vhf.reg05_low_bits);
+    const auto vhf_return =
+        measured_v4_frontend_plan(100000000u, true, hf_from_vhf.reg05_low_bits);
+    const auto uhf_from_hf =
+        measured_v4_frontend_plan(1090000000u, true, hf_from_vhf.reg05_low_bits);
+    const auto hf_from_uhf =
+        measured_v4_frontend_plan(1120000u, true, uhf_from_hf.reg05_low_bits);
+    EXPECT_EQ_U(vhf.reg05, vhf_return.reg05);
+    EXPECT_EQ_U(hf_from_vhf.reg05, hf_from_uhf.reg05);
+    EXPECT_EQ_U(vhf.gpo ^ hf_from_vhf.gpo, 0x20);
+    EXPECT_EQ_U(uhf_from_hf.gpo ^ hf_from_uhf.gpo, 0x20);
+    EXPECT_EQ_U(vhf.gpo & 0x01, hf_from_uhf.gpo & 0x01);
+    EXPECT_EQ_U(uhf_from_hf.gpo & 0x01, hf_from_uhf.gpo & 0x01);
+
+    /* HF manual gain changes and manual -> AUTO retain the HF input mask. */
+    const auto hf_manual_low = measured_v4_frontend_plan(1120000u, false, 0xf0);
+    const auto hf_manual_high = measured_v4_frontend_plan(1120000u, false, 0xf7);
+    const auto hf_auto =
+        measured_v4_frontend_plan(1120000u, false, kMeasuredV4TunerAgcReg05);
+    EXPECT_EQ_U(hf_manual_low.reg05, 0xb0);
+    EXPECT_EQ_U(hf_manual_high.reg05, 0xb7);
+    EXPECT_EQ_U(hf_auto.reg05, 0xa8);
+
+    /* At 28.8 MHz Cable-2 remains selected, but no LO offset is added. */
+    EXPECT_TRUE(!esp_rtl_sdr_frequency_uses_hf_upconverter(28800000u));
+    EXPECT_EQ_U(esp_rtl_sdr_tuner_frequency_hz(28800000u), 28800000u);
 }
 
 static void test_callback_reentry_is_task_local(void)
@@ -686,12 +784,21 @@ static void test_smoke_urb_image_isolation(void)
     EXPECT_TRUE(readme.find("CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K") != std::string::npos);
 }
 
+static void test_usb_fault_guard_latch_contract(void)
+{
+    const std::string source = slurp_repo_file("src/esp_rtl_sdr.cpp");
+    EXPECT_TRUE(source.find(
+        "else if (s_usb_fault_guard.panic_count < kUsbFaultGuardPanicThreshold)") !=
+                std::string::npos);
+}
+
 int main(void)
 {
     std::printf("esp_rtl_sdr host policy tests (%s)\n", esp_rtl_sdr_get_version_string());
     test_version();
     test_capabilities();
     test_measured_agc_tables();
+    test_v4_frontend_composition();
     test_callback_reentry_is_task_local();
     test_delivery_mode_helpers();
     test_rate_windows();
@@ -704,6 +811,7 @@ int main(void)
     test_error_base_unique();
     test_metrics_window_health();
     test_smoke_urb_image_isolation();
+    test_usb_fault_guard_latch_contract();
     std::printf("RESULT passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

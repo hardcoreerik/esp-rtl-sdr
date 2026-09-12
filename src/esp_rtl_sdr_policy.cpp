@@ -4,6 +4,7 @@
  */
 
 #include "esp_rtl_sdr.h"
+#include "rtl_profile.hpp"
 
 #include <cstddef>
 #include <cstdio>
@@ -38,16 +39,16 @@ const char *esp_rtl_sdr_get_version_string(void)
 uint32_t esp_rtl_sdr_get_capabilities(void)
 {
     /* MEASURED_2026_08_12: CAP_GAIN + CAP_BIAS_TEE from lab USBPcap (Blog V4).
-     * 0.7.7: CAP_HF_UPCONVERTER — public V4 HF path (RF+28.8e6) + measured band FE.
-     * MEASURED_2026_08_26: CAP_GAIN_AUTO + CAP_RTL_AGC (tuner 05/07/0c + demod 0x19). */
-    return ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE | ESP_RTL_SDR_CAP_METRICS |
-           ESP_RTL_SDR_CAP_CUSTOM_HZ | ESP_RTL_SDR_CAP_HOTPLUG |
-           ESP_RTL_SDR_CAP_FREQ_CORRECTION | ESP_RTL_SDR_CAP_MULTI_DEVICE |
-           ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_CONTINUOUS_RATE |
-           ESP_RTL_SDR_CAP_NEED | ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT |
-           ESP_RTL_SDR_CAP_DELIVERY_MODE | ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_BIAS_TEE |
-           ESP_RTL_SDR_CAP_HF_UPCONVERTER | ESP_RTL_SDR_CAP_GAIN_AUTO |
-           ESP_RTL_SDR_CAP_RTL_AGC;
+     * 0.7.7/0.7.15: CAP_HF_UPCONVERTER — public V4 HF path + composed Cable-2/GPIO5.
+     * MEASURED_2026_08_26: CAP_GAIN_AUTO + CAP_RTL_AGC (tuner 05/07/0c + demod 0x19).
+     * 0.8.0-rc2: binary Blog V4 feature set; use get_device_capabilities() for
+     * the attached profile (V3 omits STREAM; Nooelec omits HF/gain/bias). */
+    return rtl_profile_library_capabilities();
+}
+
+const char *esp_rtl_sdr_profile_to_name(esp_rtl_sdr_profile_t profile)
+{
+    return rtl_profile_name(static_cast<RtlProfileId>(profile));
 }
 
 bool esp_rtl_sdr_delivery_mode_uses_callback_iq(esp_rtl_sdr_delivery_mode_t mode)
@@ -97,6 +98,7 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err)
     case ESP_RTL_SDR_ERR_STALE_HANDLE: return "ESP_RTL_SDR_ERR_STALE_HANDLE";
     case ESP_RTL_SDR_ERR_REENTRANT: return "ESP_RTL_SDR_ERR_REENTRANT";
     case ESP_RTL_SDR_ERR_NOT_CLAIMED: return "ESP_RTL_SDR_ERR_NOT_CLAIMED";
+    case ESP_RTL_SDR_ERR_USB_SAFE_MODE: return "ESP_RTL_SDR_ERR_USB_SAFE_MODE";
     default:
 #if defined(ESP_PLATFORM)
         return esp_err_to_name(err);

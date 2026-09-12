@@ -32,17 +32,8 @@ try {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $cmake --build . --config Debug
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    $exe = Join-Path $Build "esp_rtl_sdr_host_tests.exe"
-    if (-not (Test-Path $exe)) {
-        $exe = Join-Path $Build "Debug\esp_rtl_sdr_host_tests.exe"
-    }
-    if (-not (Test-Path $exe)) {
-        $exe = Join-Path $Build "esp_rtl_sdr_host_tests"
-    }
-    if (-not (Test-Path $exe)) {
-        Write-Error "test binary not found under $Build"
-    }
-    & $exe
+    $ctest = Join-Path (Split-Path $cmake) "ctest.exe"
+    & $ctest --test-dir $Build -C Debug --output-on-failure
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

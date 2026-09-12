@@ -2,9 +2,11 @@
  * @file esp_rtl_sdr.h
  * @brief esp_rtl_sdr — production public C API (best-in-class contract)
  *
- * Standalone ESP-IDF USB Host client for the official RTL-SDR Blog V4
- * (USB 0bda:2838). Transfer sequences are clean-room / measured — this is
- * not a librtlsdr port.
+ * Standalone ESP-IDF USB Host client for RTL2832U-class SDR dongles.
+ * Blog V4 (R828D) is the measured streaming path. Nooelec NESDR SMArt v5 and
+ * Blog V3 are provisional R820T2 streams (I2C 0x34 remap; maintainer-
+ * unverified). Transfer sequences are clean-room / measured where stated —
+ * this is not a librtlsdr port.
  *
  * ---------------------------------------------------------------------------
  * Design principles (must work every time)
@@ -60,7 +62,7 @@
  * Ownership
  * ---------------------------------------------------------------------------
  *
- * - One handle owns one logical V4 session (interface 0).
+ * - One handle owns one logical accepted-profile session (interface 0).
  * - If host_library_already_installed is false, the driver installs/uninstalls
  *   the USB Host stack for that handle; if true, the app owns install and must
  *   keep the stack alive for the handle lifetime.
@@ -86,8 +88,12 @@ extern "C" {
 
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
-#define ESP_RTL_SDR_VERSION_MINOR 7
-#define ESP_RTL_SDR_VERSION_PATCH 14
+#define ESP_RTL_SDR_VERSION_MINOR 8
+#define ESP_RTL_SDR_VERSION_PATCH 0
+/** 1 while experimental prerelease; 0 for stable X.Y.Z. */
+#define ESP_RTL_SDR_VERSION_IS_PRERELEASE 1
+/** Token for prerelease suffix (stringized into VERSION_STRING). */
+#define ESP_RTL_SDR_VERSION_PRERELEASE rc2
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -99,10 +105,18 @@ extern "C" {
  */
 #define ESP_RTL_SDR_VERSION_STRING_XSTR(s) #s
 #define ESP_RTL_SDR_VERSION_STRING_STR(s) ESP_RTL_SDR_VERSION_STRING_XSTR(s)
+#if ESP_RTL_SDR_VERSION_IS_PRERELEASE
+#define ESP_RTL_SDR_VERSION_STRING                                      \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MAJOR) "."    \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MINOR) "."    \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_PATCH) "-"    \
+    ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_PRERELEASE)
+#else
 #define ESP_RTL_SDR_VERSION_STRING                                      \
     ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MAJOR) "."    \
     ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_MINOR) "."    \
     ESP_RTL_SDR_VERSION_STRING_STR(ESP_RTL_SDR_VERSION_PATCH)
+#endif
 
 /**
  * Packed version: (major << 16) | (minor << 8) | patch.
@@ -110,7 +124,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.7.0". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.8.0-rc2". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */
@@ -141,6 +155,18 @@ const char *esp_rtl_sdr_get_version_string(void);
 #define ESP_RTL_SDR_ERR_NOT_CLAIMED    (ESP_RTL_SDR_ERR_BASE + 14)
 /** Device index or serial selection out of range / not found. */
 #define ESP_RTL_SDR_ERR_BAD_DEVICE     (ESP_RTL_SDR_ERR_BASE + 15)
+/**
+ * install() refused to touch the USB Host peripheral this boot: the fault
+ * guard saw repeated panics during enumeration on prior boots (some 0bda:2838
+ * sticks — including at least one RTL-SDR Blog "V3c" that reports the bare
+ * factory RTL2838UHIDIR descriptor instead of Blog-branded strings — can
+ * STALL EP0 during ESP-IDF's own enumeration before this component's client
+ * ever sees a NEW_DEV event; that STALL has triggered a
+ * usbh_dev_close/num_ctrl_xfers_inflight assert inside stock ESP-IDF 5.5.4
+ * usb_host, i.e. a hard reboot this driver cannot catch or recover from).
+ * See esp_rtl_sdr_usb_fault_guard_reset() / esp_rtl_sdr_usb_safe_mode_active().
+ */
+#define ESP_RTL_SDR_ERR_USB_SAFE_MODE  (ESP_RTL_SDR_ERR_BASE + 16)
 
 /** Convert esp_err_t (including component codes) to a stable string. Never NULL. */
 const char *esp_rtl_sdr_err_to_name(esp_err_t err);
@@ -149,7 +175,10 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 /* Constants (policy)                                                         */
 /* -------------------------------------------------------------------------- */
 
-/** Official Blog V4 USB identity (measured). */
+/**
+ * Shared Realtek RTL2832U USB identity. Many sticks reuse 0bda:2838 —
+ * never treat VID/PID alone as Blog V4. Driver matches descriptors / probe.
+ */
 #define ESP_RTL_SDR_USB_VID            0x0BDA
 #define ESP_RTL_SDR_USB_PID            0x2838
 
@@ -205,13 +234,13 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 /**
  * Frequency policy (Hz) — Blog V4 full advertised span (public DS / product page).
  * Below HF_UPCONV_LO_HZ the driver programs the R828D at RF+28.8 MHz (built-in
- * SA612 upconverter) and selects the HF triplexer input.
+ * SA612 upconverter). The Cable-2 route remains selected through exactly 28.8 MHz.
  */
 #define ESP_RTL_SDR_FREQ_MIN_HZ        500000u
 #define ESP_RTL_SDR_FREQ_MAX_HZ        1766000000u
 /** Built-in HF upconverter LO (Blog V4 public: SA612 @ 28.8 MHz). */
 #define ESP_RTL_SDR_HF_UPCONV_LO_HZ    28800000u
-/** Triplexer band edges (public V4 product page): HF | VHF | UHF+. */
+/** Triplexer edges: HF is <= VHF_MIN_HZ; VHF begins immediately above it. */
 #define ESP_RTL_SDR_BAND_VHF_MIN_HZ    28800000u
 #define ESP_RTL_SDR_BAND_UHF_MIN_HZ    250000000u
 /** Quantization applied by retune_hz / start (Hz). */
@@ -343,6 +372,17 @@ typedef enum {
     ESP_RTL_SDR_HEALTH_RF_WEAK = 5,       /**< very low sample swing */
 } esp_rtl_sdr_health_t;
 
+/**
+ * Hardware profile selected by the driver (plug-and-play; no app picker).
+ * Identity ≠ tuner family ≠ board front-end. Apps consume capabilities.
+ */
+typedef enum {
+    ESP_RTL_SDR_PROFILE_UNKNOWN = 0,          /**< default until identified / after detach */
+    ESP_RTL_SDR_PROFILE_BLOG_V4 = 1,          /**< RTL-SDR Blog V4 / R828D + HF upconverter */
+    ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / R820T2 provisional stream */
+    ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5 = 3, /**< NESDR SMArt v5 / R820T2-R860 provisional */
+} esp_rtl_sdr_profile_t;
+
 typedef struct {
     uint16_t vid;
     uint16_t pid;
@@ -350,7 +390,7 @@ typedef struct {
     char manufacturer[48];
     char product[48];
     bool high_speed;
-    bool present; /**< false if no V4 currently attached */
+    bool present; /**< false if no accepted profile currently attached */
 } esp_rtl_sdr_device_info_t;
 
 typedef struct {
@@ -576,8 +616,8 @@ esp_err_t esp_rtl_sdr_get_supported_rates(uint32_t *out_rates,
 bool esp_rtl_sdr_normalize_frequency(uint32_t in_hz, uint32_t *out_hz);
 
 /**
- * True if RF is in the Blog V4 HF upconverter band (RF < 28.8 MHz).
- * Public product page: SA612 LO 28.8 MHz; software adds the offset.
+ * True when the 28.8 MHz LO offset is required (RF < 28.8 MHz).
+ * At exactly 28.8 MHz the HF Cable-2 route is selected without adding the LO.
  */
 bool esp_rtl_sdr_frequency_uses_hf_upconverter(uint32_t rf_hz);
 
@@ -594,8 +634,26 @@ uint32_t esp_rtl_sdr_tuner_frequency_hz(uint32_t rf_hz);
 esp_err_t esp_rtl_sdr_preset_frequency_hz(esp_rtl_sdr_preset_t preset,
                                              uint32_t *out_hz);
 
-/** Capability bitmask for this binary (see esp_rtl_sdr_cap_t). */
+/**
+ * Capability bitmask for this binary's Blog V4 feature set (see esp_rtl_sdr_cap_t).
+ * For the *attached* dongle, prefer esp_rtl_sdr_get_device_capabilities().
+ */
 uint32_t esp_rtl_sdr_get_capabilities(void);
+
+/**
+ * Active hardware profile for the open device.
+ * Returns UNKNOWN for NULL/stale handles or when nothing accepted is attached.
+ */
+esp_rtl_sdr_profile_t esp_rtl_sdr_get_profile(esp_rtl_sdr_handle_t handle);
+
+/**
+ * Capability bitmask for the currently attached profile.
+ * Detached / UNKNOWN → 0. Blog V3 / Nooelec provisional omit HF/gain/bias.
+ */
+uint32_t esp_rtl_sdr_get_device_capabilities(esp_rtl_sdr_handle_t handle);
+
+/** Stable profile name string. Never NULL. */
+const char *esp_rtl_sdr_profile_to_name(esp_rtl_sdr_profile_t profile);
 
 /** True if mode emits EVT_IQ_BLOCK for bulk IQ. */
 bool esp_rtl_sdr_delivery_mode_uses_callback_iq(esp_rtl_sdr_delivery_mode_t mode);
@@ -614,6 +672,10 @@ bool esp_rtl_sdr_delivery_mode_uses_read(esp_rtl_sdr_delivery_mode_t mode);
  *
  * Does not require a dongle present. Device attach is reported via events
  * as devices attach and detach.
+ *
+ * Returns ESP_RTL_SDR_ERR_USB_SAFE_MODE (no handle created, usb_host_install
+ * never called) if the fault guard latched after repeated enumeration-time
+ * panics — see the macro's doc comment and esp_rtl_sdr_usb_fault_guard_reset().
  */
 esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
                                  esp_rtl_sdr_handle_t *out_handle);
@@ -625,6 +687,22 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
  * returns STALE_HANDLE (use-after-free is still undefined — do not retain).
  */
 esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle);
+
+/**
+ * True if this boot's install() (or a prior one this session) refused to
+ * start the USB Host peripheral because the enumeration fault guard latched.
+ * RTC-retained across resets/panics, reset by power loss. Apps can surface
+ * this in UI ("USB disabled after repeated crashes — tap to retry").
+ */
+bool esp_rtl_sdr_usb_safe_mode_active(void);
+
+/**
+ * Clear the enumeration fault guard's retained panic counter and safe-mode
+ * latch so the next esp_rtl_sdr_install() call will attempt usb_host_install
+ * again. Does not affect an already-created handle. Safe to call any time,
+ * including when the guard was never latched (no-op then).
+ */
+esp_err_t esp_rtl_sdr_usb_fault_guard_reset(void);
 
 /* -------------------------------------------------------------------------- */
 /* Queries                                                                    */
@@ -640,7 +718,7 @@ esp_rtl_sdr_state_t esp_rtl_sdr_get_state(esp_rtl_sdr_handle_t handle);
 esp_err_t esp_rtl_sdr_get_last_error(esp_rtl_sdr_handle_t handle);
 
 /**
- * Copy device info. present=false if no accepted V4 is attached.
+ * Copy device info. present=false if no accepted profile is attached.
  * Thread-safe snapshot. out_info is not modified on failure.
  */
 esp_err_t esp_rtl_sdr_get_device_info(esp_rtl_sdr_handle_t handle,
@@ -664,7 +742,7 @@ esp_err_t esp_rtl_sdr_get_metrics(esp_rtl_sdr_handle_t handle,
  *  - ESP_OK on success
  *  - ESP_ERR_INVALID_ARG / BAD_RATE / BAD_FREQ
  *  - ESP_RTL_SDR_ERR_BUSY if already streaming or stopping
- *  - ESP_RTL_SDR_ERR_NO_DEVICE if no V4
+ *  - ESP_RTL_SDR_ERR_NO_DEVICE if no accepted device is available
  *  - ESP_RTL_SDR_ERR_UNSUPPORTED when the requested path is not built
  *  - ESP_RTL_SDR_ERR_REENTRANT if called from event callback
  *  - ESP_RTL_SDR_ERR_USB / TIMEOUT / FAULT on hardware failure
@@ -793,7 +871,7 @@ esp_err_t esp_rtl_sdr_set_freq_correction(esp_rtl_sdr_handle_t handle, int ppm);
 esp_err_t esp_rtl_sdr_get_freq_correction(esp_rtl_sdr_handle_t handle, int *out_ppm);
 
 /**
- * Rescan USB for accepted profile devices (Blog V4 identity today).
+ * Rescan USB for accepted profile devices (Blog V4 / provisional Nooelec / provisional V3).
  * Updates internal candidate list used by get_device_count / select_*.
  * Does not close the currently open device unless it vanished.
  */
@@ -827,7 +905,7 @@ esp_err_t esp_rtl_sdr_select_device_serial(esp_rtl_sdr_handle_t handle, const ch
 
 /**
  * Apply a mission intent: sets preferred LO + sample rate (quantized).
- * Does not start streaming. NEED_HF stores HF LO; full upconverter CAP still open.
+ * Does not start streaming. NEED_HF stores HF LO; V4 routing is applied when streaming starts.
  * NEED_MAX_STABLE uses last successful passport best_stable_sps when valid.
  */
 esp_err_t esp_rtl_sdr_apply_need(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_need_t need);

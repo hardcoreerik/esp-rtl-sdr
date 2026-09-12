@@ -1,15 +1,15 @@
 # esp_rtl_sdr
 
-**Make an RTL-SDR Blog V4 a first-class peripheral on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
+**Make RTL2832U SDR dongles first-class peripherals on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.7.14-green)
+![Status](https://img.shields.io/badge/version-0.8.0--rc1-orange)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
-**Not a librtlsdr port.** Clean-room Blog V4 USB profile · stand-alone ESP-IDF component · fail-closed lifecycle  
+**Not a librtlsdr port.** Clean-room Blog V4 USB profile · provisional Nooelec SMArt v5 · provisional Blog V3 stream · stand-alone ESP-IDF component · fail-closed lifecycle
 
-**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.x** — early, public, honest.
+**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.8.0-rc2** experimental — early, public, honest.
 
 ---
 
@@ -28,14 +28,14 @@ Most microcontroller “RTL-SDR” work falls into one of two traps:
 
 That means:
 
-- A **stable C API** you can put next to FreeRTOS tasks and UI code  
-- **Fail-closed** behavior (no “half-open USB” after a failed start)  
-- **Capability flags** so apps don’t assume gain/bias/HF without CAP bits  
+- A **stable C API** you can put next to FreeRTOS tasks and UI code
+- **Fail-closed** behavior (no “half-open USB” after a failed start)
+- **Capability flags** so apps don’t assume gain/bias/HF without CAP bits
 
-- **Health + metrics** (is USB starving? is the app too slow? RF clipping?)  
-- **Rate passport** — probe which sample rates this **host + stick** actually sustain  
-- **Intent presets** (`NEED_FM`, `NEED_ADSB`, …) so apps speak missions, not only registers  
-- **Profiles** (Blog V4 first) so more dongles can be added without rewriting the core  
+- **Health + metrics** (is USB starving? is the app too slow? RF clipping?)
+- **Rate passport** — probe which sample rates this **host + stick** actually sustain
+- **Intent presets** (`NEED_FM`, `NEED_ADSB`, …) so apps speak missions, not only registers
+- **Profiles** (Blog V4 first) so more dongles can be added without rewriting the core
 
 Board stuff (display, Ethernet, VBUS, audio) stays in **your** app. This component is the radio USB path only.
 
@@ -45,7 +45,7 @@ Longer vision: [`docs/VISION.md`](docs/VISION.md).
 
 ## Why this tries to be *better* on microcontrollers
 
-Desktop drivers optimize for “open stick, set knobs, dump I/Q to the PC.”  
+Desktop drivers optimize for “open stick, set knobs, dump I/Q to the PC.”
 On a P4, the **host USB and RAM path is the hard part**. We lean into that:
 
 | Desktop / sketch style | esp_rtl_sdr |
@@ -66,11 +66,11 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | Item | Notes |
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | **RTL-SDR Blog V4** — USB **`0bda:2838`**, mfg/product strings `RTLSDRBlog` / `Blog V4` |
+| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.8.0-rc2** also recognizes provisional **Nooelec NESDR SMArt v5** and provisional **Blog V3** stream (R820T2 `0x34` remap; community soak). Bare `0bda:2838` is never assumed V4. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
-**Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, random eBay RTL sticks, production warranty.  
+**Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, random eBay RTL sticks, production warranty.
 **Why that is intentional:** [`docs/SCOPE.md`](docs/SCOPE.md).
 
 ---
@@ -90,7 +90,7 @@ idf.py -p PORT flash monitor
 
 Plug the Blog V4 into the P4 **USB Host** port (not the flash/UART port).
 
-- **No dongle:** helpers + install should run; `start` → `NO_DEVICE` is OK.  
+- **No dongle:** helpers + install should run; `start` → `NO_DEVICE` is OK.
 - **With dongle:** stream, optional `read()`, health logs, passport if the example runs it.
 
 More: [`examples/p4_serial_smoke/README.md`](examples/p4_serial_smoke/README.md).
@@ -187,7 +187,7 @@ if (caps & ESP_RTL_SDR_CAP_GAIN_AUTO) {
 }
 ```
 
-**Full API reference (params, returns, examples):** [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)  
+**Full API reference (params, returns, examples):** [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
 Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h`](include/esp_rtl_sdr.h).
 
 ---
@@ -246,9 +246,9 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `set_tuner_gain_mode(MANUAL\|AUTO)` | MANUAL ladder; AUTO measured R828D AGC (`CAP_GAIN_AUTO`, 0.7.8+). Streaming = async EP0. |
 | `set/get_rtl_agc` | RTL2832 digital AGC (`CAP_RTL_AGC`); not tuner AUTO. **get** = requested shadow, not readback. |
 | `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
-| HF (0.7.7) | **500 kHz…1766 MHz**; RF&lt;28.8 MHz uses +28.8 MHz upconverter (`CAP_HF_UPCONVERTER`) |
+| HF (0.7.15 routing correction) | **500 kHz…1766 MHz**; RF&lt;28.8 MHz uses +28.8 MHz LO, RF≤28.8 MHz selects Cable-2 and GPIO5-low (`CAP_HF_UPCONVERTER`) |
 
-Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md). P4 RF soak of HF FE / AUTO still open.
+Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md), and the checked-in clean-room transfer table. The 0.7.15 routing composition is host/build verified only; P4 GPIO and RF acceptance remain open.
 
 ### Typical rates (macros)
 
@@ -280,9 +280,9 @@ install → IDLE
 
 **Rules of thumb**
 
-1. One owner task for `uninstall`.  
-2. Event callbacks: OK to call `retune_hz` / `get_*` / `read` carefully; **don’t** `start`/`stop`/`uninstall` on the same handle.  
-3. Check `get_capabilities()` before assuming advanced features.  
+1. One owner task for `uninstall`.
+2. Event callbacks: OK to call `retune_hz` / `get_*` / `read` carefully; **don’t** `start`/`stop`/`uninstall` on the same handle.
+3. Check `get_capabilities()` before assuming advanced features.
 4. Prefer `config_default` + set fields; `struct_size` supports append-only growth.
 
 ---
@@ -337,9 +337,9 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 
 ## Ecosystem
 
-- **[OrcSDR](https://github.com/hardcoreerik/OrcSDR)** — ESP32-P4 SDR application (optional consumer)  
-- **[TheOrc](https://github.com/hardcoreerik/TheOrc)** — local-first multi-agent tools (truth culture)  
-- **This repo** — driver only; builds without OrcSDR  
+- **[OrcSDR](https://github.com/hardcoreerik/OrcSDR)** — ESP32-P4 SDR application (optional consumer)
+- **[TheOrc](https://github.com/hardcoreerik/TheOrc)** — local-first multi-agent tools (truth culture)
+- **This repo** — driver only; builds without OrcSDR
 
 ---
 
@@ -349,5 +349,5 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 
 ---
 
-**Try it. Break it. Open a `truth:` issue if we oversold something.**  
+**Try it. Break it. Open a `truth:` issue if we oversold something.**
 https://github.com/hardcoreerik/esp-rtl-sdr

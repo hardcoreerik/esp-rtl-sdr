@@ -6,8 +6,8 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-07**  
-Version: **0.7.14** (stop drains live URBs before free_bulk_pool; public windowed metrics/health; USB soak still operator work - not production-ready)
+Snapshot date: **2026-09-11**
+Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Blog V3/V3c/R860 identification+streaming hardware-verified; matched-IF tuning hardware-verified across hot retune, reattach, and a user-observed battery cold boot; gain and Nooelec still provisional; not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -54,9 +54,11 @@ If marketing copy contradicts this table, open a `truth:` issue.
 ## What this project is
 
 **esp_rtl_sdr** is a **stand-alone ESP-IDF USB Host driver** for **RTL2832U-class**
-SDR dongles. It delivers continuous **CU8 IQ** with a fail-closed C API, and is
-evolving into a **dongle nervous system** (intent, health, on-host passport) —
-not a librtlsdr port.
+SDR dongles (general multi-dongle direction: shared RTL2832U USB silicon;
+profiles for board/tuner differences). It delivers continuous **CU8 IQ** with a
+fail-closed, **capability-driven** C API (no user dongle picker), and is evolving
+into a **dongle nervous system** (intent, health, on-host passport) — not a
+librtlsdr port.
 
 Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 
@@ -67,13 +69,13 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Area | State | Boundary |
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
-| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 profile |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 **provisional**; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional** |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
 | Recommended rate list | **Implemented** | `get_supported_rates` |
 | Rate passport (`probe_rates`) | **Implemented** | On-device soak; needs P4+dongle run |
-| Host unit tests (policy) | **Implemented** | `tests/host` — no IDF; CI on push |
+| Host unit tests (policy + profiles) | **Implemented** | `tests/host` — both registered suites run through CTest; CI on push |
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | ESP-IDF P4 compile CI | **Implemented** | `examples/p4_serial_smoke` idf.py build esp32p4 |
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
@@ -89,12 +91,17 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Sync `read()` | **Implemented** | |
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
 | Multi-device select | **Implemented** | |
-| Blog V4 filter `0bda:2838` | **Implemented** | |
+| Blog V4 filter `0bda:2838` | **Implemented** | Exact `RTLSDRBlog` / `Blog V4` only — never bare VID/PID |
+| Nooelec NESDR SMArt v5 `0bda:2838` | **Provisional — contributor-tested; maintainer soak pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; I2C `0x34`; HF&lt;24 MHz rejected |
+| Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |
+| Blog V3 IQ streaming (device up, no crash) | **Hardware-verified** (2026-09-11) | Streams without crash across repeated V4↔V3-family hot-swap and cold-boot testing on a real V3c unit |
+| Blog V3 tune accuracy | **Hardware-verified on V3c; gain remains separate** | Measured 28.8 MHz crystal; tuner PLL and RTL2832 demodulator matched at 3.570 MHz using official-capture `38/11/12`. The exact candidate received the expected stations at displayed 96.100 and 99.100 MHz; 99.1 locked matching RDS with +13 kHz auto-centering and zero drops. V3c reattach restored the matched IF and 99.1 RDS, and a battery-only cold boot received the saved station correctly (user-observed; no COM17 by design). Blog V4 repeated both frequencies with matching RDS and its unchanged 1.814972 MHz IF. A sampled V3c 96.1 serial status had not yet locked RDS. |
+| Blog V3 gain accuracy | **Provisional / maintainer-unverified** | Manual gain capability and existing R820T2 path are present but calibration remains separate; no AUTO/RTL AGC/Bias-T claim. |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |
 | Gain / bias-T hardware | **Implemented** (tables from PC USBPcap) | Lab 2026-08-12; **not** yet Hardware-verified from *this* tree on P4; no multimeter DC |
-| HF upconverter path CAP | **Implemented (0.7.7)** | RF&lt;28.8 MHz → tuner RF+28.8e6; CAP_HF_UPCONVERTER; FE soak open |
+| HF upconverter path CAP | **Implemented (routing corrected 0.7.15)** | RF&lt;28.8 MHz → tuner RF+28.8e6; RF≤28.8 MHz → Cable-2/GPIO5-low; host/build verified, physical FE soak open |
 | R828D stage gain / input / notches | **Planned** | |
 | Adaptive USB URB | **Planned** | |
 | Beacon ppm learn | **Planned** | |
@@ -112,7 +119,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.0** | Continuous rates + need + health + passport + docs (vision/silicon/lab) |
 | **0.7.1** | Host tests / CI spine expansion |
 | **0.7.2** | Runtime hardening (STARTING, join, ring transactional, Kconfig) |
-| **0.7.3** | True async retune from event callback + `EVT_RETUNED` |
+| **0.7.3** | True async retune from callback + `EVT_RETUNED` |
 | **0.7.4** | Delivery modes BOTH/CALLBACK/READ + lazy pull ring |
 | **0.7.5** | Measured Blog V4 gain ladder + bias-T SYS EP0; CAP_GAIN/BIAS on |
 | **0.7.6** | Async mid-stream gain/bias (bulk-pause queue); stall retries; desktop-gap map |
@@ -124,6 +131,9 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.7.12** | Smoke SOAK evidence is scoped to the drain window (not pre-soak ring overflow) |
 | **0.7.13** | Public metrics_delta / health_from_window from metric snapshots (honest soak/app window) |
 | **0.7.14** | stop_stream_internal drains live URBs (shared with pause) before free_bulk_pool; avoids Tab5 HCD assert on band-switch stop→start |
+| **0.7.15** | Composed Blog V4 Cable-2/GPIO5/Bias-T/gain routing; physical GPIO and RF acceptance pending |
+| **0.8.0-rc1** | Unified multi-dongle profiles (V4 + provisional Nooelec + provisional V3 stream); EXPERIMENTAL prerelease |
+| **0.8.0-rc2** | Hotplug/lifecycle hardening and removal of V4-only board controls from provisional R820T2/R860 initialization; hardware acceptance pending |
 
 ---
 

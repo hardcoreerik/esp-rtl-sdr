@@ -2,7 +2,7 @@
 
 Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.md`.
 
-| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.7.8 | Phase |
+| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.8.0-rc2 | Phase |
 |---|---|---|---|---|
 | 1 | Open / close | `rtlsdr_open` | `install` / `uninstall` | **Done** |
 | 2 | Async IQ | `read_async` | `start` + `EVT_IQ_BLOCK` | **Done** |
@@ -13,7 +13,7 @@ Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.m
 | 8–9 | Tuner gain | modes / steps | Manual ladder + Tuner AUTO (`CAP_GAIN_AUTO`) + RTL AGC | **Done (0.7.8)** |
 | 11 | ppm | yes | software LO offset | **Done** |
 | 12 | Bias-T | common | Measured SYS EP0 (CAP_BIAS_TEE); DC re-soak open | **3 partial** |
-| 13 | Direct sampling / HF | forks | **HF upconverter CAP** (RF+28.8e6); not direct sampling | **Done (0.7.7)** |
+| 13 | Direct sampling / HF | forks | **V4 HF upconverter CAP** (RF+28.8e6; Cable-2/GPIO5). Nooelec/V3 provisional reject <24 MHz (no V4 HF). | **V4 Implemented (0.7.15/0.8.0-rc2), hardware acceptance open** |
 | 15 | Multi-device | index/serial | yes | **Done** |
 | 19 | Metrics | app-side | `get_metrics` | **Done (stronger)** |
 | 20 | Capability bits | weak | `get_capabilities` | **Done (stronger)** |

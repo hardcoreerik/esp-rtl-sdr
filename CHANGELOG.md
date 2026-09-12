@@ -4,6 +4,24 @@
 
 ### Fixed
 
+- **Blog V3/V3c matched-IF tuning (implementation and host/build verification):**
+  the earlier PLL-only repair set the R820T2/R860 tuner to the measured
+  3.570 MHz IF, but the RTL2832 demodulator still finished initialization at
+  the Blog V4-derived 1.814972 MHz IF. The 1.755028 MHz analog/digital mismatch
+  explains why 96.1 MHz was heard near 94.33 and 99.1 MHz near 97.33 even while
+  RDS identified the expected stations. After sample-rate programming and
+  before the first PLL tune, Blog V3 alone now replays the captured RTL2832
+  `0x19/0x1A/0x1B = 0x38/0x11/0x12` sequence, including the captured settle
+  reads. Blog V4 emits no additional USB records and keeps its existing matched
+  1.814972 MHz path; Nooelec receives no unverified override. Hardware tuning
+  acceptance remains open until 96.1/99.1, cold/hot tune, and hotplug are run on
+  the real V3c and then regressed on Blog V4.
+- **Host test false green:** both local runners and Windows CI now use CTest so
+  both registered suites run. Before this correction the policy executable
+  reported 373 passed while the profile executable was skipped; running it
+  directly exposed one stale Blog V3 gain-capability expectation. That
+  expectation now matches the existing capability behavior without changing
+  gain code.
 - **Root cause of the V3/Nooelec "not Hardware-verified" status, and of the
   reboot loop reported against real V3-family hardware ("One Blog V3 tester
   reported a reboot loop on insertion with RC1", 0.8.0-rc2 below; also
@@ -46,42 +64,14 @@
 
 ### Open hardware gates
 
-- The V3c test unit tunes to the requested frequency in the UI but does
-  not lock a clean station (static + waterfall/audio-pipeline activity,
-  no station audio) — the R820T2/R860 tune/gain register math in
-  `transfers_blog_v3.hpp` is borrowed from the Nooelec remap (see its own
-  header comment: "no unique V3 init tables measured... not
-  Hardware-verified") and has never been checked against real R820T2/R860
-  PLL behavior.
-  - **Ruled out by direct test (2026-09-11)**: temporarily gave `BlogV3`
-    the exact same capability set and frontend/AGC code path as `BlogV4`
-    (`rtl_profile_uses_v4_hf_routing()` and `rtl_profile_allows_init_record()`
-    unlocked for `BlogV3`, `rtl_profile_device_capabilities()` returns
-    `rtl_profile_library_capabilities()` for it too — see the
-    "experiment: run BlogV3 through the full V4 frontend/AGC/capability
-    path" commit). Result: **zero change in reception** — confirmed
-    static before and after, on the same real hardware, same station
-    (96.1 MHz KEZL, verified receiving cleanly on Blog V4 seconds earlier
-    with RDS lock as ground truth). This rules out capability-gating and
-    the GPIO/frontend-routing code path as the blocker; the V4 AGC-enable
-    writes execute against this tuner with no observable effect either
-    way. Revert this experiment before any release — it is a diagnostic
-    change only, and V3/V3c has 1 RF input vs V4's 3 triplexed inputs, so
-    the unlocked reg06/GPIO input-select path is expected to be
-    meaningless-to-wrong here regardless.
-  - The blocker is therefore at the **data level**, not a gating/code-path
-    bug: real R820T2/R860 gain/filter/PLL register *values* are needed,
-    not V4's borrowed ones. Next step (not yet done): capture the
-    **official RTL-SDR Blog Windows driver** (`rtl_test` / SDR#) against
-    this same V3c unit via USBPcap — cold enumeration, then open/tune/close
-    at a simple VHF frequency (e.g. 100 MHz) — and diff those control
-    transfers against an equivalent Blog V4 capture from the same host
-    stack. That isolates the real generic-RTL2832-bootstrap vs.
-    tuner-specific programming split from actual silicon behavior instead
-    of continuing to guess from V4's tables. V3's HF path (<~24 MHz) is a
-    separate, later concern — it uses RTL2832U direct sampling with the
-    tuner bypassed, not the V4 upconverter path, so do not reuse V4 HF
-    logic there either once VHF is solved.
+- Blog V3/V3c tuning is now matched at 3.570 MHz in both tuner and demodulator
+  code, but physical acceptance is still open. Required checks are 96.1 MHz
+  KEZL and 99.1 MHz The Beat with matching display/audio/RDS on cold start and
+  hot retune, then unplug/replug. Blog V4 must repeat those stations and its
+  dashboard/stream/hotplug checks before this repair is accepted.
+- Blog V3/V3c manual/automatic gain calibration remains separate from this IF
+  repair. The existing provisional manual-gain capability and register path are
+  unchanged; Nooelec gain and IF behavior remain unverified.
 - OrcSDR (app-level, separate repo): auto-start-scan-on-attach did not
   trigger for the `blog_v3_r820t2` profile on hot-swap (manually
   navigating to the FM screen and back did restore audio/waterfall). Very

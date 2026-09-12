@@ -26,6 +26,7 @@ constexpr uint16_t kRtlSharedPid = 0x2838;
 constexpr uint16_t kBlogV4TunerI2cValue = 0x0074;     /* R828D */
 constexpr uint16_t kR820T2TunerI2cValue = 0x0034;     /* R820T2 / R860 */
 constexpr uint32_t kR820T2NativeMinHz = 24000000u;    /* no HF claim for R820T2 path */
+constexpr uint32_t kBlogV3DemodIfHz = 3570000u;       /* measured V3c matched IF */
 
 inline bool rtl_profile_text_is(const char *actual, const char *expected)
 {
@@ -253,10 +254,15 @@ inline double rtl_profile_pll_xtal_hz(RtlProfileId profile)
  */
 inline double rtl_profile_pll_if_offset_hz(RtlProfileId profile)
 {
-    constexpr double kMeasuredV3cIfOffsetHz = 3570000.0;
     constexpr double kMeasuredV4IfOffsetHz = 1814972.0;
     if (profile == RtlProfileId::BlogV3) {
-        return kMeasuredV3cIfOffsetHz;
+        return static_cast<double>(kBlogV3DemodIfHz);
     }
     return kMeasuredV4IfOffsetHz;
+}
+
+/** Non-zero only when initialization must restore a profile-specific demod IF. */
+inline uint32_t rtl_profile_demod_if_restore_hz(RtlProfileId profile)
+{
+    return profile == RtlProfileId::BlogV3 ? kBlogV3DemodIfHz : 0u;
 }

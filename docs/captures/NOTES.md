@@ -357,3 +357,86 @@ V4-derived IF offset default — it has never been hardware tested.
 Not yet flashed/verified on the real Tab5 as of this note being
 written — next step is exactly that: overlay this commit, rebuild,
 flash, and listen on 96.1 FM with the V3c.
+
+## Matched-IF correction — 2026-09-11 (PLL-only conclusion was incomplete)
+
+### New physical symptom after the PLL fix
+
+The PLL-only change in `ff1f07c` did make V3c FM reception possible, which
+invalidated the earlier "no reception" status. It also exposed a repeatable
+frequency displacement:
+
+| OrcSDR displayed | Station actually received | Approximate receiving dial |
+|---|---|---|
+| 96.1 MHz | KEZL 96.1, confirmed by audio/RDS | ~94.33 MHz |
+| 99.1 MHz | The Beat 99.1, confirmed by audio/RDS | ~97.33 MHz |
+
+The UI and RDS were not contradicting each other. They described opposite sides
+of an analog/digital IF mismatch.
+
+### Root cause and exact relationship
+
+`rtl_profile_pll_if_offset_hz(BlogV3)` correctly moved the tuner PLL to a
+3,570,000 Hz IF, but the shared initialization table later left the RTL2832
+demodulator at the Blog V4-derived approximately 1,814,972 Hz IF. Therefore:
+
+```
+3,570,000 Hz - 1,814,972 Hz = 1,755,028 Hz
+```
+
+That 1.755028 MHz mismatch matches the roughly 1.77 MHz station displacement;
+the small remainder is within the way the user found the station and OrcSDR's
+existing bounded FM auto-centering behavior. The PLL math was correct, but a
+correct tuner PLL is not sufficient unless the RTL2832 demodulator is configured
+for the same IF.
+
+### Official-capture provenance
+
+The official-driver capture already contained the required final RTL2832 state
+in `v3c_official_driver_control_transfers_2026-09-11.txt`:
+
+- frame 11816: write `0x1920`, value `0x38`;
+- frame 11818: settle read;
+- frame 11820: write `0x1A20`, value `0x11`;
+- frame 11822: settle read;
+- frame 11824: write `0x1B20`, value `0x12`;
+- frame 11826: settle read.
+
+The same exact six records already existed as `kRtlInitTransfers[98..103]`.
+The repair replays them for `BlogV3` after sample-rate setup and before initial
+tuning. This is a clean-room reuse of first-party observed traffic, not a value
+copied from another RTL-SDR implementation.
+
+### Scope deliberately left unchanged
+
+- 28.8 MHz crystal evidence and the 3.570 MHz V3c PLL work are preserved.
+- Hot retune does not repeat the demodulator writes; stream initialization owns
+  the stable demod IF state.
+- Blog V4 executes no added USB records and retains its existing matched
+  1.814972 MHz path.
+- Nooelec retains its prior behavior because its IF has not been measured.
+- OrcSDR display frequency, station data, FM auto-centering, tuner registers,
+  gain behavior, and public driver API are unchanged.
+
+### Test baseline and post-fix validation
+
+The PowerShell and shell runners previously built two host executables but only
+ran `esp_rtl_sdr_host_tests`. That false-green baseline was:
+
+- policy: 373 passed, 0 failed;
+- profile, when invoked manually: 125 passed, 1 failed because its Blog V3
+  `CAP_GAIN` expectation was stale relative to the source;
+- truth hygiene: passed.
+
+The runners and Windows CI now use CTest. Current local results are:
+
+- policy: 373 passed, 0 failed;
+- profiles: 163 passed, 0 failed, including exact `38/11/12` write/read sequence,
+  Blog V3 matched IF, unchanged Blog V4 IF policy, and no Nooelec override;
+- truth hygiene: passed for 0.8.0-rc2;
+- ESP32-P4 driver smoke compile: passed with ESP-IDF 5.5.4.
+
+Hardware acceptance is still required on the exact OrcSDR candidate image. It
+must prove matching display/audio/RDS at 96.1 and 99.1 on V3c for cold start,
+hot retune, and unplug/replug, followed by the same station and lifecycle checks
+on Blog V4. Gain calibration remains a separate issue.

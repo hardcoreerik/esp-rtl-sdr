@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-09-11**
-Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Blog V3/V3c/R860 identification+streaming hardware-verified; tune/gain accuracy and Nooelec still provisional; not production-ready)
+Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Blog V3/V3c/R860 identification+streaming hardware-verified; matched-IF tuning repair host/build-verified but hardware acceptance open; gain and Nooelec still provisional; not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -75,7 +75,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
 | Recommended rate list | **Implemented** | `get_supported_rates` |
 | Rate passport (`probe_rates`) | **Implemented** | On-device soak; needs P4+dongle run |
-| Host unit tests (policy) | **Implemented** | `tests/host` — no IDF; CI on push |
+| Host unit tests (policy + profiles) | **Implemented** | `tests/host` — both registered suites run through CTest; CI on push |
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | ESP-IDF P4 compile CI | **Implemented** | `examples/p4_serial_smoke` idf.py build esp32p4 |
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
@@ -95,7 +95,8 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Nooelec NESDR SMArt v5 `0bda:2838` | **Provisional — contributor-tested; maintainer soak pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; I2C `0x34`; HF&lt;24 MHz rejected |
 | Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |
 | Blog V3 IQ streaming (device up, no crash) | **Hardware-verified** (2026-09-11) | Streams without crash across repeated V4↔V3-family hot-swap and cold-boot testing on a real V3c unit |
-| Blog V3 tune/gain accuracy | **Provisional / maintainer-unverified** | Same R820T2 I2C `0x34` IR remap as Nooelec provisional; RF&lt;24 MHz reject; no V4 HF; static observed with no station lock on real hardware — **not** Hardware-verified |
+| Blog V3 tune accuracy | **Repair implemented; hardware acceptance open** | Measured 28.8 MHz crystal; tuner PLL and RTL2832 demodulator now matched at 3.570 MHz using the official-capture `38/11/12` restore. Host tests and ESP32-P4 compile pass; 96.1/99.1 cold/hot/hotplug and V4 regression still required. |
+| Blog V3 gain accuracy | **Provisional / maintainer-unverified** | Manual gain capability and existing R820T2 path are present but calibration remains separate; no AUTO/RTL AGC/Bias-T claim. |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |

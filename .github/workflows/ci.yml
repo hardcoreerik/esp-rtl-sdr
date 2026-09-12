@@ -48,10 +48,7 @@ jobs:
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Debug
           cmake --build build --config Debug
-          $exe = "build/Debug/esp_rtl_sdr_host_tests.exe"
-          if (-not (Test-Path $exe)) { $exe = "build/esp_rtl_sdr_host_tests.exe" }
-          if (-not (Test-Path $exe)) { $exe = "build/esp_rtl_sdr_host_tests" }
-          & $exe
+          ctest --test-dir build -C Debug --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   truth-hygiene:

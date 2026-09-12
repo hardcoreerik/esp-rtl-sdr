@@ -161,6 +161,30 @@ static void test_frequency_policy(void)
     EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::Unknown, 100000000u));
 }
 
+static void test_matched_if_policy(void)
+{
+    EXPECT_EQ_U((uint32_t)rtl_profile_pll_if_offset_hz(RtlProfileId::BlogV3), 3570000u);
+    EXPECT_EQ_U(rtl_profile_demod_if_restore_hz(RtlProfileId::BlogV3), 3570000u);
+    EXPECT_EQ_U((uint32_t)rtl_profile_pll_if_offset_hz(RtlProfileId::BlogV4), 1814972u);
+    EXPECT_EQ_U(rtl_profile_demod_if_restore_hz(RtlProfileId::BlogV4), 0u);
+    EXPECT_EQ_U((uint32_t)rtl_profile_pll_if_offset_hz(RtlProfileId::NooelecSmartV5), 1814972u);
+    EXPECT_EQ_U(rtl_profile_demod_if_restore_hz(RtlProfileId::NooelecSmartV5), 0u);
+
+    const uint16_t values[] = {0x1920, 0x0120, 0x1a20, 0x0120, 0x1b20, 0x0120};
+    const uint16_t indices[] = {0x0011, 0x000a, 0x0011, 0x000a, 0x0011, 0x000a};
+    const uint8_t request_types[] = {0x40, 0xc0, 0x40, 0xc0, 0x40, 0xc0};
+    const uint8_t data[] = {0x38, 0x00, 0x11, 0x00, 0x12, 0x00};
+    EXPECT_EQ_U(kRtlStandardIfLast - kRtlStandardIfFirst + 1, 6u);
+    for (size_t i = 0; i < 6; ++i) {
+        const auto &record = kRtlInitTransfers[kRtlStandardIfFirst + i];
+        EXPECT_EQ_U(record.value, values[i]);
+        EXPECT_EQ_U(record.index, indices[i]);
+        EXPECT_EQ_U(record.request_type, request_types[i]);
+        EXPECT_EQ_U(record.length, 1u);
+        EXPECT_EQ_U(record.data[0], data[i]);
+    }
+}
+
 static void test_capability_matrix(void)
 {
     const uint32_t v4 = rtl_profile_device_capabilities(RtlProfileId::BlogV4);
@@ -176,7 +200,7 @@ static void test_capability_matrix(void)
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_STREAM) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_RETUNE) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
-    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN) == 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
 
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_STREAM) != 0);
@@ -249,6 +273,7 @@ int main(void)
     test_unknown_reject_and_v3_probe();
     test_tuner_isolation();
     test_frequency_policy();
+    test_matched_if_policy();
     test_capability_matrix();
     test_profile_transition_matrix();
     std::printf("RESULT profiles passed=%d failed=%d\n", g_passed, g_failed);

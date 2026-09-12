@@ -42,16 +42,17 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 | Caps | STREAM/RETUNE/etc. without HF_UPCONVERTER / GAIN / BIAS_TEE |
 | Evidence | Contributor/OrcSDR tester reports; clean-room remap only; community soak welcome |
 
-### `blog_v3` (RTL-SDR Blog V3 / V3c / R820T2 / R860) — IDENTIFICATION+STREAM VERIFIED, TUNING PROVISIONAL
+### `blog_v3` (RTL-SDR Blog V3 / V3c / R820T2 / R860) — IDENTIFICATION+STREAM VERIFIED, MATCHED-IF REPAIR AWAITING HARDWARE ACCEPTANCE
 
 | Field | Value |
 |---|---|
-| Status | Identification and streaming **hardware-verified** (2026-09-11, real V3c unit, R860 tuner per packaging) after the demod-bring-up fix (see CHANGELOG). Actual RF tuning/gain accuracy **still provisional / not Hardware-verified** — community soak wanted |
+| Status | Identification and streaming **hardware-verified** (2026-09-11, real V3c unit, R860 tuner per packaging). The 3.570 MHz matched-IF tuning repair is host/build-verified; physical 96.1/99.1 acceptance and Blog V4 regression remain open. Gain accuracy remains provisional. |
 | USB | Exact V3 descriptors, or completed R820T2 chip-id `0x96`/`0x69` on ambiguous `0bda:2838` (the tested V3c unit reports the bare factory `RTL2838UHIDIR` descriptor, not `RTLSDRBlog`/`Blog V3` — identified via the ambiguous-descriptor chip-id probe, not string match) |
 | Tuner | R820T2/R860 @ I2C `0x34` (same USB IR template remap as Nooelec provisional; R860 is pin/register-compatible with R820T2, same profile covers both — no separate profile needed) |
 | HF | **Rejected** below 24 MHz; **no** V4 HF upconverter / Cable-2 / GPIO5 |
-| Caps | STREAM/RETUNE/etc. without HF_UPCONVERTER / GAIN / BIAS_TEE |
-| Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`. Identification/streaming verified via repeated cold-boot and hot-swap testing (V4 ↔ V3-family, both directions) with zero crashes after the demod-bring-up fix. Tune/gain register math still **not** Hardware-verified — no unique V3/R860 tables measured yet, shared R820T2/Nooelec remap only; static-with-no-station-lock observed on real hardware. Next: PLL register readback capture vs. Rafael Micro's public R820T2 datasheet formula |
+| Caps | STREAM/RETUNE/etc. plus provisional manual GAIN; without HF_UPCONVERTER / GAIN_AUTO / RTL_AGC / BIAS_TEE |
+| IF evidence | Official-driver capture measured the V3c PLL IF at 3.570 MHz and ended RTL2832 setup with `0x19/0x1A/0x1B = 0x38/0x11/0x12`, including a settle read after each write. The driver now restores that exact demodulator sequence after sample-rate setup and before the first tune. V4 stays on its existing matched 1.814972 MHz path; Nooelec is unchanged. |
+| Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`. Identification/streaming verified via repeated cold-boot and hot-swap testing (V4 ↔ V3-family, both directions) with zero crashes. The matched-IF fix passes both host suites, truth hygiene, and ESP-IDF 5.5.4 ESP32-P4 compile. Physical tuning acceptance and manual-gain calibration remain open. |
 
 ## Fail closed
 

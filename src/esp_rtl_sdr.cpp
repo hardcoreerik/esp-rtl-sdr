@@ -809,6 +809,26 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
     return ESP_OK;
 }
 
+static esp_err_t run_profile_demod_if_restore(esp_rtl_sdr_handle *h)
+{
+    const uint32_t demod_if_hz = rtl_profile_demod_if_restore_hz(h->profile);
+    if (demod_if_hz == 0) {
+        return ESP_OK;
+    }
+    for (size_t i = kRtlStandardIfFirst; i <= kRtlStandardIfLast; ++i) {
+        esp_err_t e = run_record(h, kRtlInitTransfers[i], false);
+        if (e != ESP_OK) {
+            return e;
+        }
+    }
+    ESP_LOGI(TAG, "demod IF restore profile=%s pll_if_hz=%u demod_if_hz=%u applied=1 records=%u",
+             rtl_profile_name(h->profile),
+             static_cast<unsigned>(rtl_profile_pll_if_offset_hz(h->profile)),
+             static_cast<unsigned>(demod_if_hz),
+             static_cast<unsigned>(kRtlStandardIfLast - kRtlStandardIfFirst + 1));
+    return ESP_OK;
+}
+
 /**
  * Program R828D PLL for *user RF* frequency_hz.
  * Blog V4 HF (public): RF < 28.8 MHz is upconverted by 28.8 MHz before the tuner.
@@ -835,10 +855,10 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     const bool hf = rtl_profile_uses_v4_hf_routing(profile) &&
                     esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz);
     ESP_LOGI(TAG,
-             "tune rf=%u Hz tuner=%u Hz ppm=%d hf_upconv=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x",
+             "tune rf=%u Hz tuner=%u Hz ppm=%d hf_upconv=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x pll_if_hz=%u",
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
              h != nullptr ? static_cast<int>(h->freq_correction_ppm) : 0, hf ? 1 : 0, r16_setup,
-             r16_active, r20, r21, r22);
+              r16_active, r20, r21, r22, static_cast<unsigned>(if_offset_hz));
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
         RtlControlRecord rec = kRtlFinalTuneTemplate[i];
         if (i == 3 || i == 7) {
@@ -2473,6 +2493,10 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             break;
         }
         ret = run_sample_rate(handle, local.sample_rate_sps);
+        if (ret != ESP_OK) {
+            break;
+        }
+        ret = run_profile_demod_if_restore(handle);
         if (ret != ESP_OK) {
             break;
         }

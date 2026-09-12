@@ -548,6 +548,10 @@ constexpr RtlControlRecord kRtlCleanupTransfers[] = {
 static_assert(sizeof(kRtlInitTransfers) / sizeof(kRtlInitTransfers[0]) == 515);
 static_assert(sizeof(kRtlCleanupTransfers) / sizeof(kRtlCleanupTransfers[0]) == 16);
 
+/** Captured RTL2832 3.57 MHz IF restore (write + settle-read pairs). */
+constexpr size_t kRtlStandardIfFirst = 98;
+constexpr size_t kRtlStandardIfLast = 103;
+
 /** Measured sample-rate slice inside init (indices inclusive). */
 constexpr size_t kRtlSampleRateFirst = 462;
 constexpr size_t kRtlSampleRateLast = 477;

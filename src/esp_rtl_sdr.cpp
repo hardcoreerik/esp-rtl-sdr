@@ -97,11 +97,12 @@ static esp_timer_handle_t s_usb_fault_guard_timer = nullptr;
 
 static void usb_fault_guard_disarm(void)
 {
-    s_usb_fault_guard.pending_risk = false;
-    if (s_usb_fault_guard_timer != nullptr) {
-        esp_timer_stop(s_usb_fault_guard_timer);
-        esp_timer_delete(s_usb_fault_guard_timer);
-        s_usb_fault_guard_timer = nullptr;
+    __atomic_store_n(&s_usb_fault_guard.pending_risk, false, __ATOMIC_RELEASE);
+    esp_timer_handle_t timer =
+        __atomic_exchange_n(&s_usb_fault_guard_timer, nullptr, __ATOMIC_ACQ_REL);
+    if (timer != nullptr) {
+        esp_timer_stop(timer);
+        esp_timer_delete(timer);
     }
 }
 
@@ -115,7 +116,7 @@ static void usb_fault_guard_timer_cb(void *)
 /** Arm the guard just before the risky usb_host_install()/enumeration window. */
 static void usb_fault_guard_arm(void)
 {
-    s_usb_fault_guard.pending_risk = true;
+    __atomic_store_n(&s_usb_fault_guard.pending_risk, true, __ATOMIC_RELEASE);
     const esp_timer_create_args_t args = {
         .callback = usb_fault_guard_timer_cb,
         .arg = nullptr,
@@ -123,11 +124,13 @@ static void usb_fault_guard_arm(void)
         .name = "rtl_usb_fguard",
         .skip_unhandled_events = false,
     };
-    if (esp_timer_create(&args, &s_usb_fault_guard_timer) == ESP_OK) {
+    esp_timer_handle_t timer = nullptr;
+    if (esp_timer_create(&args, &timer) == ESP_OK) {
+        __atomic_store_n(&s_usb_fault_guard_timer, timer, __ATOMIC_RELEASE);
         /* Observed panics land ~3.3-3.4 s after usb_host_install(); 8 s is a
          * generous margin for a slow-enumerating device before we stop
          * treating "no crash yet" as still-at-risk. */
-        esp_timer_start_once(s_usb_fault_guard_timer, 8000000);
+        esp_timer_start_once(timer, 8000000);
     }
 }
 
@@ -314,6 +317,26 @@ struct esp_rtl_sdr_handle {
     SemaphoreHandle_t pull_mux = nullptr;
     SemaphoreHandle_t pull_sem = nullptr;
 };
+
+static void destroy_install_sync_objects(esp_rtl_sdr_handle *h)
+{
+    if (h->ctrl_sem != nullptr) {
+        vSemaphoreDelete(h->ctrl_sem);
+        h->ctrl_sem = nullptr;
+    }
+    if (h->ctrl_mutex != nullptr) {
+        vSemaphoreDelete(h->ctrl_mutex);
+        h->ctrl_mutex = nullptr;
+    }
+    if (h->bulk_done_sem != nullptr) {
+        vSemaphoreDelete(h->bulk_done_sem);
+        h->bulk_done_sem = nullptr;
+    }
+    if (h->lock != nullptr) {
+        vSemaphoreDelete(h->lock);
+        h->lock = nullptr;
+    }
+}
 
 /* -------------------------------------------------------------------------- */
 /* RAII lock                                                                  */
@@ -2038,6 +2061,7 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
     h->bulk_done_sem = xSemaphoreCreateCounting(ESP_RTL_SDR_MAX_XFER_COUNT, 0);
     if (h->lock == nullptr || h->ctrl_sem == nullptr || h->ctrl_mutex == nullptr ||
         h->bulk_done_sem == nullptr) {
+        destroy_install_sync_objects(h);
         delete h;
         return ESP_ERR_NO_MEM;
     }
@@ -2057,6 +2081,7 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
 
     if (usb_host_transfer_alloc(kCtrlXferBytes, 0, &h->ctrl_xfer) != ESP_OK) {
         h->magic = 0;
+        destroy_install_sync_objects(h);
         delete h;
         return ESP_ERR_NO_MEM;
     }
@@ -2071,6 +2096,7 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
         h->magic = 0;
         usb_host_transfer_free(h->ctrl_xfer);
         h->ctrl_xfer = nullptr;
+        destroy_install_sync_objects(h);
         delete h;
         return ESP_RTL_SDR_ERR_USB_SAFE_MODE;
     }

@@ -58,7 +58,9 @@ before the truncation point decoded cleanly and is unaffected.
    decoded file, frames 10294–10320) as part of a **known-good, confirmed
    reception** session — first-party evidence this project has never had
    for this tuner family.
-3. **The actual mechanism that makes reception work is a continuous
+3. **Superseded hypothesis (recorded here to preserve the investigation):**
+   the initial capture review suggested that the mechanism making reception
+   work was a continuous
    active AGC feedback loop, not a one-time init table** — on *both*
    V4 and V3c: write several gain/filter tuner registers (`0x10, 0x1a,
    0x12, 0x16, 0x15`-family), then a 1-byte write selecting register 0,
@@ -67,10 +69,12 @@ before the truncation point decoded cleanly and is unaffected.
    `esp_rtl_sdr` currently does nothing resembling this for any profile —
    `apply_tuner_agc_auto_records()` is a one-shot register write, not a
    loop, and never reads back a multi-byte status at all. This is the
-   leading candidate for why V3c streams but never locks a station: the
+   leading candidate at that point for why V3c streamed but did not lock a station: the
    driver has no active gain-management loop, and R820T2/R860 appears to
    need one (or benefit from one) more than R828D's own freerunning
-   internal AGC does.
+   internal AGC does. Later controlled captures disproved the continuous-loop
+   interpretation, and the matched 3.570 MHz tuner/demodulator IF repair produced
+   correct physical FM reception. Gain calibration remains a separate open item.
 
 ## Gain-step experiment (SDR#, same V3c unit, two sessions)
 

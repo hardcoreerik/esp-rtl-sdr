@@ -42,17 +42,17 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 | Caps | STREAM/RETUNE/etc. without HF_UPCONVERTER / GAIN / BIAS_TEE |
 | Evidence | Contributor/OrcSDR tester reports; clean-room remap only; community soak welcome |
 
-### `blog_v3` (RTL-SDR Blog V3 / V3c / R820T2 / R860) — IDENTIFICATION+STREAM VERIFIED, MATCHED-IF REPAIR AWAITING HARDWARE ACCEPTANCE
+### `blog_v3` (RTL-SDR Blog V3 / V3c / R820T2 / R860) — IDENTIFICATION, STREAMING, AND MATCHED-IF TUNING VERIFIED
 
 | Field | Value |
 |---|---|
-| Status | Identification and streaming **hardware-verified** (2026-09-11, real V3c unit, R860 tuner per packaging). The 3.570 MHz matched-IF repair has passed a physical 99.1 MHz hot-retune/RDS check; 96.1, cold-start, V3c hotplug, and Blog V4 regression remain open. Gain accuracy remains provisional. |
+| Status | Identification, streaming, and 3.570 MHz matched-IF tuning **hardware-verified** (2026-09-11/12, real V3c unit, R860 tuner per packaging). Physical checks covered 96.1 MHz, 99.1 MHz with matching RDS, cold start, hot retune, V3c/V4 hotplug in both directions, USB-powered boot, battery-powered boot, and the Blog V4 regression. Gain accuracy remains provisional. |
 | USB | Exact V3 descriptors, or completed R820T2 chip-id `0x96`/`0x69` on ambiguous `0bda:2838` (the tested V3c unit reports the bare factory `RTL2838UHIDIR` descriptor, not `RTLSDRBlog`/`Blog V3` — identified via the ambiguous-descriptor chip-id probe, not string match) |
 | Tuner | R820T2/R860 @ I2C `0x34` (same USB IR template remap as Nooelec provisional; R860 is pin/register-compatible with R820T2, same profile covers both — no separate profile needed) |
 | HF | **Rejected** below 24 MHz; **no** V4 HF upconverter / Cable-2 / GPIO5 |
 | Caps | STREAM/RETUNE/etc. plus provisional manual GAIN; without HF_UPCONVERTER / GAIN_AUTO / RTL_AGC / BIAS_TEE |
 | IF evidence | Official-driver capture measured the V3c PLL IF at 3.570 MHz and ended RTL2832 setup with `0x19/0x1A/0x1B = 0x38/0x11/0x12`, including a settle read after each write. The driver now restores that exact demodulator sequence after sample-rate setup and before the first tune. V4 stays on its existing matched 1.814972 MHz path; Nooelec is unchanged. |
-| Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`. Identification/streaming verified via repeated cold-boot and hot-swap testing (V4 ↔ V3-family, both directions) with zero crashes. The matched-IF fix passes both host suites, truth hygiene, and ESP-IDF 5.5.4 ESP32-P4 compile. Physical tuning acceptance and manual-gain calibration remain open. |
+| Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`. Identification/streaming verified via repeated cold-boot and hot-swap testing (V4 ↔ V3-family, both directions) with zero crashes. The matched-IF fix passes both host suites, truth hygiene, ESP-IDF 5.5.4 ESP32-P4 compile, and physical V3c/V4 tuning acceptance. Manual-gain calibration remains open. |
 
 ## Fail closed
 

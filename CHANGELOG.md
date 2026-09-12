@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **Blog V3/V3c matched-IF tuning (implementation, host/build, and partial
+- **Blog V3/V3c matched-IF tuning (implementation, host/build, and physical
   hardware verification):**
   the earlier PLL-only repair set the R820T2/R860 tuner to the measured
   3.570 MHz IF, but the RTL2832 demodulator still finished initialization at
@@ -17,7 +17,14 @@
   1.814972 MHz path; Nooelec receives no unverified override. On the exact
   candidate, a real V3c received the expected stations at displayed 96.100 and
   99.100 MHz; 99.1 also locked matching RDS. A subsequent live swap to Blog V4
-  repeated both stations with the unchanged V4 IF and zero stream drops.
+  repeated both stations with the unchanged V4 IF and zero stream drops. V3c
+  cold start, hot retune, reverse hotplug, USB-powered boot, and battery-powered
+  boot also passed. Manual-gain calibration remains provisional.
+- **USB fault-guard cleanup:** timer disarm now atomically claims the timer
+  handle before stopping and deleting it, preventing concurrent expiry and
+  device-discovery paths from tearing down the same timer. All early
+  `esp_rtl_sdr_install()` failures now release their allocated mutexes and
+  semaphores, including the safe-mode return path.
 - **Host test false green:** both local runners and Windows CI now use CTest so
   both registered suites run. Before this correction the policy executable
   reported 373 passed while the profile executable was skipped; running it
@@ -46,9 +53,8 @@
   actually attached. Confirmed hardware-verified after this fix: the V3c
   test unit now identifies as `blog_v3_r820t2` and streams, across
   repeated hot-swap (V4 ↔ V3-family, both directions) and cold-boot
-  cycles, with zero crashes. Actual RF tuning accuracy for the R820T2/R860
-  path is **still not verified** — see "Open hardware gates" below; this
-  fix only repairs identification and streaming.
+  cycles, with zero crashes. The later matched-IF repair completed physical RF
+  tuning verification at 96.1 and 99.1 MHz; manual-gain accuracy remains open.
 
 ### Added
 

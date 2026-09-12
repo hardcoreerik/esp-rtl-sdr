@@ -3548,11 +3548,25 @@ static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
     const size_t idx = r820t2_nearest_gain_index(tenth_db);
     const R820T2GainStep &st = kR820T2InterpolatedGainSteps[idx];
 
+    /*
+     * V4's manual gain path also writes reg0x0c (kMeasuredV4GainReg0c=0x68,
+     * measured constant across V4's entire gain ladder -- see
+     * measured_gain_bias_v4.hpp). The first cut of this function omitted it,
+     * leaving that VGA/IF gain stage at whatever run_demod_bringup/tuner
+     * init last left it. R828D (V4) and R820T2/R860 (V3c) are both Rafael
+     * Micro R82xx-family parts with the same register layout for 05/07/0c,
+     * so borrowing V4's measured reg0c value here is a reasonable first
+     * attempt, not an independent R820T2 measurement -- flag if it doesn't
+     * hold up on real hardware.
+     */
     esp_err_t err = ESP_FAIL;
     for (int pass = 0; pass < 3; ++pass) {
         err = run_record(h, measured_v4_ir_reg_write(0x05, st.reg05), false);
         if (err == ESP_OK) {
             err = run_record(h, measured_v4_ir_reg_write(0x07, st.reg07), false);
+        }
+        if (err == ESP_OK) {
+            err = run_record(h, measured_v4_ir_reg_write(0x0c, kMeasuredV4GainReg0c), false);
         }
         if (err == ESP_OK) {
             break;

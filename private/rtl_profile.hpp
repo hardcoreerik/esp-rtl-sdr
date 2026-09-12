@@ -214,3 +214,25 @@ inline uint32_t rtl_profile_tuner_frequency_hz(RtlProfileId profile, uint32_t rf
     }
     return rf_hz;
 }
+
+/**
+ * PLL reference crystal, Hz. kMeasuredV4XtalHz (28.8 MHz, see
+ * transfers_blog_v4.hpp's kRtlXtalHz) is a Blog V4/R828D-board measurement,
+ * not a universal constant. Direct clean-room capture against a real Blog
+ * V3c (2026-09-11, FM-band sweep in exact 2 MHz steps, 88.1-106.1 MHz)
+ * showed the real N-divider register advancing by exactly +1 per 2 MHz
+ * step, solving to xtal=32,000,000 Hz for that specific unit -- see
+ * docs/captures/NOTES.md. Scoped to BlogV3 only: NooelecSmartV5 shares
+ * BlogV3's I2C remap for tuner addressing but has never been hardware
+ * tested for PLL math, so it keeps the V4-derived default rather than
+ * inheriting an unverified guess.
+ */
+inline double rtl_profile_pll_xtal_hz(RtlProfileId profile)
+{
+    constexpr double kMeasuredV3cXtalHz = 32000000.0;
+    constexpr double kMeasuredV4XtalHz = 28800000.0;
+    if (profile == RtlProfileId::BlogV3) {
+        return kMeasuredV3cXtalHz;
+    }
+    return kMeasuredV4XtalHz;
+}

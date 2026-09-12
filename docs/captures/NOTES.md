@@ -436,7 +436,7 @@ The runners and Windows CI now use CTest. Current local results are:
 - truth hygiene: passed for 0.8.0-rc2;
 - ESP32-P4 driver smoke compile: passed with ESP-IDF 5.5.4.
 
-### First hardware result from the exact candidate
+### Hardware results from the exact candidate
 
 Driver commit `ae100781af355dfa5caf182fcddcb479789491e5` was overlaid without
 changing OrcSDR's manifest/lockfile, built against OrcSDR
@@ -460,7 +460,22 @@ The +13 kHz internal LO nudge is normal FM auto-centering and is inside the
 existing +/-40 kHz limit. It is not the former 1.755028 MHz IF mismatch. IQ byte
 and block counters advanced between status polls, with zero overruns/drops.
 
-This proves V3c 99.1 MHz hot-retune display/reception/RDS alignment on the exact
-candidate. It does not yet prove the remaining acceptance matrix: 96.1 MHz,
-cold start, V3c unplug/replug, or the Blog V4 regression. Gain calibration also
-remains separate.
+The same V3c then received the expected 96.1 MHz station at a displayed
+96.100 MHz with a 96.113 MHz internal LO. The user confirmed correct reception;
+the sampled status had carrier but had not yet acquired RDS block lock. Streaming
+continued with zero overruns/drops.
+
+The V3c was replaced by a real Blog V4 without resetting the Tab5. The continuous
+log recorded orderly V3c detach, V4 selection as `blog_v4_r828d`, the unchanged
+V4 initialization, and `pll_if_hz=1814972`. Re-entering the FM dashboard started
+the new stream at 96.1 MHz; RDS locked to `KZEL` with PI `5277`. At 99.1 MHz,
+RDS identified `99.1 The Beat of Eugene`; existing auto-centering settled at
+99.097 MHz (3 kHz from the request), inside the +/-40 kHz bound. Both V4 checks
+reported zero driver overruns and zero consumer drops.
+
+This proves V3c 96.1/99.1 hot-retune reception and the targeted V4 tuning
+non-regression on the exact candidate. Remaining acceptance checks are V3c cold
+start and V3c reattach; a V3c 96.1 RDS lock was not captured. The live swap also
+showed an OrcSDR app behavior outside this driver fix: the newly attached V4 was
+ready but remained idle until the active FM dashboard was left and re-entered.
+Gain calibration remains separate.

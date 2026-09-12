@@ -4,7 +4,8 @@
 
 ### Fixed
 
-- **Blog V3/V3c matched-IF tuning (implementation and host/build verification):**
+- **Blog V3/V3c matched-IF tuning (implementation, host/build, and partial
+  hardware verification):**
   the earlier PLL-only repair set the R820T2/R860 tuner to the measured
   3.570 MHz IF, but the RTL2832 demodulator still finished initialization at
   the Blog V4-derived 1.814972 MHz IF. The 1.755028 MHz analog/digital mismatch
@@ -13,9 +14,10 @@
   before the first PLL tune, Blog V3 alone now replays the captured RTL2832
   `0x19/0x1A/0x1B = 0x38/0x11/0x12` sequence, including the captured settle
   reads. Blog V4 emits no additional USB records and keeps its existing matched
-  1.814972 MHz path; Nooelec receives no unverified override. Hardware tuning
-  acceptance remains open until 96.1/99.1, cold/hot tune, and hotplug are run on
-  the real V3c and then regressed on Blog V4.
+  1.814972 MHz path; Nooelec receives no unverified override. On the exact
+  candidate, a real V3c received the expected stations at displayed 96.100 and
+  99.100 MHz; 99.1 also locked matching RDS. A subsequent live swap to Blog V4
+  repeated both stations with the unchanged V4 IF and zero stream drops.
 - **Host test false green:** both local runners and Windows CI now use CTest so
   both registered suites run. Before this correction the policy executable
   reported 373 passed while the profile executable was skipped; running it
@@ -64,11 +66,12 @@
 
 ### Open hardware gates
 
-- Blog V3/V3c tuning is now matched at 3.570 MHz in both tuner and demodulator
-  code, but physical acceptance is still open. Required checks are 96.1 MHz
-  KEZL and 99.1 MHz The Beat with matching display/audio/RDS on cold start and
-  hot retune, then unplug/replug. Blog V4 must repeat those stations and its
-  dashboard/stream/hotplug checks before this repair is accepted.
+- Blog V3/V3c tuning is now matched at 3.570 MHz in both tuner and demodulator.
+  Hot retunes received the expected stations at displayed 96.100 and 99.100 MHz;
+  99.1 locked matching RDS. Blog V4 then repeated 96.1 and 99.1 with its existing
+  1.814972 MHz IF, matching RDS, and zero drops. Remaining acceptance checks are
+  a V3c cold start and V3c reattach; the sampled 96.1 V3c status had not yet
+  acquired RDS lock even though reception was reported correct.
 - Blog V3/V3c manual/automatic gain calibration remains separate from this IF
   repair. The existing provisional manual-gain capability and register path are
   unchanged; Nooelec gain and IF behavior remain unverified.

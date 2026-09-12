@@ -52,10 +52,36 @@
   `transfers_blog_v3.hpp` is borrowed from the Nooelec remap (see its own
   header comment: "no unique V3 init tables measured... not
   Hardware-verified") and has never been checked against real R820T2/R860
-  PLL behavior. This is a distinct, scoped follow-up: capture actual PLL
-  register readback after a tune request (same PC/pyusb method used
-  above) and compare against Rafael Micro's public R820T2 datasheet
-  formula, rather than continuing to reuse the Nooelec-derived values.
+  PLL behavior.
+  - **Ruled out by direct test (2026-09-11)**: temporarily gave `BlogV3`
+    the exact same capability set and frontend/AGC code path as `BlogV4`
+    (`rtl_profile_uses_v4_hf_routing()` and `rtl_profile_allows_init_record()`
+    unlocked for `BlogV3`, `rtl_profile_device_capabilities()` returns
+    `rtl_profile_library_capabilities()` for it too — see the
+    "experiment: run BlogV3 through the full V4 frontend/AGC/capability
+    path" commit). Result: **zero change in reception** — confirmed
+    static before and after, on the same real hardware, same station
+    (96.1 MHz KEZL, verified receiving cleanly on Blog V4 seconds earlier
+    with RDS lock as ground truth). This rules out capability-gating and
+    the GPIO/frontend-routing code path as the blocker; the V4 AGC-enable
+    writes execute against this tuner with no observable effect either
+    way. Revert this experiment before any release — it is a diagnostic
+    change only, and V3/V3c has 1 RF input vs V4's 3 triplexed inputs, so
+    the unlocked reg06/GPIO input-select path is expected to be
+    meaningless-to-wrong here regardless.
+  - The blocker is therefore at the **data level**, not a gating/code-path
+    bug: real R820T2/R860 gain/filter/PLL register *values* are needed,
+    not V4's borrowed ones. Next step (not yet done): capture the
+    **official RTL-SDR Blog Windows driver** (`rtl_test` / SDR#) against
+    this same V3c unit via USBPcap — cold enumeration, then open/tune/close
+    at a simple VHF frequency (e.g. 100 MHz) — and diff those control
+    transfers against an equivalent Blog V4 capture from the same host
+    stack. That isolates the real generic-RTL2832-bootstrap vs.
+    tuner-specific programming split from actual silicon behavior instead
+    of continuing to guess from V4's tables. V3's HF path (<~24 MHz) is a
+    separate, later concern — it uses RTL2832U direct sampling with the
+    tuner bypassed, not the V4 upconverter path, so do not reuse V4 HF
+    logic there either once VHF is solved.
 - OrcSDR (app-level, separate repo): auto-start-scan-on-attach did not
   trigger for the `blog_v3_r820t2` profile on hot-swap (manually
   navigating to the FM screen and back did restore audio/waterfall). Very

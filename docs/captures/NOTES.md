@@ -32,6 +32,8 @@ policy — not by reading librtlsdr source.
 | `v3c_official_driver_control_transfers_2026-09-11.txt` | (decoded text, committed) | Same, for the V3c unit |
 | V4 raw pcapng | `852d3e94f163755f97a8d960467e13c671ff6423ab3e242a7ebb94a062a942da` | Held locally by the tester (large; ~670 MB), not committed |
 | V3c raw pcapng | `24225496695f426caf20539dbc8fbd38c2835a4e1a1b5e89325d47191e7ba774` | Held locally by the tester (large; ~224 MB), not committed |
+| `v3c_gain_table_28step_10s_2026-09-11.txt` | (decoded text, committed) | Full-ladder gain-step retest, ~10s hold per step; see "Gain-step experiment" below |
+| V3c gain-table raw pcapng | `3d2eef6b23c3a8e6dc902f3f783ac27996c1075eb80b88c10a6884876e63a1c0` | Held locally by the tester (large; ~1.58 GB), not committed |
 
 Both raw pcapng captures were stopped by force-terminating tshark rather
 than a clean capture stop, so each file's tail packet is truncated
@@ -111,13 +113,28 @@ gain management.
 **Practical implication**: audible reception on this unit really did
 require manually raising gain in SDR#/SDR++ to work at all (~32.8 dB,
 AGC off) — that observation stands, and reg 0x05/0x07 likely *are* the
-real LNA/mixer gain registers after all (matching V4's scheme). Building
-a correct R820T2/R860 gain table is now a well-understood, mechanical
-task: hold at each of the 28 standard dB steps long enough for the ramp
-to fully settle (confirmed above: no more writes = settled), *then*
-record the resting reg 0x05/0x07 values — not the values seen while the
-ramp is still in flight, which is what the original rapid step-through
-captured. Not done this session; a good, concrete next-session task.
+real LNA/mixer gain registers after all (matching V4's scheme).
+
+**Attempted retest with ~10s hold per step (full 28-step ladder,
+`v3c_gain_table_28step_10s_2026-09-11.txt`, ~324s total): inconclusive,
+does not confirm the "ramp settles per step" model either.** Distinct
+reg 0x05/0x07 value *changes* (not re-writes of the same value) occurred
+roughly every 20-25 seconds throughout the entire session — i.e. slower
+than, and not clearly aligned with, the tester's ~10s-per-step pacing.
+Only 16 distinct register values were reached across all 28 steps. This
+is consistent with neither "one settle-step per user gain change" nor
+"independent fixed-period timer" cleanly. Combined with the earlier
+confirmed zero-writes-when-fully-idle result, the honest state is: reg
+0x05/0x07 change in response to *something* about ongoing UI/driver
+activity, but the exact triggering condition and step-to-value mapping
+is still not understood from write-side observation alone.
+
+**Recommended next angle**: decode the multi-byte *read* responses
+(5-byte and 3-byte, from `wIndex=0x0600`) instead of continuing to
+infer meaning from the write-side byte pattern — those are more likely
+to carry a directly interpretable value (e.g. an RSSI/signal-level
+readback) than reverse-engineering what appears to be an internal
+counter on the write side. Not done this session.
 
 ## Next step (not yet implemented)
 

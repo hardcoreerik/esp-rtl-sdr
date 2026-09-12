@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-09-11**
-Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Blog V3/V3c/R860 identification+streaming hardware-verified; matched-IF tuning hot-retune hardware-verified with cold-start/reattach acceptance still open; gain and Nooelec still provisional; not production-ready)
+Version: **0.8.0-rc2** (EXPERIMENTAL multi-dongle stabilization; Blog V4 routing preserved; Blog V3/V3c/R860 identification+streaming hardware-verified; matched-IF tuning hardware-verified across hot retune, reattach, and a user-observed battery cold boot; gain and Nooelec still provisional; not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -95,7 +95,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Nooelec NESDR SMArt v5 `0bda:2838` | **Provisional — contributor-tested; maintainer soak pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; I2C `0x34`; HF&lt;24 MHz rejected |
 | Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |
 | Blog V3 IQ streaming (device up, no crash) | **Hardware-verified** (2026-09-11) | Streams without crash across repeated V4↔V3-family hot-swap and cold-boot testing on a real V3c unit |
-| Blog V3 tune accuracy | **96.1/99.1 MHz hot-retune hardware-verified; full acceptance open** | Measured 28.8 MHz crystal; tuner PLL and RTL2832 demodulator matched at 3.570 MHz using official-capture `38/11/12`. The exact candidate received the expected stations at displayed 96.100 and 99.100 MHz; 99.1 locked matching RDS with +13 kHz auto-centering and zero drops. Blog V4 repeated both frequencies with matching RDS and its unchanged 1.814972 MHz IF. V3c cold start/reattach and a sampled 96.1 RDS lock remain open. |
+| Blog V3 tune accuracy | **Hardware-verified on V3c; gain remains separate** | Measured 28.8 MHz crystal; tuner PLL and RTL2832 demodulator matched at 3.570 MHz using official-capture `38/11/12`. The exact candidate received the expected stations at displayed 96.100 and 99.100 MHz; 99.1 locked matching RDS with +13 kHz auto-centering and zero drops. V3c reattach restored the matched IF and 99.1 RDS, and a battery-only cold boot received the saved station correctly (user-observed; no COM17 by design). Blog V4 repeated both frequencies with matching RDS and its unchanged 1.814972 MHz IF. A sampled V3c 96.1 serial status had not yet locked RDS. |
 | Blog V3 gain accuracy | **Provisional / maintainer-unverified** | Manual gain capability and existing R820T2 path are present but calibration remains separate; no AUTO/RTL AGC/Bias-T claim. |
 | Dual-core USB/delivery | **Implemented** | |
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |

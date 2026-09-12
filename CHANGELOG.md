@@ -69,9 +69,12 @@
 - Blog V3/V3c tuning is now matched at 3.570 MHz in both tuner and demodulator.
   Hot retunes received the expected stations at displayed 96.100 and 99.100 MHz;
   99.1 locked matching RDS. Blog V4 then repeated 96.1 and 99.1 with its existing
-  1.814972 MHz IF, matching RDS, and zero drops. Remaining acceptance checks are
-  a V3c cold start and V3c reattach; the sampled 96.1 V3c status had not yet
-  acquired RDS lock even though reception was reported correct.
+  1.814972 MHz IF, matching RDS, and zero drops. V3c reattach restored the
+  matched IF, 99.1 RDS, and a zero-drop stream. A subsequent battery-only cold
+  boot also received the saved station correctly. That cold boot is
+  user-observed because COM17 was necessarily absent; the sampled 96.1 V3c
+  serial status had not yet acquired RDS lock even though reception was reported
+  correct.
 - Blog V3/V3c manual/automatic gain calibration remains separate from this IF
   repair. The existing provisional manual-gain capability and register path are
   unchanged; Nooelec gain and IF behavior remain unverified.

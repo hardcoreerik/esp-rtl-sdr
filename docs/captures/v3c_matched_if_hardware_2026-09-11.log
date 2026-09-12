@@ -1,0 +1,163 @@
+>>> SENT: RTL_DRIVER STATUS
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=STREAMING profile=2 profile_name="blog_v3_r820t2" provisional=1 device_caps=0x0001ff1f library_caps=0x000fff3f delivery=callback gain_auto_cap=0 rtl_agc_cap=0 gain_cap=1 bias_cap=0 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=538869760 blocks=16445 effective_sps=956059 overruns=0 drops=0 shadow_ok=1 metrics_ok=1
+>>> SENT: RTL_TUNE FM 99100000
+>>> SENT: RTL_FREQ
+RTL_FREQ_STATUS band=FM frequency_hz=99098000 mode=WBFM
+RTL_SPEAKER_RESUME ok=1 running=1 playing=1 volume=208
+RTL_FM_ENTER display=99100000
+RTL_FM_SAVE frequency_hz=99100000
+I (388492) esp_rtl_sdr: tune rf=99113000 Hz tuner=99113000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=0b r21=ce r22=0b pll_if_hz=3570000
+RTL_FM_CONFIG_SAVE frequency_hz=99100000 presets=5
+I (388538) esp_rtl_sdr: hot retune applied rf=99113000 Hz tuner=99113000 Hz
+RTL_HOT_TUNE display=99100000 lo=99113000 ok
+>>> SENT: RTL_FREQ
+>>> SENT: RTL_RDS STATUS
+>>> SENT: RTL_DRIVER STATUS
+RTL_FREQ_STATUS band=FM frequency_hz=99100000 mode=WBFM
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=STREAMING profile=2 profile_name="blog_v3_r820t2" provisional=1 device_caps=0x0001ff1f library_caps=0x000fff3f delivery=callback gain_auto_cap=0 rtl_agc_cap=0 gain_cap=1 bias_cap=0 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=769163264 blocks=23473 effective_sps=956999 overruns=0 drops=0 shadow_ok=1 metrics_ok=1
+>>> SENT: RTL_RDS_STATUS
+RDS_STATUS carrier=1 carrier_signal=-3.3 block_locked=1 bler=12.5% good=2079 total=2375 hyp0_streak=4 hyp1_streak=4 pilot_pll=0 ps="Akon~Dsh" rt="99.1 The Beat of Eugene " pi=355F timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=-0.02 q_lpf=-0.10 mu=0.233 A=355f B=24e1 C=2054 D=4745 driver_overruns=0 driver_drops=0 effective_sps=957239 audio_chunks=10166 audio_drops=0
+>>> SENT: RTL_RDS_STATUS
+RDS_STATUS carrier=1 carrier_signal=-3.3 block_locked=1 bler=12.7% good=2394 total=2743 hyp0_streak=4 hyp1_streak=4 pilot_pll=0 ps="EUGENE  " rt="99.1 The Beat of Eugene " pi=355F timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=0.04 q_lpf=-0.00 mu=0.229 A=355f B=24e0 C=e0cd D=7e4b driver_overruns=0 driver_drops=0 effective_sps=957295 audio_chunks=10355 audio_drops=0
+RTL_SPEAKER_RESUME ok=1 running=1 playing=1 volume=208
+RTL_FM_ENTER display=96100000
+RTL_FM_SAVE frequency_hz=96100000
+I (787974) esp_rtl_sdr: tune rf=99113000 Hz tuner=99113000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=0b r21=ce r22=0b pll_if_hz=3570000
+I (788020) esp_rtl_sdr: hot retune applied rf=99113000 Hz tuner=99113000 Hz
+RTL_HOT_TUNE display=96100000 lo=99113000 ok
+RTL_FM_CONFIG_SAVE frequency_hz=96100000 presets=5
+I (788258) esp_rtl_sdr: tune rf=96113000 Hz tuner=96113000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=23 r22=61 pll_if_hz=3570000
+I (788304) esp_rtl_sdr: hot retune applied rf=96113000 Hz tuner=96113000 Hz
+RTL_HOT_TUNE display=96100000 lo=96113000 ok
+>>> SENT: RTL_FREQ
+>>> SENT: RTL_RDS_STATUS
+>>> SENT: RTL_DRIVER STATUS
+RTL_FREQ_STATUS band=FM frequency_hz=96100000 mode=WBFM
+RDS_STATUS carrier=1 carrier_signal=-2.3 block_locked=0 bler=100.0% good=0 total=0 hyp0_streak=1 hyp1_streak=1 pilot_pll=0 ps="" rt="" pi=0000 timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=0.04 q_lpf=0.01 mu=0.254 A=4068 B=dca3 C=d85c D=6312 driver_overruns=0 driver_drops=0 effective_sps=958280 audio_chunks=18947 audio_drops=0
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=STREAMING profile=2 profile_name="blog_v3_r820t2" provisional=1 device_caps=0x0001ff1f library_caps=0x000fff3f delivery=callback gain_auto_cap=0 rtl_agc_cap=0 gain_cap=1 bias_cap=0 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=1552416768 blocks=47376 effective_sps=958280 overruns=0 drops=0 shadow_ok=1 metrics_ok=1
+>>> SENT: RTL_RDS_STATUS
+RDS_STATUS carrier=1 carrier_signal=-4.9 block_locked=0 bler=100.0% good=0 total=0 hyp0_streak=1 hyp1_streak=1 pilot_pll=0 ps="" rt="" pi=0000 timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=0.03 q_lpf=-0.03 mu=0.905 A=f42e B=42bc C=12f3 D=2c79 driver_overruns=0 driver_drops=0 effective_sps=958429 audio_chunks=20688 audio_drops=0
+W (939732) esp_rtl_sdr: bulk status=1 bytes=0
+E (939732) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+E (939733) esp_rtl_sdr: bulk resubmit failed: ESP_ERR_INVALID_STATE
+W (939734) esp_rtl_sdr: usb disconnected profile=blog_v3_r820t2 addr=1
+RTL_SDR_DISCONNECTED
+I (939734) esp_rtl_sdr: usb probe_rescan
+RTL_STOP_REQUESTED
+RTL_STOP_RESULT ESP_OK
+RTL_STOP bytes=1790902272
+I (953726) esp_rtl_sdr: usb new_device addr=2 queued=1
+I (953726) esp_rtl_sdr: usb probe_begin addr=2
+I (953727) esp_rtl_sdr: open RTLSDRBlog Blog V4 serial=00000001 hs=1
+I (953727) esp_rtl_sdr: profile=blog_v4_r828d caps=0x000fff3f
+RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x000fff3f driver=esp_rtl_sdr v0.8.0-rc2 ready=1
+>>> SENT: RTL_DRIVER STATUS
+>>> SENT: RTL_FREQ
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=IDLE profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x000fff3f library_caps=0x000fff3f delivery=callback gain_auto_cap=1 rtl_agc_cap=1 gain_cap=1 bias_cap=1 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=1790902272 blocks=54654 effective_sps=0 overruns=0 drops=0 shadow_ok=1 metrics_ok=1
+RTL_FREQ_STATUS band=FM frequency_hz=96100000 mode=WBFM
+I (987389) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=208
+E (987607) USBH: Dev 2 EP 0 STALL
+E (987609) USBH: Dev 2 EP 0 STALL
+E (987612) USBH: Dev 2 EP 0 STALL
+E (987615) USBH: Dev 2 EP 0 STALL
+E (987617) USBH: Dev 2 EP 0 STALL
+E (987620) USBH: Dev 2 EP 0 STALL
+I (988478) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+I (988519) esp_rtl_sdr: tune rf=96113000 Hz tuner=96113000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=89 r22=67 pll_if_hz=1814972
+I (988584) esp_rtl_sdr: front-end route rf=96113000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+I (988585) esp_rtl_sdr: stream start freq=96113000 exact_rate=960000 urbs=3x32768
+RTL_START ESP_OK rate=960000 display_hz=96100000 lo_hz=96113000
+RTL_WBFM_DSP rate=960000 filter_hz=191000 iq_lpf_k=0.46 audio_lpf_k=0.34 decim=4/5 note=app_side_filter
+RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=208
+>>> SENT: RTL_DRIVER STATUS
+>>> SENT: RTL_FREQ
+>>> SENT: RTL_RDS_STATUS
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=STREAMING profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x000fff3f library_caps=0x000fff3f delivery=callback gain_auto_cap=1 rtl_agc_cap=1 gain_cap=1 bias_cap=1 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=96731136 blocks=2952 effective_sps=959881 overruns=0 drops=0 shadow_ok=1 metrics_ok=1
+RTL_FREQ_STATUS band=FM frequency_hz=96100000 mode=WBFM
+RDS_STATUS carrier=1 carrier_signal=-7.3 block_locked=1 bler=30.0% good=837 total=1196 hyp0_streak=1 hyp1_streak=4 pilot_pll=0 ps="KZEL    " rt="961 KZEL" pi=5277 timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=0.00 q_lpf=0.00 mu=0.190 A=5277 B=04c9 C=e0cd D=6c61 driver_overruns=0 driver_drops=0 effective_sps=959881 audio_chunks=1180 audio_drops=0
+>>> SENT: RTL_TUNE FM 99100000
+>>> SENT: RTL_FREQ
+RTL_FREQ_STATUS band=FM frequency_hz=96100000 mode=WBFM
+>>> SENT: RTL_RDS_STATUS
+>>> SENT: RTL_DRIVER STATUS
+RDS_STATUS carrier=1 carrier_signal=-6.4 block_locked=1 bler=25.3% good=1953 total=2614 hyp0_streak=1 hyp1_streak=4 pilot_pll=0 ps="KZEL    " rt="" pi=5277 timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=0.00 q_lpf=-0.02 mu=0.508 A=5277 B=04c9 C=e0cd D=7465 driver_overruns=0 driver_drops=0 effective_sps=959977 audio_chunks=1908 audio_drops=0
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=STREAMING profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x000fff3f library_caps=0x000fff3f delivery=callback gain_auto_cap=1 rtl_agc_cap=1 gain_cap=1 bias_cap=1 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=156368896 blocks=4772 effective_sps=959977 overruns=0 drops=0 shadow_ok=1 metrics_ok=1
+RTL_SPEAKER_RESUME ok=1 running=1 playing=1 volume=208
+RTL_FM_ENTER display=99100000
+RTL_FM_SAVE frequency_hz=99100000
+I (1096021) esp_rtl_sdr: tune rf=99113000 Hz tuner=99113000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=ca r21=33 r22=12 pll_if_hz=1814972
+RTL_FM_CONFIG_SAVE frequency_hz=99100000 presets=5
+I (1096087) esp_rtl_sdr: front-end route rf=99113000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+I (1096087) esp_rtl_sdr: hot retune applied rf=99113000 Hz tuner=99113000 Hz
+RTL_HOT_TUNE display=99100000 lo=99113000 ok
+RTL_FM_ENTER display=98875354
+RTL_FM_SAVE frequency_hz=98875000
+I (1154337) esp_rtl_sdr: tune rf=98888000 Hz tuner=98888000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=33 r22=f2 pll_if_hz=1814972
+RTL_FM_CONFIG_SAVE frequency_hz=98875000 presets=5
+I (1154402) esp_rtl_sdr: front-end route rf=98888000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+I (1154403) esp_rtl_sdr: hot retune applied rf=98888000 Hz tuner=98888000 Hz
+RTL_HOT_TUNE display=98875000 lo=98888000 ok
+RTL_FM_ENTER display=99097222
+RTL_FM_SAVE frequency_hz=99097000
+I (1166094) esp_rtl_sdr: tune rf=99110000 Hz tuner=99110000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=ca r21=c6 r22=11 pll_if_hz=1814972
+RTL_FM_CONFIG_SAVE frequency_hz=99097000 presets=5
+I (1166159) esp_rtl_sdr: front-end route rf=99110000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+I (1166160) esp_rtl_sdr: hot retune applied rf=99110000 Hz tuner=99110000 Hz
+RTL_HOT_TUNE display=99097000 lo=99110000 ok
+>>> SENT: RTL_FREQ
+>>> SENT: RTL_RDS_STATUS
+>>> SENT: RTL_DRIVER STATUS
+RTL_FREQ_STATUS band=FM frequency_hz=99097000 mode=WBFM
+RDS_STATUS carrier=1 carrier_signal=-5.2 block_locked=1 bler=8.5% good=2019 total=2206 hyp0_streak=1 hyp1_streak=4 pilot_pll=0 ps="THmi S  " rt="99.1 The Beat of Eugene " pi=355F timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=-0.02 q_lpf=0.03 mu=0.087 A=355f B=04e8 C=e0cd D=4245 driver_overruns=0 driver_drops=0 effective_sps=958461 audio_chunks=5285 audio_drops=0
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=STREAMING profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x000fff3f library_caps=0x000fff3f delivery=callback gain_auto_cap=1 rtl_agc_cap=1 gain_cap=1 bias_cap=1 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=433029120 blocks=13215 effective_sps=958461 overruns=0 drops=0 shadow_ok=1 metrics_ok=1
+W (1514609) esp_rtl_sdr: bulk status=1 bytes=0
+E (1514609) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+E (1514609) esp_rtl_sdr: bulk resubmit failed: ESP_ERR_INVALID_STATE
+W (1514610) esp_rtl_sdr: usb disconnected profile=blog_v4_r828d addr=2
+RTL_SDR_DISCONNECTED
+I (1514610) esp_rtl_sdr: usb probe_rescan
+RTL_STOP_REQUESTED
+RTL_STOP_RESULT ESP_OK
+RTL_STOP bytes=1009254400
+I (1517554) esp_rtl_sdr: usb new_device addr=3 queued=1
+I (1517554) esp_rtl_sdr: usb probe_begin addr=3
+I (1518204) esp_rtl_sdr: open Realtek RTL2838UHIDIR serial=00000001 hs=1
+I (1518204) esp_rtl_sdr: profile=blog_v3_r820t2 caps=0x0001ff1f
+RTL_SDR_PROBE_OK profile=2 profile_name="blog_v3_r820t2" provisional=1 device_caps=0x0001ff1f driver=esp_rtl_sdr v0.8.0-rc2 ready=1
+RTL_ADSB_CAPTURE live_rf=true ui_data=live
+W (1521070) esp_rtl_sdr: blog_v3_r820t2: provisional R820T2 stream (I2C 0x34 remap); maintainer-unverified — please report soak results
+I (1521071) esp_rtl_sdr: init begin profile=blog_v3_r820t2 records=515
+E (1521290) USBH: Dev 3 EP 0 STALL
+E (1521292) USBH: Dev 3 EP 0 STALL
+E (1521295) USBH: Dev 3 EP 0 STALL
+E (1521297) USBH: Dev 3 EP 0 STALL
+I (1522140) esp_rtl_sdr: init complete profile=blog_v3_r820t2 skipped_v4_board=12
+I (1522196) esp_rtl_sdr: demod IF restore profile=blog_v3_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+I (1522197) esp_rtl_sdr: tune rf=1090000000 Hz tuner=1090000000 Hz ppm=0 hf_upconv=0 r16=24/04 r20=06 r21=9f r22=f8 pll_if_hz=3570000
+I (1522243) esp_rtl_sdr: stream start freq=1090000000 exact_rate=2048000 urbs=3x32768
+RTL_START ESP_OK rate=2048000 display_hz=1090000000 lo_hz=1090000000
+RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=208
+RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=208
+RTL_STOP_REQUESTED
+RTL_STOP_RESULT ESP_OK
+RTL_STOP bytes=6881280
+W (1523968) esp_rtl_sdr: blog_v3_r820t2: provisional R820T2 stream (I2C 0x34 remap); maintainer-unverified — please report soak results
+I (1523969) esp_rtl_sdr: init begin profile=blog_v3_r820t2 records=515
+E (1524186) USBH: Dev 3 EP 0 STALL
+E (1524188) USBH: Dev 3 EP 0 STALL
+E (1524191) USBH: Dev 3 EP 0 STALL
+E (1524194) USBH: Dev 3 EP 0 STALL
+I (1525036) esp_rtl_sdr: init complete profile=blog_v3_r820t2 skipped_v4_board=12
+I (1525093) esp_rtl_sdr: demod IF restore profile=blog_v3_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+I (1525093) esp_rtl_sdr: tune rf=99110000 Hz tuner=99110000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=0b r21=61 r22=0b pll_if_hz=3570000
+I (1525139) esp_rtl_sdr: stream start freq=99110000 exact_rate=960000 urbs=3x32768
+RTL_START ESP_OK rate=960000 display_hz=99097000 lo_hz=99110000
+RTL_WBFM_DSP rate=960000 filter_hz=260000 iq_lpf_k=0.57 audio_lpf_k=0.34 decim=4/5 note=app_side_filter
+RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=208
+>>> SENT: RTL_FREQ
+>>> SENT: RTL_RDS_STATUS
+>>> SENT: RTL_DRIVER STATUS
+RTL_FREQ_STATUS band=FM frequency_hz=99097000 mode=WBFM
+RDS_STATUS carrier=1 carrier_signal=-4.8 block_locked=1 bler=2.6% good=1380 total=1417 hyp0_streak=1 hyp1_streak=4 pilot_pll=0 ps="BEAT OF " rt="99.1 The Beat of Eugene " pi=355F timing_chip_rate=2374.98 timing_correction_ppm=-10.0 nco_freq_off=0.000000 i_lpf=-0.03 q_lpf=0.02 mu=0.942 A=355f B=04e9 C=e0cd D=4154 driver_overruns=0 driver_drops=0 effective_sps=959719 audio_chunks=764 audio_drops=0
+RTL_DRIVER_STATUS installed=1 version=0.8.0-rc2 state=STREAMING profile=2 profile_name="blog_v3_r820t2" provisional=1 device_caps=0x0001ff1f library_caps=0x000fff3f delivery=callback gain_auto_cap=0 rtl_agc_cap=0 gain_cap=1 bias_cap=0 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=62652416 blocks=1912 effective_sps=959719 overruns=0 drops=0 shadow_ok=1 metrics_ok=1

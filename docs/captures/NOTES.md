@@ -473,9 +473,22 @@ RDS identified `99.1 The Beat of Eugene`; existing auto-centering settled at
 99.097 MHz (3 kHz from the request), inside the +/-40 kHz bound. Both V4 checks
 reported zero driver overruns and zero consumer drops.
 
-This proves V3c 96.1/99.1 hot-retune reception and the targeted V4 tuning
-non-regression on the exact candidate. Remaining acceptance checks are V3c cold
-start and V3c reattach; a V3c 96.1 RDS lock was not captured. The live swap also
-showed an OrcSDR app behavior outside this driver fix: the newly attached V4 was
-ready but remained idle until the active FM dashboard was left and re-entered.
-Gain calibration remains separate.
+Replacing the V4 with the V3c completed the reverse hotplug check. The driver
+selected `blog_v3_r820t2`, emitted the matched-IF milestone with both IFs at
+3.570 MHz and six restore records, and restarted at the saved 99.097 MHz. RDS
+locked to `99.1 The Beat of Eugene` with PI `355F`; counters advanced with zero
+overruns/drops. The Tab5 then completed a battery-only cold boot with the V3c
+attached and received the saved station correctly. That boot is user-observed,
+not serial-captured, because USB-C/COM17 was disconnected for the test.
+
+The continuous serial portion is preserved as
+`v3c_matched_if_hardware_2026-09-11.log` (SHA-256
+`9aa8a058115d9150907c243acf75e7de67d503dc91964a365f8521e474ea9bfb`). It covers
+the exact V3c hot retunes, V3c-to-V4 swap, V4 96.1/99.1 regression, V4-to-V3c
+swap, matched-IF reinitialization, and V3c 99.1 RDS recovery.
+
+This hardware-accepts the targeted V3c matched-IF repair and the V4 tuning
+non-regression on the exact candidate. A V3c 96.1 RDS lock was not captured;
+gain calibration remains separate. The live V3c-to-V4 swap also showed an
+OrcSDR app behavior outside this driver fix: the newly attached V4 was ready but
+remained idle until the active FM dashboard was left and re-entered.

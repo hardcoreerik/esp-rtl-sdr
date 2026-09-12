@@ -150,16 +150,8 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
     switch (profile) {
     case RtlProfileId::BlogV4:
         return rtl_profile_library_capabilities();
-    case RtlProfileId::BlogV3:
-        /* EXPERIMENTAL (2026-09-11): full V4 capability set unlocked for live
-         * empirical testing on real R860/R820T2 hardware -- see the comment
-         * on rtl_profile_uses_v4_hf_routing() above. NOT a Hardware-verified
-         * claim; V3/V3c has only 1 RF input vs. V4's 3 triplexed inputs, so
-         * HF_UPCONVERTER/the reg06 input-select path is expected to be wrong
-         * even if gain/AGC turns out fine. Revert to the Nooelec-style
-         * reduced set below once real results are in. */
-        return rtl_profile_library_capabilities();
     case RtlProfileId::NooelecSmartV5:
+    case RtlProfileId::BlogV3:
         /* Provisional: stream/retune/sync-read/passport; no V4 HF or measured gain/bias. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT;
@@ -173,21 +165,9 @@ inline bool rtl_profile_supports_stream(RtlProfileId profile)
     return (rtl_profile_device_capabilities(profile) & ESP_RTL_SDR_CAP_STREAM) != 0;
 }
 
-/**
- * EXPERIMENTAL (2026-09-11): BlogV3 (real V3c/R860 hardware confirmed
- * identifying and streaming, tune-lock unverified) is deliberately run
- * through the exact same V4 frontend/GPIO/AGC-enable code path as BlogV4
- * here, on maintainer request, to empirically find what does and does not
- * work on real R820T2/R860 silicon rather than guess. This intentionally
- * removes the "never run V4-only board controls on a plain R820T2/R860
- * stick" protection below for BlogV3 specifically -- Nooelec keeps it.
- * Do not treat any resulting capability/behavior as Hardware-verified
- * until confirmed against real reception; update docs/PROFILES.md and
- * PROJECT_TRUTH.md from actual soak results, not from this unlocking it.
- */
 inline bool rtl_profile_uses_v4_hf_routing(RtlProfileId profile)
 {
-    return profile == RtlProfileId::BlogV4 || profile == RtlProfileId::BlogV3;
+    return profile == RtlProfileId::BlogV4;
 }
 
 inline bool rtl_profile_uses_r820t2_i2c_remap(RtlProfileId profile)
@@ -195,13 +175,11 @@ inline bool rtl_profile_uses_r820t2_i2c_remap(RtlProfileId profile)
     return profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5;
 }
 
-/** Blog V4 vendor board controls must never run on plain R820T2/R860 sticks
- * -- except BlogV3, which is deliberately unlocked above for the same
- * experiment; see that comment. */
+/** Blog V4 vendor board controls must never run on plain R820T2/R860 sticks. */
 inline bool rtl_profile_allows_init_record(RtlProfileId profile,
                                            const RtlControlRecord &record)
 {
-    if (profile == RtlProfileId::BlogV3 || !rtl_profile_uses_r820t2_i2c_remap(profile)) {
+    if (!rtl_profile_uses_r820t2_i2c_remap(profile)) {
         return true;
     }
     return record.value != 0x3001 && record.value != 0x3003 && record.value != 0x3004;

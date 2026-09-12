@@ -86,8 +86,8 @@ struct UsbFaultGuardState {
     uint32_t panic_count;
     /* Set just before usb_host_install(); cleared once we know enumeration
      * of at least one device succeeded (NEW_DEV delivered) or the
-     * post-install settle window elapsed with nothing attached. Read once
-     * (and cleared) at the next boot — see usb_fault_guard_boot_check(). */
+     * post-install settle window elapsed with nothing attached. Read at the
+     * next boot — see usb_fault_guard_boot_check(). */
     bool pending_risk;
     bool safe_mode_active_this_boot;
     esp_timer_handle_t timer;
@@ -158,7 +158,7 @@ static bool usb_fault_guard_boot_check(void)
             s_usb_fault_guard.panic_count = 0;
         }
         s_usb_fault_guard.timer = nullptr;
-    } else {
+    } else if (s_usb_fault_guard.panic_count < kUsbFaultGuardPanicThreshold) {
         /* Previous boot's risky window closed cleanly (or none happened). */
         s_usb_fault_guard.panic_count = 0;
     }

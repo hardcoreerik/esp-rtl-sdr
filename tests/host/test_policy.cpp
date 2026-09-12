@@ -784,6 +784,14 @@ static void test_smoke_urb_image_isolation(void)
     EXPECT_TRUE(readme.find("CONFIG_ESP_RTL_SDR_SMOKE_URB_3X32K") != std::string::npos);
 }
 
+static void test_usb_fault_guard_latch_contract(void)
+{
+    const std::string source = slurp_repo_file("src/esp_rtl_sdr.cpp");
+    EXPECT_TRUE(source.find(
+        "else if (s_usb_fault_guard.panic_count < kUsbFaultGuardPanicThreshold)") !=
+                std::string::npos);
+}
+
 int main(void)
 {
     std::printf("esp_rtl_sdr host policy tests (%s)\n", esp_rtl_sdr_get_version_string());
@@ -803,6 +811,7 @@ int main(void)
     test_error_base_unique();
     test_metrics_window_health();
     test_smoke_urb_image_isolation();
+    test_usb_fault_guard_latch_contract();
     std::printf("RESULT passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

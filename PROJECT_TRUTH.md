@@ -6,8 +6,8 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-15**
-Version: **0.8.0-rc3** (EXPERIMENTAL multi-dongle stabilization; Blog V3c cold normal-tuner initialization and LF/HF transitions hardware-verified; Blog V4 FM and HF-upconverter regressions hardware-verified; true LF reception, absolute V3c gain calibration, and Nooelec remain provisional; not production-ready)
+Snapshot date: **2026-09-20**
+Version: **0.8.0-rc3** (EXPERIMENTAL multi-dongle stabilization; concurrent multi-handle USB session **Implemented** / host-test verified, **not** Hardware-verified; Blog V3c cold normal-tuner initialization and LF/HF transitions hardware-verified; Blog V4 FM and HF-upconverter regressions hardware-verified; true LF reception, absolute V3c gain calibration, and Nooelec remain provisional; not production-ready)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -90,7 +90,9 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | set/get center freq, rate, ppm | **Implemented** | |
 | Sync `read()` | **Implemented** | |
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
-| Multi-device select | **Implemented** | |
+| Multi-device select | **Implemented** | pick-one candidate per handle |
+| Concurrent multi-handle USB session | **Implemented** (host/build) | exclusive USB-address claims; shared `usb_host_install` refcount; `[RTLn]` logs; identity/stats/metadata APIs. Hardware 2- and 3-dongle streams **not yet measured** |
+| Multi-rtl hardware harness | **Implemented** | `examples/multi_rtlsdr_test/` — Gates 1–6 procedure; no soak log in tree |
 | Blog V4 filter `0bda:2838` | **Implemented** | Exact `RTLSDRBlog` / `Blog V4` only — never bare VID/PID |
 | Nooelec NESDR SMArt v5 `0bda:2838` | **Provisional — contributor-tested; maintainer soak pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; I2C `0x34`; HF&lt;24 MHz rejected |
 | Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |

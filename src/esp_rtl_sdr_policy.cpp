@@ -262,6 +262,8 @@ void esp_rtl_sdr_config_default(esp_rtl_sdr_config_t *config)
     config->usb_task_core_id = 0xFF;
     config->delivery_mode = ESP_RTL_SDR_DELIVERY_BOTH;
     config->pull_ring_bytes = 0;
+    config->bind_device_index = ESP_RTL_SDR_BIND_ANY;
+    config->bind_serial[0] = '\0';
 }
 
 void esp_rtl_sdr_stream_config_default(esp_rtl_sdr_stream_config_t *stream)
@@ -319,6 +321,10 @@ esp_err_t esp_rtl_sdr_config_validate(const esp_rtl_sdr_config_t *config)
             local.pull_ring_bytes > (1024u * 1024u)) {
             return ESP_ERR_INVALID_ARG;
         }
+    }
+    if (local.bind_device_index != ESP_RTL_SDR_BIND_ANY &&
+        local.bind_device_index >= ESP_RTL_SDR_MAX_DEVICES) {
+        return ESP_RTL_SDR_ERR_BAD_DEVICE;
     }
     return ESP_OK;
 }

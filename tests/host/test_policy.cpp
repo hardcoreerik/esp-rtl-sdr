@@ -290,6 +290,8 @@ static void test_rate_windows(void)
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_3200K));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1536000));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1200000));
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(3400000));
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(3600000));
 
     /* Window edges (low min is 225001 — not 225000; ratio field / desktop parity) */
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MIN_HZ));

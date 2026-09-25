@@ -384,6 +384,65 @@ static void test_profile_transition_matrix(void)
     EXPECT_TRUE(!esp_rtl_sdr_frequency_uses_hf_upconverter(28800000u));
 }
 
+/*
+ * V4L identity and routing.
+ *
+ * The V4L carries an R828S, which answers over I2C where an R820T/R860
+ * would. Detection therefore has to come from the EEPROM strings; relying on
+ * the I2C probe brought the stick up as BlogV3, complete with a
+ * direct-sampling HF path the board does not have.
+ */
+static void test_blog_v4l_identity(void)
+{
+    /* Exact-match on "Blog V4" used to reject "Blog V4L" and fall through to
+     * the probe. It must resolve from descriptors alone. */
+    EXPECT_TRUE(rtl_profile_from_descriptors(kRtlSharedVid, kRtlSharedPid,
+                                             "RTLSDRBlog", "Blog V4L") ==
+                RtlProfileId::BlogV4L);
+    /* ...without stealing the plain V4. */
+    EXPECT_TRUE(rtl_profile_from_descriptors(kRtlSharedVid, kRtlSharedPid,
+                                             "RTLSDRBlog", "Blog V4") ==
+                RtlProfileId::BlogV4);
+
+    /* Even when the I2C probe says "R820T-like", descriptors win. */
+    RtlProfileProbeResult v3_probe{};
+    v3_probe.completed = true;
+    v3_probe.chip_id = 0x69;
+    EXPECT_TRUE(rtl_profile_select(kRtlSharedVid, kRtlSharedPid, "RTLSDRBlog",
+                                   "Blog V4L", v3_probe) ==
+                RtlProfileId::BlogV4L);
+
+    /* R828S shares the remapped tuner addressing... */
+    EXPECT_TRUE(rtl_profile_uses_r820t2_i2c_remap(RtlProfileId::BlogV4L));
+    EXPECT_TRUE(rtl_profile_tuner_i2c_value(RtlProfileId::BlogV4L) ==
+                kR820T2TunerI2cValue);
+
+    /* ...but NOT the V3 HF handling. The V4L upconverts; folding it through
+     * the Q-branch path would be actively wrong. */
+    EXPECT_TRUE(!rtl_profile_uses_v3_direct_sampling(RtlProfileId::BlogV4L, 10000000u));
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::BlogV4L) &
+                 ESP_RTL_SDR_CAP_DIRECT_SAMPLING) == 0);
+
+    /* Nor does it claim the V4 front-end routing, which is a different board. */
+    EXPECT_TRUE(!rtl_profile_uses_v4_hf_routing(RtlProfileId::BlogV4L));
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::BlogV4L) &
+                 ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
+
+    /* HF fails closed until that upconverter's control is captured. */
+    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 10000000u));
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 100100000u));
+
+    /* VHF/UHF streams, and keeps the cold tuner reinit the V4L was observed
+     * streaming under while it was still misdetected as BlogV3. */
+    EXPECT_TRUE(rtl_profile_supports_stream(RtlProfileId::BlogV4L));
+    EXPECT_TRUE(rtl_profile_needs_cold_tuner_reinit(RtlProfileId::BlogV4L, 100100000u));
+
+    /* V4 vendor board controls must not run on it. */
+    RtlControlRecord vendor{};
+    vendor.value = 0x3001;
+    EXPECT_TRUE(!rtl_profile_allows_init_record(RtlProfileId::BlogV4L, vendor));
+}
+
 int main(void)
 {
     test_detection_matrix();
@@ -394,6 +453,7 @@ int main(void)
     test_v3_direct_transition_records();
     test_capability_matrix();
     test_profile_transition_matrix();
+    test_blog_v4l_identity();
     std::printf("RESULT profiles passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

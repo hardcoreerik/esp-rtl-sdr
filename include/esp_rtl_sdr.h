@@ -194,7 +194,7 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 #define ESP_RTL_SDR_RATE_2048K         2048000u  /**< P4 ADS-B path (provenance) */
 #define ESP_RTL_SDR_RATE_2400K         2400000u  /**< PC clean-room capture rate */
 #define ESP_RTL_SDR_RATE_2560K         2560000u  /**< vendor "stable" ceiling (Blog V4 DS) */
-#define ESP_RTL_SDR_RATE_3200K         3200000u  /**< max; drops expected */
+#define ESP_RTL_SDR_RATE_3200K         3200000u  /**< vendor max; drops expected */
 
 /**
  * Hardware sample-rate windows (RTL2832U resampler + ecosystem practice).
@@ -202,7 +202,8 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
  *
  * Low band: **> 225 kHz … 300 kHz** (desktop librtlsdr rejects rate <= 225000;
  * at exactly 225000 the 28-bit ratio field masks to 0 and cannot be programmed).
- * High band: 900 kHz … 3.2 MHz. Gap 300001–899999 is unstable / rejected.
+ * High band: 900 kHz … 3.2 MHz. Rates above 3.2 MHz lost data in
+ * board and PC probes; gap 300001–899999 is rejected.
  */
 #define ESP_RTL_SDR_RATE_LOW_MIN_HZ    225001u
 #define ESP_RTL_SDR_RATE_LOW_MAX_HZ    300000u
@@ -382,6 +383,7 @@ typedef enum {
     ESP_RTL_SDR_PROFILE_BLOG_V4 = 1,          /**< RTL-SDR Blog V4 / R828D + HF upconverter */
     ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / R820T2 provisional stream */
     ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5 = 3, /**< NESDR SMArt v5 / R820T2-R860 provisional */
+    ESP_RTL_SDR_PROFILE_BLOG_V4L = 4,         /**< RTL-SDR Blog V4L (Lite) / R828S */
 } esp_rtl_sdr_profile_t;
 
 typedef struct {
@@ -399,7 +401,34 @@ typedef struct {
     uint32_t blocks_total;
     uint32_t short_transfers;
     uint32_t overruns;       /**< USB side could not keep consumer fed / free slots */
-    uint32_t consumer_drops; /**< app too slow (if ring drops newest/oldest) */
+    /**
+     * DEPRECATED, MIXED UNITS. Historically incremented by 1 when no free
+     * IqSlot existed AND by a byte count when the pull ring overwrote old
+     * data, then exported as dropped_buffers. A value here can therefore be
+     * a count of buffers, a count of bytes, or a sum of both, which made
+     * figures like 81920 (= 5 x 16384) look like tens of thousands of lost
+     * buffers when they were five ring losses counted in bytes.
+     *
+     * Kept so existing readers do not break. Use the separated counters
+     * below; each has one unit and one cause.
+     */
+    uint32_t consumer_drops;
+    /** No free IqSlot at completion time. Unit: blocks. */
+    uint32_t slot_starve_blocks;
+    /** Pull ring full, oldest data overwritten. Unit: blocks / bytes. */
+    uint32_t ring_overrun_blocks;
+    uint64_t ring_overrun_bytes;
+    /**
+     * pull_ring_push() could not take pull_mux and discarded a completed
+     * block. Previously invisible: the USB callback had already done all
+     * the work and the data vanished with no counter at all.
+     */
+    uint32_t pull_lock_miss_blocks;
+    uint64_t pull_lock_miss_bytes;
+    /** Bytes handed to the application by read(). Unit: bytes. */
+    uint64_t bytes_consumed;
+    /** Peak pull-ring occupancy in bytes, for pressure visibility. */
+    uint32_t ring_high_water;
     uint8_t sample_min;
     uint8_t sample_max;
     float sample_mean; /**< not double: stable ABI, enough precision */
@@ -423,7 +452,115 @@ typedef struct {
     uint32_t frequency_hz; /**< LO after last successful tune */
     uint32_t sample_rate_sps;
     int64_t host_timestamp_us; /**< esp_timer_get_time() style; 0 if unknown */
+    /**
+     * Append-only (0.8 multi-receiver). Older apps that only read the fields
+     * above remain valid: the callback payload is the driver's struct.
+     * device_id is the handle's logical index (0..MAX_DEVICES-1), NOT USB addr.
+     */
+    uint8_t device_id;
+    int gain_tenth_db;       /**< last requested tuner gain; 0 if unknown */
+    uint32_t bandwidth_hz;   /**< occupied IQ bandwidth (= sample_rate); not analog IF */
+    uint32_t flags;          /**< ESP_RTL_SDR_IQ_FLAG_* */
 } esp_rtl_sdr_iq_block_t;
+
+/** IQ / capture flags (bitmask). Host-time alignment only — not RF coherence. */
+#define ESP_RTL_SDR_IQ_FLAG_NONE           0u
+#define ESP_RTL_SDR_IQ_FLAG_SHORT_TRANSFER (1u << 0) /**< URB shorter than transfer_bytes */
+#define ESP_RTL_SDR_IQ_FLAG_OVERRUN        (1u << 1) /**< free-slot / filled-queue miss */
+
+/** bind_device_index sentinel: claim the first USB address not owned by another handle. */
+#define ESP_RTL_SDR_BIND_ANY ((size_t)(-1))
+
+/**
+ * Stable identity for one physical receiver. VID/PID/product are NOT unique
+ * across identical dongles — use usb_addr + hub_port + serial together.
+ */
+typedef struct {
+    size_t struct_size;
+    uint8_t logical_index; /**< handle slot 0..MAX_DEVICES-1; log tag [RTLn] */
+    uint8_t usb_addr;      /**< USB device address after enumeration; 0 if none */
+    uint8_t parent_addr;   /**< hub device address; 0 = root port or unknown */
+    uint8_t hub_port;      /**< downstream port on parent; 0 = unknown/root */
+    uint8_t enum_index;    /**< index in last candidate list (0-based) */
+    uint16_t vid;
+    uint16_t pid;
+    char serial[32];
+    char manufacturer[48];
+    char product[48];
+    char usb_path[24]; /**< "root" or "P<addr>.p<port>" */
+    bool high_speed;
+    bool present;
+    esp_rtl_sdr_profile_t profile;
+} esp_rtl_sdr_identity_t;
+
+/**
+ * Per-buffer / per-handle acquisition metadata for later multi-receiver
+ * comparison. Host timestamps are NOT sample-sync or phase-coherent.
+ */
+typedef struct {
+    size_t struct_size;
+    uint8_t device_id;
+    uint8_t usb_addr;
+    uint8_t hub_port;
+    uint32_t sequence;
+    int64_t host_timestamp_us;
+    uint32_t sample_count; /**< CU8 pairs in the associated buffer; 0 if none */
+    uint32_t center_frequency_hz;
+    uint32_t tuner_frequency_hz; /**< after HF upconverter map when known */
+    uint32_t sample_rate_sps;
+    uint32_t bandwidth_hz;
+    uint8_t gain_mode; /**< esp_rtl_sdr_gain_mode_t stored as u8 for ABI */
+    int gain_tenth_db;
+    int freq_correction_ppm;
+    esp_rtl_sdr_profile_t profile;
+    bool bias_tee;
+    esp_rtl_sdr_state_t stream_status;
+    uint32_t dropped_buffers;
+    uint32_t usb_errors;
+    uint8_t rms_placeholder;  /**< reserved for a later DSP layer; 0 now */
+    uint8_t peak_placeholder; /**< reserved for a later DSP layer; 0 now */
+    uint32_t flags;
+} esp_rtl_sdr_capture_meta_t;
+
+/** Per-receiver streaming instrumentation (in addition to esp_rtl_sdr_metrics_t). */
+typedef struct {
+    size_t struct_size;
+    uint8_t device_id;
+    uint64_t bytes_received;
+    uint64_t samples_received; /**< CU8 complex samples = bytes/2 */
+    uint32_t usb_transfer_count;
+    uint32_t usb_transfer_errors;
+    uint32_t usb_timeouts; /**< IDF USB host has no transfer timeouts yet; stays 0 */
+    uint32_t short_transfers;
+    uint32_t buffer_overruns;
+    /** DEPRECATED, MIXED UNITS - mirrors metrics.consumer_drops. */
+    uint32_t dropped_buffers;
+    uint32_t queue_high_water;
+    /* Separated loss accounting. Each has one unit and one cause, so every
+     * byte's fate is attributable. */
+    uint32_t slot_starve_blocks;
+    uint32_t ring_overrun_blocks;
+    uint64_t ring_overrun_bytes;
+    uint32_t pull_lock_miss_blocks;
+    uint64_t pull_lock_miss_bytes;
+    uint64_t bytes_consumed;
+    uint32_t ring_high_water_bytes;
+    uint32_t stream_uptime_ms;
+    uint32_t effective_sample_rate;
+    int64_t last_transfer_timestamp_us;
+} esp_rtl_sdr_stream_stats_t;
+
+/** Shared USB host / hub session counters (not per-dongle). */
+typedef struct {
+    size_t struct_size;
+    uint32_t session_refcount;
+    uint32_t claimed_rtl_count;
+    uint32_t new_dev_events;
+    uint32_t gone_events;
+    uint32_t claim_conflicts;
+    bool host_installed;
+    bool hubs_compiled_in; /**< CONFIG_USB_HOST_HUBS_SUPPORTED when built on IDF */
+} esp_rtl_sdr_hub_stats_t;
 
 typedef struct {
     esp_err_t code;
@@ -549,6 +686,15 @@ typedef struct {
      * uses read() (lazy on first push/read).
      */
     size_t pull_ring_bytes;
+    /**
+     * Bind this handle to a candidate index from get_device_at(), or
+     * ESP_RTL_SDR_BIND_ANY (default) to claim the first USB address not
+     * already owned by another live handle. Append-only: older struct_size
+     * keeps BIND_ANY after config_default().
+     */
+    size_t bind_device_index;
+    /** Optional exact serial match. Empty = ignore. */
+    char bind_serial[32];
 } esp_rtl_sdr_config_t;
 
 typedef struct {
@@ -884,11 +1030,59 @@ esp_err_t esp_rtl_sdr_refresh_device_list(esp_rtl_sdr_handle_t handle);
 esp_err_t esp_rtl_sdr_get_device_count(esp_rtl_sdr_handle_t handle, size_t *out_count);
 
 /**
+ * Number of devices currently on the USB bus, whatever they are.
+ *
+ * This is the raw host device list - hubs, non-RTL devices and RTL dongles
+ * that have not finished enumerating all count. It is deliberately NOT the
+ * accepted-candidate count from esp_rtl_sdr_get_device_count().
+ *
+ * It exists so a caller can tell "the bus is empty" apart from "the bus is
+ * busy enumerating and no RTL device has been accepted yet". Those look
+ * identical through the candidate count, and confusing them makes recovery
+ * logic tear down enumeration that was still in progress.
+ *
+ * Needs no handle: it asks the USB host library, not a device.
+ */
+esp_err_t esp_rtl_sdr_usb_device_count(size_t *out_count);
+
+/**
+ * Power-cycle the downstream ports of any external hub on the bus.
+ *
+ * Toggling the ESP32-P4 ROOT port does nothing useful when the hub is
+ * self-powered: it cannot remove power from such a hub, so the devices
+ * behind it keep whatever stale state they had. This instead asks the hub
+ * itself, over hub-class control requests, to drop and restore power on its
+ * own downstream ports - which does reach the dongles.
+ *
+ * Why it is needed: after a warm MCU reset the devices behind the hub are
+ * still powered and still configured from the previous session. IDF creates
+ * a device tree node for the first one and then the whole USB host stack
+ * goes silent - no descriptor read, no address assignment, no timeout, no
+ * retry - and the remaining hub ports are never scanned, so only one device
+ * is ever seen and none complete enumeration.
+ *
+ * @param handle  any installed handle; only its USB client is used
+ * @param off_ms  how long to leave port power off (100-1000 is sensible)
+ *
+ * Returns ESP_ERR_NOT_FOUND when no hub could be opened, which is itself
+ * the useful answer - it means this recovery is unavailable and the port
+ * power must be removed some other way.
+ */
+esp_err_t esp_rtl_sdr_hub_port_power_cycle(esp_rtl_sdr_handle_t handle, uint32_t off_ms);
+
+/**
  * Snapshot candidate info at index [0, count).
  * Does not change which device is open.
  */
 esp_err_t esp_rtl_sdr_get_device_at(esp_rtl_sdr_handle_t handle, size_t index,
                                     esp_rtl_sdr_device_info_t *out_info);
+
+/**
+ * Snapshot identity (USB addr/path/profile) of candidate index without opening it.
+ * Does not change which device is open.
+ */
+esp_err_t esp_rtl_sdr_get_candidate_identity(esp_rtl_sdr_handle_t handle, size_t index,
+                                             esp_rtl_sdr_identity_t *out);
 
 /**
  * Select candidate by index for the next claim/start (and open now if idle).
@@ -1067,6 +1261,62 @@ esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable
  */
 esp_err_t esp_rtl_sdr_set_rtl_agc(esp_rtl_sdr_handle_t handle, bool enable);
 esp_err_t esp_rtl_sdr_get_rtl_agc(esp_rtl_sdr_handle_t handle, bool *out_enable);
+
+/* -------------------------------------------------------------------------- */
+/* Multi-receiver identity / stats / metadata (concurrent handles)            */
+/* -------------------------------------------------------------------------- */
+
+void esp_rtl_sdr_identity_default(esp_rtl_sdr_identity_t *out);
+void esp_rtl_sdr_capture_meta_default(esp_rtl_sdr_capture_meta_t *out);
+void esp_rtl_sdr_stream_stats_default(esp_rtl_sdr_stream_stats_t *out);
+void esp_rtl_sdr_hub_stats_default(esp_rtl_sdr_hub_stats_t *out);
+
+/** Format usb_path: "root" or "P<parent>.p<port>". Never writes more than dst_sz. */
+void esp_rtl_sdr_format_usb_path(uint8_t parent_addr, uint8_t hub_port,
+                                 char *dst, size_t dst_sz);
+
+/**
+ * Snapshot identity of the device currently opened by this handle.
+ * present=false and usb_addr=0 if nothing is open. out is not modified on failure.
+ */
+esp_err_t esp_rtl_sdr_get_identity(esp_rtl_sdr_handle_t handle,
+                                   esp_rtl_sdr_identity_t *out);
+
+/** Logical index used in [RTLn] logs. 0xFF if handle is stale. */
+esp_err_t esp_rtl_sdr_get_logical_index(esp_rtl_sdr_handle_t handle, uint8_t *out_index);
+
+/**
+ * Snapshot capture metadata from live handle state (not a queued IQ block).
+ * Combine with EVT_IQ_BLOCK sequence/timestamp for per-buffer records.
+ */
+esp_err_t esp_rtl_sdr_get_capture_meta(esp_rtl_sdr_handle_t handle,
+                                       esp_rtl_sdr_capture_meta_t *out);
+
+/** Extended per-device stream counters. Complements get_metrics(). */
+esp_err_t esp_rtl_sdr_get_stream_stats(esp_rtl_sdr_handle_t handle,
+                                       esp_rtl_sdr_stream_stats_t *out);
+
+/**
+ * Shared USB session / hub counters. Handle may be NULL: still reports the
+ * process-wide session (zeros if no handle has installed yet).
+ */
+esp_err_t esp_rtl_sdr_get_hub_stats(esp_rtl_sdr_handle_t handle,
+                                    esp_rtl_sdr_hub_stats_t *out);
+
+/**
+ * Fill capture metadata from explicit fields (host-testable, no USB).
+ * Used by unit tests and by the driver to stamp IQ blocks consistently.
+ */
+void esp_rtl_sdr_fill_capture_meta(esp_rtl_sdr_capture_meta_t *out,
+                                   uint8_t device_id, uint8_t usb_addr, uint8_t hub_port,
+                                   uint32_t sequence, int64_t host_timestamp_us,
+                                   uint32_t sample_count, uint32_t center_hz,
+                                   uint32_t tuner_hz, uint32_t sample_rate_sps,
+                                   uint8_t gain_mode, int gain_tenth_db, int ppm,
+                                   esp_rtl_sdr_profile_t profile, bool bias_tee,
+                                   esp_rtl_sdr_state_t stream_status,
+                                   uint32_t dropped_buffers, uint32_t usb_errors,
+                                   uint32_t flags);
 
 #ifdef __cplusplus
 }

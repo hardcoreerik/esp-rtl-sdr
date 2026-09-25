@@ -54,7 +54,10 @@ for f in \
   docs/EXAMPLES.md \
   docs/RUNTIME_CONSTANTS.md \
   docs/lab/SOAK_LOG_TEMPLATE.md \
-  docs/REVIEW_GAPS_2026-08.md
+  docs/REVIEW_GAPS_2026-08.md \
+  docs/MULTI_DEVICE_ARCHITECTURE.md \
+  docs/WAVESHARE_P4_MULTI_RTL_PROTOTYPE.md \
+  docs/MULTI_DEVICE_PERFORMANCE.md
 do
   test -f "$f" || { echo "missing $f"; exit 1; }
 done
@@ -93,6 +96,8 @@ fi
 
 # Host test sources present
 test -f tests/host/test_policy.cpp
+test -f tests/host/test_multi_device.cpp
 test -f src/esp_rtl_sdr_policy.cpp
+test -f src/esp_rtl_sdr_multi.cpp
 
 echo "TRUTH_HYGIENE_OK ver=$VER"

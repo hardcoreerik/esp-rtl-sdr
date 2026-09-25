@@ -13,3 +13,8 @@ managed_components/
 .idea/
 *.user
 .DS_Store
+
+# Editor/manual backups - swept in by git add -A once already
+*.bak
+*.bak_*
+*.orig

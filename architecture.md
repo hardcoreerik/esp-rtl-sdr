@@ -129,6 +129,14 @@ RTL2832U bulk IN 0x81 (HS, 512 B MPS)
 
 ---
 
+## Concurrent receivers (multiple handles)
+
+One handle still owns one stream. Multiple `install()` calls share a refcounted
+USB host session and claim distinct USB addresses. See
+[`docs/MULTI_DEVICE_ARCHITECTURE.md`](docs/MULTI_DEVICE_ARCHITECTURE.md).
+
+Single-dongle apps do not need to change (`BIND_ANY` + one handle).
+
 ## Multi-dongle / multi-tuner strategy
 
 ### Identity

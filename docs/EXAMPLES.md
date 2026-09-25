@@ -2,7 +2,10 @@
 
 Driver-level recipes (not full demod apps). Runnable smoke:
 [`../examples/p4_serial_smoke/`](../examples/p4_serial_smoke/).  
+Concurrent multi-receiver harness:
+[`../examples/multi_rtlsdr_test/`](../examples/multi_rtlsdr_test/).  
 Full param docs: [`API_REFERENCE.md`](API_REFERENCE.md).
+Architecture: [`MULTI_DEVICE_ARCHITECTURE.md`](MULTI_DEVICE_ARCHITECTURE.md).
 
 All examples assume Blog V4 on ESP32-P4 HS USB Host and:
 

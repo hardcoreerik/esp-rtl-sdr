@@ -12,6 +12,7 @@ enum class RtlProfileId : uint8_t {
     BlogV4 = ESP_RTL_SDR_PROFILE_BLOG_V4,
     BlogV3 = ESP_RTL_SDR_PROFILE_BLOG_V3,
     NooelecSmartV5 = ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5,
+    BlogV4L = ESP_RTL_SDR_PROFILE_BLOG_V4L,
 };
 
 struct RtlProfileProbeResult {
@@ -48,6 +49,19 @@ inline RtlProfileId rtl_profile_from_descriptors(uint16_t vid, uint16_t pid,
 {
     if (vid != kRtlSharedVid || pid != kRtlSharedPid) {
         return RtlProfileId::Unknown;
+    }
+    /* V4L before V4.
+     *
+     * The V4L carries an R828S, which "may appear to software like an R820T
+     * or R860 over I2C" (RTL-SDR Blog). Before this profile existed the
+     * exact match on "Blog V4" rejected "Blog V4L", detection fell through
+     * to the I2C probe, the probe saw an R820T-like tuner and the stick came
+     * up as BlogV3 - complete with a direct-sampling HF path this board does
+     * not have. The EEPROM strings were being read correctly and then
+     * ignored, so identity has to be settled from them, not from I2C. */
+    if (rtl_profile_text_is(manufacturer, "RTLSDRBlog") &&
+        rtl_profile_text_is(product, "Blog V4L")) {
+        return RtlProfileId::BlogV4L;
     }
     if (rtl_profile_text_is(manufacturer, "RTLSDRBlog") &&
         rtl_profile_text_is(product, "Blog V4")) {
@@ -98,6 +112,7 @@ inline const char *rtl_profile_name(RtlProfileId profile)
     switch (profile) {
     case RtlProfileId::BlogV4: return "blog_v4_r828d";
     case RtlProfileId::BlogV3: return "blog_v3_r820t2";
+    case RtlProfileId::BlogV4L: return "blog_v4l_r828s";
     case RtlProfileId::NooelecSmartV5: return "nooelec_smart_v5_r820t2";
     default: return "unknown";
     }
@@ -113,6 +128,10 @@ inline uint16_t rtl_profile_tuner_i2c_value(RtlProfileId profile)
     switch (profile) {
     case RtlProfileId::NooelecSmartV5:
     case RtlProfileId::BlogV3:
+    case RtlProfileId::BlogV4L:
+        /* R828S answers where an R820T/R860 would, so it shares the
+         * 0x74 -> 0x34 remapped addressing rather than the V4's R828D
+         * address. This is the one V4L behaviour that is evidenced. */
         return kR820T2TunerI2cValue;
     case RtlProfileId::BlogV4:
         return kBlogV4TunerI2cValue;
@@ -162,6 +181,24 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
                ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_DIRECT_SAMPLING;
+    case RtlProfileId::BlogV4L:
+        /* R828S. Shares the R820T2 remapped addressing, so the VHF/UHF
+         * stream path is the same as BlogV3's.
+         *
+         * Deliberately NOT DIRECT_SAMPLING: the V4L reaches HF through a
+         * built-in upconverter, so tuning low must not fold through the
+         * V3 Q-branch path. Deliberately NOT HF_UPCONVERTER either - the
+         * board has one, but its control has not been captured or verified
+         * here, and claiming a capability we cannot exercise is worse than
+         * declining it. Until it is, rtl_profile_supports_rf_hz() fails
+         * closed below the tuner's native floor.
+         *
+         * GAIN is claimed on the same footing as BlogV3 (reg05/07 writes
+         * via the R820T2 records). R828S is a different die, so treat the
+         * resulting dB as uncalibrated until measured. */
+        return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
+               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
+               ESP_RTL_SDR_CAP_GAIN;
     case RtlProfileId::NooelecSmartV5:
         /* Provisional: stream/retune/sync-read/passport; no V4 HF or measured gain/bias. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
@@ -191,7 +228,9 @@ inline bool rtl_profile_uses_v4_hf_routing(RtlProfileId profile)
 
 inline bool rtl_profile_uses_r820t2_i2c_remap(RtlProfileId profile)
 {
-    return profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5;
+    return profile == RtlProfileId::BlogV3 ||
+           profile == RtlProfileId::NooelecSmartV5 ||
+           profile == RtlProfileId::BlogV4L;
 }
 
 inline bool rtl_profile_uses_v3_direct_sampling(RtlProfileId profile, uint32_t frequency_hz)
@@ -202,7 +241,15 @@ inline bool rtl_profile_uses_v3_direct_sampling(RtlProfileId profile, uint32_t f
 inline bool rtl_profile_needs_cold_tuner_reinit(RtlProfileId profile,
                                                  uint32_t frequency_hz)
 {
-    return profile == RtlProfileId::BlogV3 &&
+    /* V4L keeps the cold reinit.
+     *
+     * Not a guess: before this profile existed the V4L was misdetected as
+     * BlogV3 and streamed at 2.4 MS/s under that path, which includes this
+     * reinit. Dropping it while changing identity would risk breaking a
+     * stream that demonstrably works, and nothing about R828S says the
+     * sequence is unnecessary. Revisit if a first-party V4L capture shows
+     * otherwise. */
+    return (profile == RtlProfileId::BlogV3 || profile == RtlProfileId::BlogV4L) &&
            !rtl_profile_uses_v3_direct_sampling(profile, frequency_hz);
 }
 
@@ -234,6 +281,13 @@ inline bool rtl_profile_supports_rf_hz(RtlProfileId profile, uint32_t frequency_
     /* Nooelec has no measured direct-sampling path. Blog V3 uses its separately
      * captured Q-branch path below this native tuner floor. */
     if (profile == RtlProfileId::NooelecSmartV5 && frequency_hz < kR820T2NativeMinHz) {
+        return false;
+    }
+    /* The V4L has an HF upconverter, but its control path is not captured
+     * here. Direct sampling would be actively wrong on this board, so fail
+     * closed below the native tuner floor rather than folding through a
+     * circuit the V4L does not have. */
+    if (profile == RtlProfileId::BlogV4L && frequency_hz < kR820T2NativeMinHz) {
         return false;
     }
     if (profile == RtlProfileId::Unknown) {

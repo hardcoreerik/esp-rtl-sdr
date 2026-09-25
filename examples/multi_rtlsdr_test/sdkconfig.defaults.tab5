@@ -1,0 +1,4 @@
+# Overlay for M5Stack Tab5 (ESP32-P4 rev v1.3). Mutually exclusive with
+# Waveshare v3.x images.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_0=y

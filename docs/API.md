@@ -16,6 +16,7 @@ For every function’s parameters, return semantics, and copy-paste examples, us
 |---|---|
 | Works every time | Strict validation; no half-open USB; fail closed to IDLE/FAULT |
 | Safe under concurrency | Per-handle mutex; RAII locks; short timeouts on queries |
+| Concurrent receivers | Shared USB session + exclusive USB-address claims; `BIND_ANY` or index/serial |
 | No callback re-entry | `ERR_REENTRANT` only if **this task** is inside the event callback. App tasks may set gain/mode while delivery emits. |
 | Events outside lock | Callbacks run only after mutex release |
 | Stable ABI growth | `struct_size` on config structs; new fields only at end |

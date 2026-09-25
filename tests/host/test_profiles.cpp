@@ -199,8 +199,9 @@ static void test_matched_if_policy(void)
     EXPECT_EQ_U(rtl_profile_demod_if_restore_hz(RtlProfileId::BlogV3), 3570000u);
     EXPECT_EQ_U((uint32_t)rtl_profile_pll_if_offset_hz(RtlProfileId::BlogV4), 1814972u);
     EXPECT_EQ_U(rtl_profile_demod_if_restore_hz(RtlProfileId::BlogV4), 0u);
-    EXPECT_EQ_U((uint32_t)rtl_profile_pll_if_offset_hz(RtlProfileId::NooelecSmartV5), 1814972u);
-    EXPECT_EQ_U(rtl_profile_demod_if_restore_hz(RtlProfileId::NooelecSmartV5), 0u);
+    /* Same R820T2 tuner as BlogV3: its measured 3.57 MHz IF, verified receiving on a SMArt v5 */
+    EXPECT_EQ_U((uint32_t)rtl_profile_pll_if_offset_hz(RtlProfileId::NooelecSmartV5), 3570000u);
+    EXPECT_EQ_U(rtl_profile_demod_if_restore_hz(RtlProfileId::NooelecSmartV5), 3570000u);
 
     const uint16_t values[] = {0x1920, 0x0120, 0x1a20, 0x0120, 0x1b20, 0x0120};
     const uint16_t indices[] = {0x0011, 0x000a, 0x0011, 0x000a, 0x0011, 0x000a};
@@ -285,13 +286,15 @@ static void test_capability_matrix(void)
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_RETUNE) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN) != 0);
-    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN_AUTO) == 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN_AUTO) != 0); /* librtlsdr's R82xx auto gain recipe */
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_DIRECT_SAMPLING) != 0);
     EXPECT_EQ_U(rtl_profile_default_gain_mode(RtlProfileId::BlogV4),
                 ESP_RTL_SDR_GAIN_MODE_AUTO);
     EXPECT_EQ_U(rtl_profile_default_gain_mode(RtlProfileId::BlogV3),
-                ESP_RTL_SDR_GAIN_MODE_MANUAL);
+                ESP_RTL_SDR_GAIN_MODE_AUTO);
+    EXPECT_EQ_U(rtl_profile_default_gain_mode(RtlProfileId::NooelecSmartV5),
+                ESP_RTL_SDR_GAIN_MODE_AUTO);
 
     constexpr uint8_t expected_r820t2_stages[][2] = {
         {0x90, 0x60}, {0x91, 0x60}, {0x91, 0x61}, {0x92, 0x61},
@@ -322,7 +325,8 @@ static void test_capability_matrix(void)
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_STREAM) != 0);
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_RETUNE) != 0);
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
-    EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_GAIN) == 0);
+    EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_GAIN) != 0); /* shared apply_r820t2_gain_records() path */
+    EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_GAIN_AUTO) != 0);
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
     EXPECT_TRUE((noe & ESP_RTL_SDR_CAP_DIRECT_SAMPLING) == 0);
 
@@ -384,8 +388,75 @@ static void test_profile_transition_matrix(void)
     EXPECT_TRUE(!esp_rtl_sdr_frequency_uses_hf_upconverter(28800000u));
 }
 
+/* hardcoreerik/esp-rtl-sdr#25: the R820T2 front end must follow the tuned band */
+static void test_r820t2_band_select(void)
+{
+    /* 433.92 MHz: bypass mux (0x41), tracking filter caps 0 */
+    const R820T2BandRow *b433 = rtl_r820t2_band_for_hz(433920000u);
+    EXPECT_EQ_U(b433->mhz, 310u);
+    EXPECT_EQ_U(b433->rf_mux_ploy, 0x41u);
+    EXPECT_EQ_U(b433->tf_c, 0x00u);
+    EXPECT_EQ_U(b433->open_d, 0x00u);
+    /* the byte actually written for r1a from the capture's 0x2a, as seen live on hardware */
+    EXPECT_EQ_U((0x2au & ~0xc3u) | b433->rf_mux_ploy, 0x69u);
+    const R820T2BandRow *b915 = rtl_r820t2_band_for_hz(915000000u);
+    EXPECT_EQ_U(b915->mhz, 650u);
+    EXPECT_EQ_U((0x2au & ~0xc3u) | b915->rf_mux_ploy, 0x68u);
+    /* FM band keeps the capture's own values (that's where it was recorded) */
+    const R820T2BandRow *bfm = rtl_r820t2_band_for_hz(100000000u);
+    EXPECT_EQ_U(bfm->rf_mux_ploy, 0x02u);
+    EXPECT_EQ_U(bfm->tf_c, 0x34u);
+    /* below 75 MHz the open-drain input is on */
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(30000000u)->open_d, 0x08u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(75000000u)->open_d, 0x00u);
+    /* row boundaries: exactly on a row start selects that row */
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(310000000u)->mhz, 310u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(309999999u)->mhz, 280u);
+    /* keyed on the LO like librtlsdr: RF 307 MHz + 3.57 MHz IF = LO 310.57 MHz -> 310 row */
+    EXPECT_EQ_U(rtl_r820t2_lo_hz(307000000u, 3570000.0), 310570000u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(rtl_r820t2_lo_hz(307000000u, 3570000.0))->mhz, 310u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(rtl_r820t2_lo_hz(433920000u, 3570000.0))->mhz, 310u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(rtl_r820t2_lo_hz(915000000u, 3570000.0))->mhz, 650u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_hz(1700000000u)->mhz, 650u);
+    /* table is sorted, or the lookup picks the wrong row */
+    for (size_t i = 1; i < std::size(kR820T2Bands); ++i) {
+        EXPECT_TRUE(kR820T2Bands[i].mhz > kR820T2Bands[i - 1].mhz);
+    }
+}
+
+static void test_r820t2_if_for_rate(void)
+{
+    /* librtlsdr r82xx_set_bandwidth() with bandwidth = sample rate */
+    R820T2IfSetting s = rtl_r820t2_if_for_rate(250000u);
+    EXPECT_EQ_U(s.reg0a, 0x0fu); EXPECT_EQ_U(s.reg0b, 0xe8u); EXPECT_EQ_U(s.if_hz, 1700000u);
+    s = rtl_r820t2_if_for_rate(1024000u);
+    EXPECT_EQ_U(s.reg0b, 0xecu); EXPECT_EQ_U(s.if_hz, 1400000u);
+    s = rtl_r820t2_if_for_rate(2048000u);
+    EXPECT_EQ_U(s.reg0a, 0x0fu); EXPECT_EQ_U(s.reg0b, 0x8fu); EXPECT_EQ_U(s.if_hz, 1750000u);
+    s = rtl_r820t2_if_for_rate(2560000u);
+    EXPECT_EQ_U(s.reg0b, 0x6fu); EXPECT_EQ_U(s.if_hz, 2000000u);
+    s = rtl_r820t2_if_for_rate(3200000u);
+    EXPECT_EQ_U(s.reg0a, 0x00u); EXPECT_EQ_U(s.reg0b, 0x6fu); EXPECT_EQ_U(s.if_hz, 3570000u);
+    /* demod IF word: the init table's 3.57 MHz bytes are 38 11 12 */
+    EXPECT_EQ_U(rtl_demod_if_word(3570000u, 28800000u), 0x381112u);
+}
+
+static void test_r82xx_bitrev(void)
+{
+    EXPECT_EQ_U(r82xx_bitrev(0x69), 0x96u); /* R820T2 chip id as it arrives over I2C */
+    EXPECT_EQ_U(r82xx_bitrev(0x00), 0x00u);
+    EXPECT_EQ_U(r82xx_bitrev(0xff), 0xffu);
+    EXPECT_EQ_U(r82xx_bitrev(0x01), 0x80u);
+    for (unsigned v = 0; v < 256; ++v) {
+        EXPECT_EQ_U(r82xx_bitrev(r82xx_bitrev(static_cast<uint8_t>(v))), v);
+    }
+}
+
 int main(void)
 {
+    test_r820t2_band_select();
+    test_r820t2_if_for_rate();
+    test_r82xx_bitrev();
     test_detection_matrix();
     test_unknown_reject_and_v3_probe();
     test_tuner_isolation();

@@ -30,6 +30,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "usb/usb_host.h"
+#include "usb/usb_helpers.h"
 
 #include "rtl_profile.hpp"
 #include "transfers_blog_v3.hpp"
@@ -54,6 +55,7 @@ static constexpr UBaseType_t kClientPrio = 19;
 /* Delivery only posts IQ; app audio task should be >= this and graphics much lower. */
 static constexpr UBaseType_t kDeliveryPrio = 18;
 static constexpr size_t kProbeQueueDepth = 8;
+static constexpr uint8_t kPendingRateMaxFailures = 3; /* hot rate change attempts before giving up */
 
 static constexpr uint16_t kVid = ESP_RTL_SDR_USB_VID;
 static constexpr uint16_t kPid = ESP_RTL_SDR_USB_PID;
@@ -167,9 +169,14 @@ static bool usb_fault_guard_boot_check(void)
     return s_usb_fault_guard.panic_count >= kUsbFaultGuardPanicThreshold;
 }
 
+/* Kept out of RTC_NOINIT memory: before install() runs usb_fault_guard_boot_check(), the
+ * retained field still holds whatever an earlier boot left there, so callers checking this
+ * ahead of install saw "safe mode" on boots where it was not active. */
+static bool s_usb_safe_mode_this_boot = false;
+
 bool esp_rtl_sdr_usb_safe_mode_active(void)
 {
-    return s_usb_fault_guard.safe_mode_active_this_boot;
+    return s_usb_safe_mode_this_boot;
 }
 
 esp_err_t esp_rtl_sdr_usb_fault_guard_reset(void)
@@ -178,6 +185,7 @@ esp_err_t esp_rtl_sdr_usb_fault_guard_reset(void)
     s_usb_fault_guard.panic_count = 0;
     s_usb_fault_guard.pending_risk = false;
     s_usb_fault_guard.safe_mode_active_this_boot = false;
+    s_usb_safe_mode_this_boot = false;
     usb_fault_guard_disarm();
     return ESP_OK;
 }
@@ -229,7 +237,7 @@ struct esp_rtl_sdr_handle {
     usb_device_handle_t dev = nullptr;
     bool iface_claimed = false;
     QueueHandle_t probe_q = nullptr;
-    bool device_gone = false;
+    volatile bool device_gone = false;
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
@@ -243,6 +251,7 @@ struct esp_rtl_sdr_handle {
     usb_transfer_t *ctrl_xfer = nullptr;
     esp_err_t ctrl_status = ESP_OK;
     bool ctrl_stall = false;
+    uint16_t ctrl_actual = 0; /* bytes received in the data stage of the last control IN */
 
     usb_transfer_t **bulk = nullptr;
     uint32_t bulk_num = 0;
@@ -264,6 +273,12 @@ struct esp_rtl_sdr_handle {
 
     /** LO request; applied after bulk drain (never EP0 mid-bulk). 0 = none. */
     volatile uint32_t pending_retune_hz = 0;
+    /** IF the R820T2 path currently runs at (0 = the profile default). Set per sample rate. */
+    uint32_t r820t2_if_hz = 0;
+    /** Sample rate queued while streaming; applied in an EP0 window like a retune. */
+    volatile uint32_t pending_rate_sps = 0;
+    /** Consecutive failed attempts to apply pending_rate_sps; the request is dropped after a few. */
+    uint8_t pending_rate_failures = 0;
     /** True while apply_pending_retune() runs (delivery or app task). */
     volatile bool retune_busy = false;
     /**
@@ -279,6 +294,9 @@ struct esp_rtl_sdr_handle {
     volatile bool pending_rtl_agc = false;
     volatile bool pending_rtl_agc_enable = false;
     volatile bool ep0_sideband_busy = false;
+    /** 1 while a retune, rate change or sideband EP0 window owns bulk pause/resume + EP0.
+     * Claimed atomically (Ep0WindowClaim): these run on the app task or the delivery task. */
+    uint32_t ep0_window = 0;
 
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
     uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
@@ -315,6 +333,14 @@ struct esp_rtl_sdr_handle {
 
     /** Sync-read pull ring (CU8 bytes). Filled by delivery task. */
     uint8_t *pull_buf = nullptr;
+    /* Last value written to each tuner register and whether it is known. A hot retune replays the
+     * whole tune template, and every tuner write costs several ms of EP0 + I2C repeater time while
+     * the stream is paused; most of those writes repeat the value already in the register. Only
+     * exact repeats are skipped (a 0x2a, 0x22, 0x2a sequence still writes all three). Dropped at
+     * init, on profile reset and after any failed record. Same idea as upstream 698091a. */
+    uint8_t tuner_reg_val[32] = {0};
+    uint32_t tuner_reg_known = 0;
+    uint32_t tuner_writes_skipped = 0;
     size_t pull_cap = 0;
     size_t pull_r = 0;
     size_t pull_w = 0;
@@ -572,6 +598,10 @@ static void ctrl_cb(usb_transfer_t *xfer)
     }
     h->ctrl_status = (xfer->status == USB_TRANSFER_STATUS_COMPLETED) ? ESP_OK : ESP_FAIL;
     h->ctrl_stall = (xfer->status == USB_TRANSFER_STATUS_STALL);
+    /* actual_num_bytes counts the 8-byte setup packet too */
+    h->ctrl_actual = (xfer->actual_num_bytes > static_cast<int>(sizeof(usb_setup_packet_t)))
+                         ? static_cast<uint16_t>(xfer->actual_num_bytes - sizeof(usb_setup_packet_t))
+                         : 0;
     xSemaphoreGive(h->ctrl_sem);
 }
 
@@ -582,6 +612,7 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     }
     h->profile = RtlProfileId::Unknown;
     h->device_caps = 0;
+    h->tuner_reg_known = 0;
     h->frontend_applied_valid = false;
     h->frontend_applied = MeasuredV4FrontendPlan{};
     h->tuner_reg05_low_bits = 0x03;
@@ -592,6 +623,8 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     h->gain_tenth_db = 0;
     h->pending_retune_hz = 0;
+    h->pending_rate_sps = 0;
+    h->r820t2_if_hz = 0;
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_bias = false;
@@ -618,6 +651,17 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t d
     if (h->ctrl_xfer == nullptr || dev == nullptr) {
         return ESP_RTL_SDR_ERR_USB;
     }
+    /* The control transfer buffer holds kCtrlXferBytes including the setup packet. */
+    if (wLength > kCtrlXferBytes - sizeof(usb_setup_packet_t)) {
+        ESP_LOGE(TAG, "ctrl wLength %u exceeds %u-byte buffer", static_cast<unsigned>(wLength),
+                 static_cast<unsigned>(kCtrlXferBytes - sizeof(usb_setup_packet_t)));
+        return ESP_ERR_INVALID_ARG;
+    }
+    /* RTL2832U I2C passthrough (block IICB) reads longer than 16 bytes STALL EP0; measured on
+     * hardware, and repeated STALLs can take the stream down. Refuse them up front. */
+    if ((bm & USB_BM_REQUEST_TYPE_DIR_IN) != 0 && (wIndex & 0xff00u) == 0x0600u && wLength > 16) {
+        return ESP_ERR_INVALID_ARG;
+    }
     xSemaphoreTake(h->ctrl_mutex, portMAX_DELAY);
 
     esp_err_t final_err = ESP_FAIL;
@@ -641,6 +685,7 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t d
 
         h->ctrl_status = ESP_FAIL;
         h->ctrl_stall = false;
+        h->ctrl_actual = 0;
         xSemaphoreTake(h->ctrl_sem, 0);
 
         esp_err_t ret = usb_host_transfer_submit_control(h->client, x);
@@ -669,9 +714,19 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t d
         if (h->ctrl_status == ESP_OK) {
             if ((bm & USB_BM_REQUEST_TYPE_DIR_IN) != 0 && response != nullptr &&
                 response_length > 0) {
-                const uint16_t copy_length =
-                    (response_length < wLength) ? response_length : wLength;
-                std::memcpy(response, x->data_buffer + sizeof(usb_setup_packet_t), copy_length);
+                const uint16_t want = (response_length < wLength) ? response_length : wLength;
+                /* Copy only what the device actually sent; a short read must not hand back
+                 * stale bytes from the previous transfer. */
+                const uint16_t got = (h->ctrl_actual < want) ? h->ctrl_actual : want;
+                std::memcpy(response, x->data_buffer + sizeof(usb_setup_packet_t), got);
+                if (got < want) {
+                    std::memset(response + got, 0, want - got);
+                    final_err = ESP_RTL_SDR_ERR_USB;
+                    ESP_LOGW(TAG, "ctrl IN short read: %u of %u bytes (wValue=0x%04x wIndex=0x%04x)",
+                             static_cast<unsigned>(got), static_cast<unsigned>(want),
+                             static_cast<unsigned>(wValue), static_cast<unsigned>(wIndex));
+                    break;
+                }
             }
             final_err = ESP_OK;
             break;
@@ -727,8 +782,31 @@ static esp_err_t run_record(esp_rtl_sdr_handle *h, const RtlControlRecord &rec,
                             bool expect_stall)
 {
     const RtlControlRecord mapped = map_tuner_record_for_profile(h, rec);
-    return ctrl_submit(h, mapped.request_type, 0, mapped.value, mapped.index, mapped.data,
-                       mapped.length, expect_stall);
+    /* A plain register write to the tuner: {reg, value} to the tuner's I2C address. Probe writes
+     * that are expected to STALL (tuner auto-detect) are never cached. */
+    const bool tuner_write = h != nullptr && !expect_stall && mapped.request_type == 0x40 &&
+                             mapped.index == 0x0610 &&
+                             (mapped.value & 0x00ffu) == tuner_i2c_value_for_handle(h);
+    if (tuner_write && mapped.length == 2 && mapped.data[0] < 32) {
+        const uint8_t reg = mapped.data[0];
+        if ((h->tuner_reg_known & (1u << reg)) != 0 && h->tuner_reg_val[reg] == mapped.data[1]) {
+            h->tuner_writes_skipped++;
+            return ESP_OK;
+        }
+    }
+    const esp_err_t err = ctrl_submit(h, mapped.request_type, 0, mapped.value, mapped.index,
+                                      mapped.data, mapped.length, expect_stall);
+    if (h != nullptr) {
+        if (err != ESP_OK) {
+            h->tuner_reg_known = 0;
+        } else if (tuner_write && mapped.length == 2 && mapped.data[0] < 32) {
+            h->tuner_reg_val[mapped.data[0]] = mapped.data[1];
+            h->tuner_reg_known |= 1u << mapped.data[0];
+        } else if (tuner_write && mapped.length > 2) {
+            h->tuner_reg_known = 0; /* multi-register write: not tracked */
+        }
+    }
+    return err;
 }
 
 /*
@@ -787,6 +865,7 @@ static bool probe_blog_v3_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
 
 static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
 {
+    h->tuner_reg_known = 0; /* the tuner is being re-initialised from scratch */
     ESP_LOGI(TAG, "init begin profile=%s records=%u", rtl_profile_name(h->profile),
              static_cast<unsigned>(std::size(kRtlInitTransfers)));
     size_t skipped = 0;
@@ -860,6 +939,60 @@ static esp_err_t run_profile_demod_if_restore(esp_rtl_sdr_handle *h)
     return ESP_OK;
 }
 
+static esp_err_t r820t2_read_regs(esp_rtl_sdr_handle *h, uint8_t *out, uint16_t n);
+
+/**
+ * R820T2 profiles: set the tuner IF filter and the demod IF for a sample rate the way librtlsdr
+ * does (see rtl_r820t2_if_for_rate). The caller retunes afterwards: the LO = RF + IF moves.
+ */
+static esp_err_t run_r820t2_if_for_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps)
+{
+    if (h == nullptr || !rtl_profile_uses_r820t2_i2c_remap(h->profile)) {
+        return ESP_OK;
+    }
+    const R820T2IfSetting st = rtl_r820t2_if_for_rate(sample_rate_sps);
+    esp_err_t err = run_records(h, kBlogV3TunerRepeaterOn, std::size(kBlogV3TunerRepeaterOn));
+    uint8_t r[16] = {0};
+    if (err == ESP_OK) {
+        err = r820t2_read_regs(h, r, sizeof(r));
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
+    const uint8_t r0a = static_cast<uint8_t>((r[0x0a] & ~0x10u) | (st.reg0a & 0x10u));
+    const uint8_t r0b = static_cast<uint8_t>((r[0x0b] & ~0xefu) | (st.reg0b & 0xefu));
+    h->tuner_reg_known = 0;
+    err = run_record(h, measured_v4_ir_reg_write(0x0a, r0a), false);
+    if (err == ESP_OK) {
+        err = run_record(h, measured_v4_ir_reg_write(0x0b, r0b), false);
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
+    /* demod IF: page 1 regs 0x19 (bits 21:16), 0x1a, 0x1b; same record shape as the init table */
+    const uint32_t word = rtl_demod_if_word(st.if_hz, ESP_RTL_SDR_XTAL_HZ);
+    const uint8_t bytes[3] = {static_cast<uint8_t>((word >> 16) & 0x3f),
+                              static_cast<uint8_t>(word >> 8), static_cast<uint8_t>(word)};
+    const uint8_t regs[3] = {0x19, 0x1a, 0x1b};
+    for (int i = 0; i < 3; ++i) {
+        const RtlControlRecord w = {static_cast<uint16_t>((regs[i] << 8) | 0x20), 0x0011, 0x40, 1,
+                                    {bytes[i], 0, 0, 0, 0, 0, 0, 0}};
+        const RtlControlRecord rd = {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}};
+        err = run_record(h, w, false);
+        if (err == ESP_OK) {
+            err = run_record(h, rd, false);
+        }
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    h->r820t2_if_hz = st.if_hz;
+    ESP_LOGI(TAG, "r820t2 IF for %u S/s: filter r0a=%02x r0b=%02x (was %02x/%02x) if=%u Hz demod=%06x",
+             static_cast<unsigned>(sample_rate_sps), r0a, r0b, r[0x0a], r[0x0b],
+             static_cast<unsigned>(st.if_hz), static_cast<unsigned>(word));
+    return ESP_OK;
+}
+
 static esp_err_t run_v3_direct_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
 {
     const uint32_t nco =
@@ -903,6 +1036,7 @@ static esp_err_t run_v3_enter_direct(esp_rtl_sdr_handle *h, uint32_t frequency_h
 
 static esp_err_t run_v3_tuner_reinit(esp_rtl_sdr_handle *h)
 {
+    h->tuner_reg_known = 0; /* a forced reinit must reach the tuner even for cached values */
     for (size_t i = kRtlTunerReinitFirst; i <= kRtlTunerReinitLast; ++i) {
         esp_err_t err = run_record(h, kRtlInitTransfers[i], false);
         if (err != ESP_OK) {
@@ -929,6 +1063,42 @@ static esp_err_t run_v3_leave_direct(esp_rtl_sdr_handle *h)
     return err;
 }
 
+/*
+ * R820T2 RF front-end band select. The replayed Blog V4 capture only ever tunes the PLL
+ * per frequency (r16/r20-r22); the RF mux (r1a[7:6],[1:0]), tracking-filter caps (r1b) and
+ * open-drain input (r17[3]) stay at whatever the capture used -- measured on a real Nooelec
+ * SMArt v5: r1a=0x2a/r1b=0x34, i.e. the polyphase-LPF path with the 90-110 MHz tracking
+ * filter, which leaves the ADC dead flat at 433 MHz. Table is librtlsdr's R820T
+ * freq_ranges[] (tuner_r82xx.c). Base bytes for the masked regs are the capture's final
+ * values, since the R820T2 cannot read back regs >= 0x10 (16-byte I2C read limit).
+ */
+static constexpr uint8_t kR820T2CaptureReg17 = 0x20;
+static constexpr uint8_t kR820T2CaptureReg1a = 0x2a;
+
+static esp_err_t run_r820t2_band_frontend(esp_rtl_sdr_handle *h, uint32_t lo_hz)
+{
+    const uint32_t mhz = lo_hz / 1000000u;
+    const R820T2BandRow *row = rtl_r820t2_band_for_hz(lo_hz);
+    const uint8_t r17 = static_cast<uint8_t>((kR820T2CaptureReg17 & ~0x08) | row->open_d);
+    const uint8_t r1a = static_cast<uint8_t>((kR820T2CaptureReg1a & ~0xc3) | row->rf_mux_ploy);
+    const RtlControlRecord recs[] = {
+        {kR820T2TunerI2cValue, 0x0610, 0x40, 2, {0x17, r17, 0, 0, 0, 0, 0, 0}},
+        {kR820T2TunerI2cValue, 0x0610, 0x40, 2, {0x1a, r1a, 0, 0, 0, 0, 0, 0}},
+        {kR820T2TunerI2cValue, 0x0610, 0x40, 2, {0x1b, row->tf_c, 0, 0, 0, 0, 0, 0}},
+    };
+    for (const RtlControlRecord &rec : recs) {
+        esp_err_t e = run_record(h, rec, false);
+        if (e != ESP_OK) {
+            ESP_LOGE(TAG, "r820t2 band reg 0x%02x write failed: %s", rec.data[0],
+                     esp_rtl_sdr_err_to_name(e));
+            return e;
+        }
+    }
+    ESP_LOGI(TAG, "r820t2 band frontend lo=%u MHz row=%u r17=%02x r1a=%02x r1b=%02x",
+             static_cast<unsigned>(mhz), static_cast<unsigned>(row->mhz), r17, r1a, row->tf_c);
+    return ESP_OK;
+}
+
 /**
  * Program R828D PLL for *user RF* frequency_hz.
  * Blog V4 HF (public): RF < 28.8 MHz is upconverted by 28.8 MHz before the tuner.
@@ -947,7 +1117,9 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         apply_freq_correction_hz(tuner_base, h != nullptr ? h->freq_correction_ppm : 0);
     uint8_t r16_setup = 0, r16_active = 0, r20 = 0, r21 = 0, r22 = 0;
     const double xtal_hz = rtl_profile_pll_xtal_hz(profile);
-    const double if_offset_hz = rtl_profile_pll_if_offset_hz(profile);
+    const double if_offset_hz = (h != nullptr && h->r820t2_if_hz != 0)
+                                    ? static_cast<double>(h->r820t2_if_hz)
+                                    : rtl_profile_pll_if_offset_hz(profile);
     if (!encode_r820_pll(tune_hz, xtal_hz, if_offset_hz, &r16_setup, &r16_active, &r20, &r21,
                          &r22)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
@@ -981,6 +1153,12 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
             return e;
         }
     }
+    if (h != nullptr && rtl_profile_uses_r820t2_i2c_remap(profile)) {
+        esp_err_t e = run_r820t2_band_frontend(h, rtl_r820t2_lo_hz(tune_hz, if_offset_hz));
+        if (e != ESP_OK) {
+            return e;
+        }
+    }
     return ESP_OK;
 }
 
@@ -1004,6 +1182,14 @@ static esp_err_t run_profile_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
                           std::size(kBlogV3TunerRepeaterOn));
         if (err != ESP_OK) {
             return err;
+        }
+        /* leave_direct replayed the init IF filter and the fixed 3.57 MHz demod IF, while
+         * run_tune() puts the LO at RF + the rate-based IF: re-match filter and IF to the rate */
+        if (h->sample_rate_sps != 0) {
+            err = run_r820t2_if_for_rate(h, h->sample_rate_sps);
+            if (err != ESP_OK) {
+                return err;
+            }
         }
         err = run_tune(h, frequency_hz);
         if (err == ESP_OK) {
@@ -1184,8 +1370,11 @@ static void bulk_cb(usb_transfer_t *xfer)
         ESP_LOGW(TAG, "bulk status=%d bytes=%d", xfer->status, xfer->actual_num_bytes);
     }
 
-    /* Resubmit only while streaming and not draining for stop/retune. */
-    if (h->streaming && !h->pause_resubmit) {
+    /* Resubmit only while streaming and not draining for stop/retune. A transfer that ended
+     * because the device was unplugged is retired: resubmitting it (or scheduling EP recovery)
+     * races the client task closing the device. */
+    if (h->streaming && !h->pause_resubmit && xfer->status != USB_TRANSFER_STATUS_NO_DEVICE &&
+        !h->device_gone) {
         esp_err_t ret = usb_host_transfer_submit(xfer);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "bulk resubmit failed: %s", esp_err_to_name(ret));
@@ -1259,7 +1448,7 @@ static void bulk_resume(esp_rtl_sdr_handle *h)
         return;
     }
     h->pause_resubmit = false;
-    if (!h->streaming || h->bulk == nullptr) {
+    if (!h->streaming || h->bulk == nullptr || h->dev == nullptr || h->device_gone) {
         return;
     }
     h->live_urbs = 0;
@@ -1279,6 +1468,121 @@ static void bulk_resume(esp_rtl_sdr_handle *h)
 }
 
 /**
+ * Retune, sample-rate change and sideband EP0 (gain/bias) each pause bulk, talk EP0 and resume
+ * bulk, and can be started from the app task or the delivery task. Only one may do so at a time:
+ * two overlapping windows resubmit URBs twice (corrupting live_urbs) or send EP0 mid-bulk.
+ * The claim is released when the object goes out of scope.
+ */
+class Ep0WindowClaim {
+public:
+    explicit Ep0WindowClaim(esp_rtl_sdr_handle *h) : h_(h)
+    {
+        uint32_t expected = 0;
+        owned_ = __atomic_compare_exchange_n(&h_->ep0_window, &expected, 1u, false,
+                                             __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+    }
+    ~Ep0WindowClaim()
+    {
+        if (owned_) {
+            __atomic_store_n(&h_->ep0_window, 0u, __ATOMIC_RELEASE);
+        }
+    }
+    Ep0WindowClaim(const Ep0WindowClaim &) = delete;
+    Ep0WindowClaim &operator=(const Ep0WindowClaim &) = delete;
+    bool owned() const { return owned_; }
+    /** Try again to take a claim this object does not hold yet. */
+    bool retry()
+    {
+        if (!owned_) {
+            uint32_t expected = 0;
+            owned_ = __atomic_compare_exchange_n(&h_->ep0_window, &expected, 1u, false,
+                                                 __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+        }
+        return owned_;
+    }
+
+private:
+    esp_rtl_sdr_handle *h_;
+    bool owned_;
+};
+
+/**
+ * Apply a queued sample rate while streaming: drain bulks, rewrite the resampler (the same
+ * register sequence start() uses, ending in a demod soft reset), resubmit. Replaces a full
+ * stop/start of the stream, which costs about a second of samples on every hop between
+ * bands that use different rates. Same threading rules as apply_pending_retune().
+ */
+static esp_err_t apply_pending_rate(esp_rtl_sdr_handle *h)
+{
+    if (h == nullptr || !h->streaming) {
+        return ESP_RTL_SDR_ERR_NOT_STREAMING;
+    }
+    const uint32_t rate = h->pending_rate_sps;
+    if (rate == 0) {
+        return ESP_OK;
+    }
+    Ep0WindowClaim window(h);
+    if (!window.owned()) {
+        return ESP_OK; /* another EP0 window is open; the delivery task applies it later */
+    }
+    h->retune_busy = true;
+    if (!bulk_pause_and_drain(h)) {
+        h->retune_busy = false;
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    if (!h->streaming) {
+        h->pause_resubmit = false;
+        if (h->pending_rate_sps == rate) {
+            h->pending_rate_sps = 0;
+        }
+        h->retune_busy = false;
+        return ESP_RTL_SDR_ERR_NOT_STREAMING;
+    }
+    const uint32_t apply = (h->pending_rate_sps != 0) ? h->pending_rate_sps : rate;
+    esp_err_t err = run_sample_rate(h, apply);
+    if (err == ESP_OK && rtl_profile_uses_r820t2_i2c_remap(h->profile) &&
+        !rtl_profile_uses_v3_direct_sampling(h->profile, h->frequency_hz)) {
+        /* the IF filter and IF follow the rate; the LO = RF + IF, so retune */
+        err = run_r820t2_if_for_rate(h, apply);
+        if (err == ESP_OK) {
+            err = run_profile_tune(h, h->frequency_hz, h->frequency_hz);
+        }
+        if (err == ESP_OK) {
+            err = run_band_frontend(h, h->frequency_hz);
+        }
+    }
+    if (err == ESP_OK) {
+        h->sample_rate_sps = apply;
+        h->preferred_sample_rate_sps = apply;
+        h->metrics.sample_rate_sps = apply;
+        /* effective_sps is bytes over stream time: restart the window at the new rate */
+        h->metrics.bytes_total = 0;
+        h->stream_start_ms = now_ms();
+        h->pending_rate_failures = 0;
+        if (h->pending_rate_sps == apply) {
+            h->pending_rate_sps = 0;
+        }
+        ESP_LOGI(TAG, "hot sample rate applied %u S/s", static_cast<unsigned>(apply));
+    } else if (++h->pending_rate_failures < kPendingRateMaxFailures) {
+        /* The hardware may be half way (resampler at the new rate, tuner not): leave the request
+         * pending so the delivery task runs the whole sequence again on its next pass. Bulk is
+         * resumed regardless; a paused stream would never reach that pass. */
+        ESP_LOGW(TAG, "hot sample rate EP0 failed: %s (attempt %u, will retry)",
+                 esp_rtl_sdr_err_to_name(err), static_cast<unsigned>(h->pending_rate_failures));
+    } else {
+        ESP_LOGE(TAG, "hot sample rate EP0 failed: %s; giving up on %u S/s",
+                 esp_rtl_sdr_err_to_name(err), static_cast<unsigned>(apply));
+        h->pending_rate_failures = 0;
+        if (h->pending_rate_sps == apply) {
+            h->pending_rate_sps = 0;
+        }
+    }
+    bulk_resume(h);
+    h->retune_busy = false;
+    return err;
+}
+
+/**
  * Drain outstanding bulks (no resubmit), apply LO, resubmit.
  * Must NOT run on the USB client/host lib tasks (blocks; does EP0).
  * Safe from delivery task or app tasks. Coalesces: if pending changes mid-apply,
@@ -1293,8 +1597,9 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     if (freq == 0) {
         return ESP_OK;
     }
-    if (h->retune_busy) {
-        return ESP_OK; /* another apply in flight; pending remains */
+    Ep0WindowClaim window(h);
+    if (!window.owned()) {
+        return ESP_OK; /* another EP0 window is open; the delivery task applies it later */
     }
     h->retune_busy = true;
 
@@ -1591,7 +1896,11 @@ static void delivery_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
-        /* Async EP0 off the USB client task (retune first, then gain/bias). */
+        /* Async EP0 off the USB client task (rate, then retune, then gain/bias). */
+        if (h->streaming && h->pending_rate_sps != 0 && !h->retune_busy &&
+            !h->ep0_sideband_busy) {
+            (void)apply_pending_rate(h);
+        }
         if (h->streaming && h->pending_retune_hz != 0 && !h->retune_busy &&
             !h->ep0_sideband_busy) {
             (void)apply_pending_retune(h);
@@ -1697,6 +2006,12 @@ static void free_bulk_pool(esp_rtl_sdr_handle *h)
 static esp_err_t alloc_bulk_pool(esp_rtl_sdr_handle *h, uint32_t num, uint32_t len)
 {
     free_bulk_pool(h);
+    if (h->bulk != nullptr) {
+        /* free_bulk_pool refused (live URBs): never overwrite a pool the host stack still owns */
+        ESP_LOGE(TAG, "alloc_bulk_pool: old pool still live (live_urbs=%u)",
+                 static_cast<unsigned>(h->live_urbs));
+        return ESP_ERR_INVALID_STATE;
+    }
     h->bulk = static_cast<usb_transfer_t **>(calloc(num, sizeof(usb_transfer_t *)));
     if (h->bulk == nullptr) {
         return ESP_ERR_NO_MEM;
@@ -1843,6 +2158,36 @@ static RtlProfileId identify_profile(esp_rtl_sdr_handle *h, usb_device_handle_t 
 }
 
 /** Probe address; if accepted profile, fill candidate and close unless keep_open. */
+/**
+ * Refuse a device whose descriptors don't have the shape this driver drives: interface 0 with a
+ * bulk IN endpoint 0x81 and a sane max packet size. VID/PID and strings alone are spoofable, and
+ * everything after the claim assumes this layout.
+ */
+static bool rtl_device_layout_ok(usb_device_handle_t dev, const usb_device_desc_t *dd)
+{
+    if (dd == nullptr || dd->bNumConfigurations == 0 || dd->bMaxPacketSize0 < 8) {
+        return false;
+    }
+    const usb_config_desc_t *cfg = nullptr;
+    if (usb_host_get_active_config_descriptor(dev, &cfg) != ESP_OK || cfg == nullptr) {
+        return false;
+    }
+    int offset = 0;
+    const usb_intf_desc_t *intf = usb_parse_interface_descriptor(cfg, 0, 0, &offset);
+    if (intf == nullptr || intf->bNumEndpoints == 0) {
+        return false;
+    }
+    offset = 0;
+    const usb_ep_desc_t *ep =
+        usb_parse_endpoint_descriptor_by_address(cfg, 0, 0, ESP_RTL_SDR_BULK_EP_IN, &offset);
+    if (ep == nullptr ||
+        (ep->bmAttributes & USB_BM_ATTRIBUTES_XFERTYPE_MASK) != USB_BM_ATTRIBUTES_XFER_BULK) {
+        return false;
+    }
+    const uint16_t mps = USB_EP_DESC_GET_MPS(ep);
+    return mps >= 8 && mps <= 512;
+}
+
 static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate *out,
                             bool keep_open)
 {
@@ -1871,6 +2216,12 @@ static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate
     esp_rtl_sdr_device_info_t di{};
     const RtlProfileId profile = identify_profile(h, dev, dd, &info, &di);
     if (profile == RtlProfileId::Unknown) {
+        usb_host_device_close(h->client, dev);
+        return false;
+    }
+    if (!rtl_device_layout_ok(dev, dd)) {
+        ESP_LOGW(TAG, "addr %u matches %s but has no bulk IN 0x81 on interface 0; ignoring",
+                 static_cast<unsigned>(addr), rtl_profile_name(profile));
         usb_host_device_close(h->client, dev);
         return false;
     }
@@ -2040,16 +2391,97 @@ static void host_lib_task_fn(void *arg)
     worker_task_exit(h);
 }
 
+/**
+ * A dongle whose enumeration fails (seen at power-on: "ENUM: CHECK_SHORT_DEV_DESC FAILED") is
+ * never reported to clients, so nothing retries until it is replugged. When this driver owns the
+ * host library and no device has been enumerated for a while, power-cycle the root port to make
+ * the hub state machine enumerate again. Backs off so an empty port is only blipped once a minute.
+ */
+static constexpr uint32_t kEnumRetryFirstMs = 10000;
+static constexpr uint32_t kEnumRetryMaxMs = 60000;
+
+static void maybe_retry_enumeration(esp_rtl_sdr_handle *h, TickType_t *no_dev_since,
+                                    uint32_t *wait_ms)
+{
+    if (!h->owns_host || !h->host_installed) {
+        return;
+    }
+    /* Count only fully enumerated devices: a device whose enumeration failed stays in the host
+     * library's device list (and in usb_host_lib_info().num_devices) at address 0 until it is
+     * unplugged, which is exactly the case this retry exists for. */
+    uint8_t addrs[4];
+    int num_addressed = 0;
+    const esp_err_t fill = (h->dev != nullptr)
+                               ? ESP_OK
+                               : usb_host_device_addr_list_fill(sizeof(addrs), addrs, &num_addressed);
+    if (h->dev != nullptr || fill != ESP_OK || num_addressed > 0) {
+        *no_dev_since = 0;
+        *wait_ms = kEnumRetryFirstMs;
+        return;
+    }
+    const TickType_t now = xTaskGetTickCount();
+    if (*no_dev_since == 0) {
+        *no_dev_since = now;
+        return;
+    }
+    if ((now - *no_dev_since) < pdMS_TO_TICKS(*wait_ms)) {
+        return;
+    }
+    ESP_LOGW(TAG, "usb no enumerated device for %u ms: power-cycling the root port",
+             static_cast<unsigned>(*wait_ms));
+    if (usb_host_lib_set_root_port_power(false) == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+        (void)usb_host_lib_set_root_port_power(true);
+    }
+    *no_dev_since = xTaskGetTickCount();
+    *wait_ms = (*wait_ms * 2 > kEnumRetryMaxMs) ? kEnumRetryMaxMs : *wait_ms * 2;
+}
+
 static void client_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
+    TickType_t no_dev_since = 0;
+    uint32_t enum_retry_ms = kEnumRetryFirstMs;
     while (h->tasks_run) {
         usb_host_client_handle_events(h->client, pdMS_TO_TICKS(20));
+        maybe_retry_enumeration(h, &no_dev_since, &enum_retry_ms);
         if (h->device_gone) {
-            h->device_gone = false;
             ESP_LOGW(TAG, "usb disconnected profile=%s addr=%u",
                      rtl_profile_name(h->profile), static_cast<unsigned>(h->open_addr));
             h->streaming = false;
+            /* A retune, rate change, sideband EP0 or EP recovery running on another task uses
+             * h->dev between its own checks; let it finish before the handle goes away. Its
+             * transfers complete through this task, so keep pumping client events meanwhile. */
+            Ep0WindowClaim window(h);
+            /* Also wait for the bulk URBs to retire (they complete NO_DEVICE and are not
+             * resubmitted): interface release and device close refuse pending transfers. */
+            for (uint32_t waited = 0; (!window.retry() || h->live_urbs > 0) && waited < 2000;
+                 waited += 5) {
+                usb_host_client_handle_events(h->client, 0);
+                vTaskDelay(pdMS_TO_TICKS(5));
+            }
+            if (!window.owned()) {
+                ESP_LOGW(TAG, "usb disconnected while an EP0 window stayed open");
+            }
+            if (h->live_urbs > 0 && h->dev != nullptr) {
+                /* Still owned by the host stack: force them back (halt/flush/clear), then keep
+                 * pumping completions for as long as it takes. Releasing the interface under a
+                 * live transfer, or letting the next stream start overwrite the pool, corrupts
+                 * the HCD's state; a stalled client task is the lesser evil, and it says so. */
+                ESP_LOGW(TAG, "usb disconnected with %u bulk URBs still pending; flushing",
+                         static_cast<unsigned>(h->live_urbs));
+                usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+                usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+                usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+                for (uint32_t waited = 0; h->live_urbs > 0 && h->tasks_run; waited += 5) {
+                    usb_host_client_handle_events(h->client, 0);
+                    vTaskDelay(pdMS_TO_TICKS(5));
+                    if (waited != 0 && waited % 2000 == 0) {
+                        ESP_LOGW(TAG, "still waiting for %u bulk URBs to retire",
+                                 static_cast<unsigned>(h->live_urbs));
+                    }
+                }
+            }
             if (h->iface_claimed && h->dev != nullptr) {
                 usb_host_interface_release(h->client, h->dev, 0);
                 h->iface_claimed = false;
@@ -2059,6 +2491,7 @@ static void client_task_fn(void *arg)
                 h->dev = nullptr;
                 h->open_addr = 0;
             }
+            h->device_gone = false; /* only now: other tasks check it until the handle is closed */
             clear_profile_runtime_state(h);
             h->info = {};
             h->info.present = false;
@@ -2201,6 +2634,7 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
 
     if (usb_fault_guard_boot_check()) {
         s_usb_fault_guard.safe_mode_active_this_boot = true;
+        s_usb_safe_mode_this_boot = true;
         ESP_LOGE(TAG,
                  "USB fault guard latched: %u consecutive enumeration-time panics; "
                  "skipping usb_host_install this boot. Call "
@@ -2214,6 +2648,7 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
         return ESP_RTL_SDR_ERR_USB_SAFE_MODE;
     }
     s_usb_fault_guard.safe_mode_active_this_boot = false;
+    s_usb_safe_mode_this_boot = false;
 
     usb_fault_guard_arm();
     esp_err_t ret = start_usb_stack(h);
@@ -2460,6 +2895,8 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->streaming = false;
     h->frontend_applied_valid = false;
     h->pending_retune_hz = 0;
+    h->pending_rate_sps = 0;
+    h->r820t2_if_hz = 0;
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_bias = false;
@@ -2657,6 +3094,12 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (cold_tuner_reinit) {
             ret = run_records(handle, kBlogV3TunerRepeaterOn,
                               std::size(kBlogV3TunerRepeaterOn));
+            if (ret != ESP_OK) {
+                break;
+            }
+        }
+        if (!rtl_profile_uses_v3_direct_sampling(handle->profile, freq)) {
+            ret = run_r820t2_if_for_rate(handle, local.sample_rate_sps);
             if (ret != ESP_OK) {
                 break;
             }
@@ -2954,10 +3397,25 @@ esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t samp
         set_error_unlocked(handle, re);
         return re;
     }
-    if (handle->state == ESP_RTL_SDR_STATE_STREAMING ||
-        handle->state == ESP_RTL_SDR_STATE_STOPPING) {
+    if (handle->state == ESP_RTL_SDR_STATE_STOPPING) {
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
         return ESP_RTL_SDR_ERR_BUSY;
+    }
+    if (handle->state == ESP_RTL_SDR_STATE_STREAMING && handle->streaming) {
+        if (exact == handle->sample_rate_sps && handle->pending_rate_sps == 0) {
+            set_error_unlocked(handle, ESP_OK);
+            return ESP_OK;
+        }
+        /* Change the rate in place (see apply_pending_rate); deferred to the delivery task
+         * when called from the event callback, like a retune. */
+        handle->pending_rate_sps = exact;
+        const uint32_t depth = __atomic_load_n(&handle->in_callback_depth, __ATOMIC_SEQ_CST);
+        const TaskHandle_t cb = __atomic_load_n(&handle->callback_task, __ATOMIC_SEQ_CST);
+        const bool from_callback =
+            esp_rtl_sdr_caller_is_event_callback(depth, cb, xTaskGetCurrentTaskHandle());
+        set_error_unlocked(handle, ESP_OK);
+        lk.release();
+        return from_callback ? ESP_OK : apply_pending_rate(handle);
     }
     handle->preferred_sample_rate_sps = exact;
     handle->sample_rate_sps = exact;
@@ -3050,10 +3508,24 @@ esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t
             }
             continue;
         }
+        /* At most two memcpys (up to the end of the ring, then from its start). The previous
+         * byte-at-a-time loop did a modulo per byte and cost ~43% of a core at 2 MS/s. */
         while (copied < max_bytes && handle->pull_count > 0) {
-            out_buf[copied++] = handle->pull_buf[handle->pull_r];
-            handle->pull_r = (handle->pull_r + 1) % handle->pull_cap;
-            handle->pull_count--;
+            size_t n = max_bytes - copied;
+            if (n > handle->pull_count) {
+                n = handle->pull_count;
+            }
+            const size_t to_end = handle->pull_cap - handle->pull_r;
+            if (n > to_end) {
+                n = to_end;
+            }
+            std::memcpy(out_buf + copied, handle->pull_buf + handle->pull_r, n);
+            copied += n;
+            handle->pull_r += n;
+            if (handle->pull_r == handle->pull_cap) {
+                handle->pull_r = 0;
+            }
+            handle->pull_count -= n;
         }
         xSemaphoreGive(handle->pull_mux);
 
@@ -3813,8 +4285,77 @@ static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *ap
 }
 
 /** Apply tuner AUTO and the current route together (caller owns bulk pause). */
+/** Read the R82xx's first n registers (n <= 16: the RTL2832U I2C bridge STALLs longer reads).
+ * The tuner always reads from register 0 and returns each byte bit-reversed. */
+static esp_err_t r820t2_read_regs(esp_rtl_sdr_handle *h, uint8_t *out, uint16_t n)
+{
+    const RtlControlRecord ptr = {kBlogV4TunerI2cValue, 0x0610, 0x40, 1, {0, 0, 0, 0, 0, 0, 0, 0}};
+    esp_err_t err = run_record(h, ptr, false);
+    if (err != ESP_OK) {
+        return err;
+    }
+    uint8_t raw[16] = {0};
+    err = ctrl_submit_device(h, h->dev, 0xc0, 0, tuner_i2c_value_for_handle(h), 0x0600, nullptr, n,
+                             false, raw, n);
+    for (uint16_t i = 0; i < n; ++i) {
+        out[i] = r82xx_bitrev(raw[i]);
+    }
+    return err;
+}
+
+/**
+ * R820T2 automatic gain, librtlsdr's r82xx_set_gain(auto): LNA gain auto (r05 bit 4 clear), mixer
+ * gain auto (r07 bit 4 set), VGA fixed at 26.5 dB (r0c low bits 0x0b, mask 0x9f). Read-modify-write
+ * so the other bits in those registers keep what init and tune put there.
+ */
+static esp_err_t apply_r820t2_agc_auto_records(esp_rtl_sdr_handle *h)
+{
+    esp_err_t err = run_records(h, kBlogV3TunerRepeaterOn, std::size(kBlogV3TunerRepeaterOn));
+    uint8_t r[16] = {0};
+    if (err == ESP_OK) {
+        err = r820t2_read_regs(h, r, sizeof(r));
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
+    /* reg 0x05: [7] loop-through off, [6] LNA1 power detector, [5] LNA power detector (0 = on),
+     * [4] LNA gain mode (0 = auto), [3:0] manual LNA gain. The replayed init leaves 0xe3: mode
+     * already "auto" but both detectors OFF, so the AGC has nothing to measure and parks the LNA
+     * at minimum gain (verified deaf on hardware). librtlsdr's init is 0x83; the manual-gain
+     * ladder here writes 0x9x, i.e. detectors on, which is why fixed gain worked. Keep bit 7 and
+     * the gain bits, clear 6:4. */
+    const uint8_t r05 = static_cast<uint8_t>(r[0x05] & 0x8fu);
+    /* reg 0x07: [4] mixer gain mode (1 = auto); librtlsdr's init/auto value is 0x75. */
+    const uint8_t r07 = static_cast<uint8_t>(r[0x07] | 0x10u);
+    /* reg 0x0c: VGA fixed at 26.5 dB (0x0b) like librtlsdr's auto path. */
+    const uint8_t r0c = static_cast<uint8_t>((r[0x0c] & ~0x9fu) | 0x0bu);
+    h->tuner_reg_known = 0; /* the cache may disagree with what was just read back */
+    err = run_record(h, measured_v4_ir_reg_write(0x05, r05), false);
+    if (err == ESP_OK) {
+        err = run_record(h, measured_v4_ir_reg_write(0x07, r07), false);
+    }
+    if (err == ESP_OK) {
+        err = run_record(h, measured_v4_ir_reg_write(0x0c, r0c), false);
+    }
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "R820T2 gain AUTO: r05=%02x r07=%02x r0c=%02x (was %02x/%02x/%02x; vth r0d=%02x r0e=%02x)",
+                 r05, r07, r0c, r[0x05], r[0x07], r[0x0c], r[0x0d], r[0x0e]);
+    }
+    return err;
+}
+
 static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h)
 {
+    if (rtl_profile_uses_r820t2_i2c_remap(h->profile)) {
+        esp_err_t err = ESP_FAIL;
+        for (int pass = 0; pass < 3 && err != ESP_OK; ++pass) {
+            err = apply_r820t2_agc_auto_records(h);
+            if (err != ESP_OK) {
+                vTaskDelay(pdMS_TO_TICKS(30 + pass * 20));
+            }
+        }
+        return err;
+    }
     esp_err_t err = ESP_FAIL;
     const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 3; ++pass) {
@@ -3885,6 +4426,10 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
     if (!h->pending_gain && !h->pending_bias && !h->pending_gain_mode &&
         !h->pending_rtl_agc) {
         return ESP_OK;
+    }
+    Ep0WindowClaim window(h);
+    if (!window.owned()) {
+        return ESP_OK; /* retune or rate change in flight; next delivery pass */
     }
     h->ep0_sideband_busy = true;
 
@@ -4315,3 +4860,4 @@ esp_err_t esp_rtl_sdr_get_bias_tee(esp_rtl_sdr_handle_t handle, bool *out_enable
     *out_enable = handle->bias_tee_want;
     return ESP_OK;
 }
+

@@ -294,7 +294,9 @@ static void test_rate_windows(void)
     /* Window edges (low min is 225001 — not 225000; ratio field / desktop parity) */
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MIN_HZ));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MAX_HZ));
-    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ));
+    /* Exactly 900000 aliases to 300000 in the 28-bit ratio field (bit 27 set); librtlsdr rejects it */
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ + 1));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MAX_HZ));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(225001));
 
@@ -802,9 +804,56 @@ static void test_usb_fault_guard_latch_contract(void)
                 std::string::npos);
 }
 
+/* librtlsdr's rtlsdr_set_sample_rate() arithmetic, as an independent reference */
+static uint32_t librtlsdr_ratio(uint32_t sps)
+{
+    const uint64_t num = static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22;
+    return static_cast<uint32_t>(num / sps) & 0x0ffffffcu;
+}
+
+static double librtlsdr_real_rate(uint32_t sps)
+{
+    const uint32_t ratio = librtlsdr_ratio(sps);
+    const uint32_t real = ratio | ((ratio & 0x08000000u) << 1);
+    return static_cast<double>(static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / real;
+}
+
+/* hardcoreerik/esp-rtl-sdr#24: every LOW-range rate used to come back as a bogus 450k-900k "exact"
+ * rate that the second quantize in run_sample_rate() rejected as BAD_RATE. */
+static void test_rate_quantizer_matches_librtlsdr(void)
+{
+    const uint32_t rates[] = {225001, 240000, 250000, 256000, 300000, 900001, 960000,
+                              1024000, 1200000, 1536000, 2048000, 2400000, 2560000, 3200000};
+    for (uint32_t r : rates) {
+        uint32_t exact = 0;
+        EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(r, &exact));
+        const double ref = librtlsdr_real_rate(r);
+        EXPECT_TRUE(exact + 1.0 >= ref && exact <= ref + 1.0);
+        /* run_sample_rate() re-derives the register value from `exact`: must be librtlsdr's */
+        const uint32_t reg =
+            static_cast<uint32_t>((static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / exact) &
+            0x0ffffffcu;
+        EXPECT_EQ_U(reg, librtlsdr_ratio(r));
+        /* quantizing an already-quantized rate is stable (start() quantizes twice) */
+        uint32_t again = 0;
+        EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(exact, &again));
+        EXPECT_EQ_U(again, exact);
+    }
+    uint32_t exact = 0;
+    EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(250000, &exact));
+    EXPECT_EQ_U(exact, 250000u);
+    EXPECT_EQ_U(librtlsdr_ratio(250000), 0x0cccccccu);
+    EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(1024000, &exact));
+    EXPECT_EQ_U(librtlsdr_ratio(1024000), 0x07080000u); /* read back from a live RTL2832U */
+    EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(900000, &exact));
+    EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(300001, &exact));
+    EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(3200001, &exact));
+}
+
 int main(void)
 {
     std::printf("esp_rtl_sdr host policy tests (%s)\n", esp_rtl_sdr_get_version_string());
+    test_rate_quantizer_matches_librtlsdr();
     test_version();
     test_capabilities();
     test_measured_agc_tables();

@@ -157,15 +157,25 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
          * from private/gain_r820t2.hpp. Its discrete stage sequence remains
          * a hardware candidate, not a calibrated table (see that header and
          * docs/captures/NOTES.md).
-         * Still no AUTO/RTL_AGC/BIAS_TEE/HF_UPCONVERTER -- unimplemented
+         * Tuner AUTO gain uses librtlsdr's R82xx recipe (LNA + mixer auto, VGA 26.5 dB). Still no
+         * RTL_AGC/BIAS_TEE/HF_UPCONVERTER -- unimplemented
          * for this tuner family, not just unverified. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
-               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_DIRECT_SAMPLING;
+               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO |
+               ESP_RTL_SDR_CAP_DIRECT_SAMPLING;
     case RtlProfileId::NooelecSmartV5:
-        /* Provisional: stream/retune/sync-read/passport; no V4 HF or measured gain/bias. */
+        /* Nooelec SMArt v5 uses the same R820T2 tuner and I2C remap path as BlogV3
+         * (rtl_profile_uses_r820t2_i2c_remap() is true for both), and
+         * apply_gain_records() branches on that same predicate to reach
+         * apply_r820t2_gain_records() -- there is no Nooelec-specific gain code path,
+         * it is the identical BlogV3 manual gain-table write. Enabling CAP_GAIN here
+         * to soak-test on real Nooelec SMArt v5 hardware per the maintainer's request
+         * in the capability comment above. AUTO gain as for BlogV3; still no RTL_AGC/BIAS_TEE/HF_UPCONVERTER
+         * -- unimplemented for this tuner family, not just unverified. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
-               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT;
+               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
+               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO;
     default:
         return 0;
     }
@@ -214,6 +224,55 @@ inline uint32_t rtl_profile_v3_direct_nco_word(uint32_t frequency_hz, int32_t pp
     const uint32_t scaled = static_cast<uint32_t>(
         (static_cast<uint64_t>(corrected_hz) << 22) / ESP_RTL_SDR_XTAL_HZ);
     return (0x400000u - scaled) & 0x3fffffu;
+}
+
+/**
+ * R820T2 RF front-end band select: librtlsdr's R820T freq_ranges[] (tuner_r82xx.c). The Blog V4
+ * capture the R820T2 path replays only retunes the PLL, so without this the RF mux and tracking
+ * filter stay on the 90-110 MHz FM band the capture was taken in (hardcoreerik/esp-rtl-sdr#25).
+ * open_d is r17 bit 3, rf_mux_ploy is r1a mask 0xc3, tf_c is r1b.
+ */
+struct R820T2BandRow {
+    uint16_t mhz;        /* row applies from this frequency up to the next row */
+    uint8_t open_d;
+    uint8_t rf_mux_ploy;
+    uint8_t tf_c;
+};
+constexpr R820T2BandRow kR820T2Bands[] = {
+    {0, 0x08, 0x02, 0xdf},   {50, 0x08, 0x02, 0xbe},  {55, 0x08, 0x02, 0x8b},
+    {60, 0x08, 0x02, 0x7b},  {65, 0x08, 0x02, 0x69},  {70, 0x08, 0x02, 0x58},
+    {75, 0x00, 0x02, 0x44},  {80, 0x00, 0x02, 0x44},  {90, 0x00, 0x02, 0x34},
+    {100, 0x00, 0x02, 0x34}, {110, 0x00, 0x02, 0x24}, {120, 0x00, 0x02, 0x24},
+    {140, 0x00, 0x02, 0x14}, {180, 0x00, 0x02, 0x13}, {220, 0x00, 0x02, 0x13},
+    {250, 0x00, 0x02, 0x11}, {280, 0x00, 0x02, 0x00}, {310, 0x00, 0x41, 0x00},
+    {450, 0x00, 0x41, 0x00}, {588, 0x00, 0x40, 0x00}, {650, 0x00, 0x40, 0x00},
+};
+
+/** Row for an R820T2 LO frequency. librtlsdr keys the table on the LO (tuner RF + IF), not RF. */
+inline const R820T2BandRow *rtl_r820t2_band_for_hz(uint32_t lo_hz)
+{
+    const uint32_t mhz = lo_hz / 1000000u;
+    const R820T2BandRow *row = &kR820T2Bands[0];
+    for (const R820T2BandRow &r : kR820T2Bands) {
+        if (mhz >= r.mhz) {
+            row = &r;
+        }
+    }
+    return row;
+}
+
+/** LO the R820T2 runs at for a (ppm-corrected) tuner frequency: tuner + PLL IF offset. */
+inline uint32_t rtl_r820t2_lo_hz(uint32_t tuner_hz, double if_offset_hz)
+{
+    return tuner_hz + static_cast<uint32_t>(if_offset_hz + 0.5);
+}
+
+/** R82xx tuners return every register byte bit-reversed over I2C. */
+inline uint8_t r82xx_bitrev(uint8_t b)
+{
+    constexpr uint8_t lut[16] = {0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
+                                 0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf};
+    return static_cast<uint8_t>((lut[b & 0xf] << 4) | lut[b >> 4]);
 }
 
 /** Blog V4 vendor board controls must never run on plain R820T2/R860 sticks. */
@@ -292,14 +351,61 @@ inline double rtl_profile_pll_xtal_hz(RtlProfileId profile)
 inline double rtl_profile_pll_if_offset_hz(RtlProfileId profile)
 {
     constexpr double kMeasuredV4IfOffsetHz = 1814972.0;
-    if (profile == RtlProfileId::BlogV3) {
+    /* Soak test: NooelecSmartV5 is the same R820T2 tuner as BlogV3, so try BlogV3's
+     * measured 3.57 MHz instead of the R828D/V4-board value. */
+    if (profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5) {
         return static_cast<double>(kBlogV3DemodIfHz);
     }
     return kMeasuredV4IfOffsetHz;
 }
 
+/**
+ * R820T2 IF filter and IF frequency for a sample rate, as librtlsdr's r82xx_set_bandwidth() picks
+ * them when the tuner bandwidth is left automatic (bandwidth = sample rate). reg 0x0a is written
+ * with mask 0x10, reg 0x0b with mask 0xef, and the RTL2832 demod IF plus the tuner LO follow if_hz.
+ * The replayed capture leaves the 2.2 MHz filter (0x8f) but a 3.57 MHz IF: the signal then sits at
+ * the edge of the filter and the image (7.14 MHz off) is barely rejected, which on a busy band
+ * (915 MHz ISM) buries the wanted signals under the AGC-amplified neighbours.
+ */
+struct R820T2IfSetting {
+    uint8_t reg0a;
+    uint8_t reg0b;
+    uint32_t if_hz;
+};
+
+inline R820T2IfSetting rtl_r820t2_if_for_rate(uint32_t sample_rate_sps)
+{
+    constexpr uint32_t kBwKhz[] = {300, 450, 600, 900, 1100, 1200, 1300, 1500, 1800, 2200, 3000, 5000};
+    constexpr uint8_t kReg0b[] = {0xe8, 0xe9, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xaf, 0x8f, 0x6f, 0x6f};
+    constexpr uint32_t kIfKhz[] = {1700, 1650, 1600, 1500, 1400, 1350, 1320, 1270, 1600, 1750, 2000, 3570};
+    const uint32_t bw_khz = sample_rate_sps / 1000u;
+    if (bw_khz > 7000u) {
+        return {0x10, 0x0b, 4570000u};
+    }
+    if (bw_khz > 6000u) {
+        return {0x10, 0x2a, 4570000u};
+    }
+    if (bw_khz > 5000u) {
+        return {0x10, 0x6b, 3570000u};
+    }
+    size_t i = 0;
+    while (i + 1 < sizeof(kBwKhz) / sizeof(kBwKhz[0]) && bw_khz > kBwKhz[i]) {
+        ++i;
+    }
+    return {static_cast<uint8_t>(i == 11 ? 0x00 : 0x0f), kReg0b[i], kIfKhz[i] * 1000u};
+}
+
+/** RTL2832 demod IF word (page 1 regs 0x19..0x1b), librtlsdr's rtlsdr_set_if_freq() arithmetic. */
+inline uint32_t rtl_demod_if_word(uint32_t if_hz, uint32_t xtal_hz)
+{
+    const int64_t v = (static_cast<int64_t>(if_hz) << 22) / static_cast<int64_t>(xtal_hz);
+    return static_cast<uint32_t>(-v) & 0x3fffffu;
+}
+
 /** Non-zero only when initialization must restore a profile-specific demod IF. */
 inline uint32_t rtl_profile_demod_if_restore_hz(RtlProfileId profile)
 {
-    return profile == RtlProfileId::BlogV3 ? kBlogV3DemodIfHz : 0u;
+    return (profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5)
+               ? kBlogV3DemodIfHz
+               : 0u;
 }

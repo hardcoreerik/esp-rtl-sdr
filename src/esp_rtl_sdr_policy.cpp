@@ -131,20 +131,28 @@ bool esp_rtl_sdr_quantize_sample_rate(uint32_t requested_sps, uint32_t *out_exac
     if (!rate_in_hardware_window(requested_sps)) {
         return false;
     }
-    /* 28-bit resampler field (low 2 bits clear) — same mask family as ecosystem drivers. */
-    uint32_t ratio =
-        static_cast<uint32_t>((static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / requested_sps);
+    /* 28-bit resampler field, low 2 bits clear (the value written to the demod). The hardware
+     * treats bit 27 as also setting bit 28, so the ratio it actually divides by is
+     * ratio | ((ratio & bit27) << 1) -- librtlsdr's real_rsamp_ratio. Without that step every
+     * LOW-range rate (225k-300k, whose ratios need bit 28) came out as a bogus 450k-900k
+     * "exact" value and start() rejected it as BAD_RATE (hardcoreerik/esp-rtl-sdr#24). */
+    const uint64_t num = static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22;
+    uint32_t ratio = static_cast<uint32_t>(num / requested_sps);
     ratio &= 0x0ffffffcu;
     if (ratio == 0) {
-        /* e.g. request 225000 → raw ratio 0x20000000 → mask zeroes the field */
         return false;
     }
-    const uint32_t exact = static_cast<uint32_t>(
-        (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / ratio);
+    const uint32_t real_ratio = ratio | ((ratio & 0x08000000u) << 1);
+    const uint32_t exact = static_cast<uint32_t>((num + real_ratio / 2) / real_ratio);
     if (exact == 0) {
         return false;
     }
-    /* Exact programmed rate may differ from request (integer ratio); still accepted. */
+    /* The programmed rate is the nearest the integer ratio allows; refuse a request that the
+     * register cannot express (e.g. exactly 900000, whose ratio aliases to 300000). */
+    const uint32_t diff = (exact > requested_sps) ? exact - requested_sps : requested_sps - exact;
+    if (static_cast<uint64_t>(diff) * 100u > requested_sps) {
+        return false;
+    }
     *out_exact_sps = exact;
     return true;
 }

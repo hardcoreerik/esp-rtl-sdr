@@ -1026,6 +1026,24 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
             return e;
         }
     }
+    /* Experimental readback: page 1, individual resampler bytes 0x9f..0xa2.
+     * Read each byte separately so host endianness cannot mask a mismatch. */
+    uint32_t observed = 0;
+    for (unsigned i = 0; i < 4; ++i) {
+        uint8_t value = 0;
+        const esp_err_t err = ctrl_submit_device(h, h->dev, 0xc0, 0,
+            static_cast<uint16_t>(((0x9fu + i) << 8) | 0x20u), 1,
+            nullptr, 1, false, &value, 1);
+        if (err != ESP_OK) {
+            RTL_LOGW(h, "rate readback failed sps=%u reg=0x%02x err=%s",
+                     static_cast<unsigned>(exact), 0x9fu + i, esp_err_to_name(err));
+            return ESP_OK;  // Diagnostic only; preserve the stream-start result.
+        }
+        observed = (observed << 8) | value;
+    }
+    RTL_LOGI(h, "rate readback sps=%u expected=0x%08x actual=0x%08x match=%u",
+             static_cast<unsigned>(exact), static_cast<unsigned>(ratio),
+             static_cast<unsigned>(observed), static_cast<unsigned>(observed == ratio));
     return ESP_OK;
 }
 

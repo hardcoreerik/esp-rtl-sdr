@@ -290,6 +290,8 @@ static void test_rate_windows(void)
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_3200K));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1536000));
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(1200000));
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(3400000)); /* experimental probe */
+    EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(3600000));
 
     /* Window edges (low min is 225001 — not 225000; ratio field / desktop parity) */
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_LOW_MIN_HZ));
@@ -307,6 +309,10 @@ static void test_rate_windows(void)
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MIN_HZ - 1));
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(ESP_RTL_SDR_RATE_HIGH_MAX_HZ + 1));
     EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(4000000));
+
+    uint32_t probe_exact = 0;
+    EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(3400000, &probe_exact));
+    EXPECT_TRUE(probe_exact >= 3399000 && probe_exact <= 3401000);
 
     uint32_t exact = 0;
     EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(2048000, &exact));

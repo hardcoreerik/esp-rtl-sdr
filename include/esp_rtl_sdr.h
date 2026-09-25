@@ -194,7 +194,7 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
 #define ESP_RTL_SDR_RATE_2048K         2048000u  /**< P4 ADS-B path (provenance) */
 #define ESP_RTL_SDR_RATE_2400K         2400000u  /**< PC clean-room capture rate */
 #define ESP_RTL_SDR_RATE_2560K         2560000u  /**< vendor "stable" ceiling (Blog V4 DS) */
-#define ESP_RTL_SDR_RATE_3200K         3200000u  /**< max; drops expected */
+#define ESP_RTL_SDR_RATE_3200K         3200000u  /**< vendor max; drops expected */
 
 /**
  * Hardware sample-rate windows (RTL2832U resampler + ecosystem practice).
@@ -202,12 +202,13 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
  *
  * Low band: **> 225 kHz … 300 kHz** (desktop librtlsdr rejects rate <= 225000;
  * at exactly 225000 the 28-bit ratio field masks to 0 and cannot be programmed).
- * High band: 900 kHz … 3.2 MHz. Gap 300001–899999 is unstable / rejected.
+ * High band: 900 kHz … 3.6 MHz in this experimental probe build.
+ * Rates above 3.2 MHz are unvalidated; gap 300001–899999 is rejected.
  */
 #define ESP_RTL_SDR_RATE_LOW_MIN_HZ    225001u
 #define ESP_RTL_SDR_RATE_LOW_MAX_HZ    300000u
 #define ESP_RTL_SDR_RATE_HIGH_MIN_HZ   900000u
-#define ESP_RTL_SDR_RATE_HIGH_MAX_HZ   3200000u
+#define ESP_RTL_SDR_RATE_HIGH_MAX_HZ   3600000u
 /** Vendor stable IQ bandwidth claim (Blog V4 datasheet). */
 #define ESP_RTL_SDR_RATE_STABLE_MAX_HZ 2560000u
 

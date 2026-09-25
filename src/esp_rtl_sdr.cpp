@@ -1428,9 +1428,6 @@ static void bulk_cb(usb_transfer_t *xfer)
     if (xfer->status == USB_TRANSFER_STATUS_COMPLETED && xfer->actual_num_bytes > 0 &&
         h->streaming && !h->pause_resubmit) {
         const size_t count = static_cast<size_t>(xfer->actual_num_bytes);
-        // Diagnostic throughput pass: keep the synthetic source but remove
-        // the per-byte checker so callback CPU cost cannot cap USB draining.
-#if 0
         uint8_t expected = h->counter_checked ? h->counter_expected : xfer->data_buffer[0];
         for (size_t i = 0; i < count; ++i) {
             const uint8_t value = xfer->data_buffer[i];
@@ -1446,7 +1443,6 @@ static void bulk_cb(usb_transfer_t *xfer)
             expected = static_cast<uint8_t>(value + 1u);
         }
         h->counter_expected = expected;
-#endif
         h->counter_checked += count;
         /* Read-only delivery: copy straight from the URB into the ring.
          *
@@ -3713,7 +3709,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->counter_last_break = 0;
         handle->counter_steady_breaks = 0;
         handle->counter_inside_packet = 0;
-        RTL_LOGW(handle, "COUNTER PROBE ACTIVE sps=%u: USB sink, no byte check, not RF",
+        RTL_LOGW(handle, "COUNTER PROBE ACTIVE sps=%u: synthetic bytes, not RF",
                  static_cast<unsigned>(local.sample_rate_sps));
         handle->streaming = true;
 

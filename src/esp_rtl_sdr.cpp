@@ -308,6 +308,11 @@ struct esp_rtl_sdr_handle {
     uint32_t frequency_hz = 0;
     uint32_t sample_rate_sps = 0;
     uint32_t stream_start_ms = 0;
+    // Temporary rate diagnostic: RTL2832U's modulo-256 byte counter.
+    uint64_t counter_checked = 0;
+    uint64_t counter_breaks = 0;
+    uint64_t counter_first_break = 0;
+    uint8_t counter_expected = 0;
     uint32_t in_callback_depth = 0;
     /** Task currently inside emit_after_unlock; null if depth == 0. */
     TaskHandle_t callback_task = nullptr;
@@ -1419,6 +1424,18 @@ static void bulk_cb(usb_transfer_t *xfer)
 
     if (xfer->status == USB_TRANSFER_STATUS_COMPLETED && xfer->actual_num_bytes > 0 &&
         h->streaming && !h->pause_resubmit) {
+        const size_t count = static_cast<size_t>(xfer->actual_num_bytes);
+        uint8_t expected = h->counter_checked ? h->counter_expected : xfer->data_buffer[0];
+        for (size_t i = 0; i < count; ++i) {
+            const uint8_t value = xfer->data_buffer[i];
+            if (value != expected) {
+                if (h->counter_breaks == 0) h->counter_first_break = h->counter_checked + i;
+                ++h->counter_breaks;
+            }
+            expected = static_cast<uint8_t>(value + 1u);
+        }
+        h->counter_expected = expected;
+        h->counter_checked += count;
         /* Read-only delivery: copy straight from the URB into the ring.
          *
          * This used to take an IqSlot, memcpy URB -> slot, populate slot
@@ -3671,6 +3688,18 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->live_urbs = 0;
         handle->health_emit_blocks = 0;
         handle->last_emitted_health = ESP_RTL_SDR_HEALTH_UNKNOWN;
+        // Diagnostic build only: substitute the chip's counter for RF samples.
+        const uint8_t counter_mode = 0x03;
+        ret = ctrl_submit(handle, 0x40, 0, 0x1920, 0x0010, &counter_mode, 1, false);
+        if (ret != ESP_OK) break;
+        const RtlControlRecord &sync = kRtlInitTransfers[kRtlSampleRateLast];
+        ret = run_record(handle, sync, false);
+        if (ret != ESP_OK) break;
+        handle->counter_checked = 0;
+        handle->counter_breaks = 0;
+        handle->counter_first_break = 0;
+        RTL_LOGW(handle, "COUNTER PROBE ACTIVE sps=%u: synthetic bytes, not RF",
+                 static_cast<unsigned>(local.sample_rate_sps));
         handle->streaming = true;
 
         for (uint32_t i = 0; i < handle->bulk_num; ++i) {
@@ -3798,7 +3827,15 @@ esp_err_t esp_rtl_sdr_stop(esp_rtl_sdr_handle_t handle, uint32_t timeout_ms)
             return ESP_RTL_SDR_ERR_BUSY;
         }
     }
-    return stop_stream_internal(handle, timeout_ms);
+    const esp_err_t stopped = stop_stream_internal(handle, timeout_ms);
+    if (stopped == ESP_OK) {
+        RTL_LOGI(handle, "COUNTER PROBE result sps=%u checked=%llu breaks=%llu first=%llu",
+                 static_cast<unsigned>(handle->sample_rate_sps),
+                 static_cast<unsigned long long>(handle->counter_checked),
+                 static_cast<unsigned long long>(handle->counter_breaks),
+                 static_cast<unsigned long long>(handle->counter_first_break));
+    }
+    return stopped;
 }
 
 esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle)

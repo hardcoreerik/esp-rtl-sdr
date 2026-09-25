@@ -334,6 +334,9 @@ struct esp_rtl_sdr_handle {
     usb_transfer_t *ctrl_xfer = nullptr;
     esp_err_t ctrl_status = ESP_OK;
     bool ctrl_stall = false;
+    /** ctrl_xfer submitted and its callback not yet run. usb_host_device_close()
+     *  asserts (usbh num_ctrl_xfers_inflight == 0) while this is true. */
+    std::atomic<bool> ctrl_inflight{false};
 
     usb_transfer_t **bulk = nullptr;
     uint32_t bulk_num = 0;
@@ -701,6 +704,7 @@ static void ctrl_cb(usb_transfer_t *xfer)
     }
     h->ctrl_status = (xfer->status == USB_TRANSFER_STATUS_COMPLETED) ? ESP_OK : ESP_FAIL;
     h->ctrl_stall = (xfer->status == USB_TRANSFER_STATUS_STALL);
+    h->ctrl_inflight.store(false, std::memory_order_release);
     xSemaphoreGive(h->ctrl_sem);
 }
 
@@ -742,6 +746,54 @@ static void apply_profile_to_handle(esp_rtl_sdr_handle *h, RtlProfileId profile,
     h->info.present = (profile != RtlProfileId::Unknown);
 }
 
+/* Pump client events until ctrl_xfer's callback has run. After a disconnect
+ * the USB stack completes an in-flight control transfer (NO_DEVICE) on the
+ * next client event pass; only the client task may pump, others just wait. */
+static bool wait_ctrl_idle(esp_rtl_sdr_handle *h, uint32_t timeout_ms)
+{
+    const TickType_t started = xTaskGetTickCount();
+    while (h->ctrl_inflight.load(std::memory_order_acquire)) {
+        if (xTaskGetTickCount() - started >= pdMS_TO_TICKS(timeout_ms)) {
+            return false;
+        }
+        if (h->client != nullptr && xTaskGetCurrentTaskHandle() == h->client_task) {
+            (void)usb_host_client_handle_events(h->client, pdMS_TO_TICKS(5));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+    }
+    return true;
+}
+
+/* usb_host_device_close() asserts if a control transfer is still in flight on
+ * the device (seen on a Tab5 when a dongle dropped out mid-init). Let it
+ * complete first, then close under ctrl_mutex so no new transfer can start.
+ * If it never completes, leak the handle rather than crash. */
+static void close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
+{
+    if (h == nullptr || h->client == nullptr || dev == nullptr) {
+        return;
+    }
+    const uint32_t wait_ms = h->cfg.control_timeout_ms + 500;
+    (void)wait_ctrl_idle(h, wait_ms);  // lets a submitter finish and drop ctrl_mutex
+    /* A holder can keep ctrl_mutex through all three attempts of
+     * ctrl_transfer_locked(), each up to control_timeout_ms + 200 ms, plus
+     * the STALL back-off. ctrl_inflight is false during that back-off, so
+     * only holding the lock proves no further attempt can reach dev. */
+    const uint32_t lock_ms = 3 * (h->cfg.control_timeout_ms + 200) + 200;
+    if (h->ctrl_mutex == nullptr ||
+        xSemaphoreTake(h->ctrl_mutex, pdMS_TO_TICKS(lock_ms)) != pdTRUE) {
+        ESP_LOGE(TAG, "device close skipped: control transfer path still busy");
+        return;
+    }
+    if (wait_ctrl_idle(h, wait_ms)) {
+        usb_host_device_close(h->client, dev);
+    } else {
+        ESP_LOGE(TAG, "device close skipped: control transfer still in flight");
+    }
+    xSemaphoreGive(h->ctrl_mutex);
+}
+
 static void close_opened_device(esp_rtl_sdr_handle *h)
 {
     if (h == nullptr) {
@@ -753,7 +805,7 @@ static void close_opened_device(esp_rtl_sdr_handle *h)
         h->iface_claimed = false;
     }
     if (h->dev != nullptr && h->client != nullptr) {
-        usb_host_device_close(h->client, h->dev);
+        close_device_safely(h, h->dev);
         h->dev = nullptr;
     }
     h->open_addr = 0;
@@ -765,16 +817,16 @@ static void close_opened_device(esp_rtl_sdr_handle *h)
     }
 }
 
-static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t dev, uint8_t bm,
-                                    uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
-                                    const uint8_t *data, uint16_t wLength, bool expect_stall,
-                                    uint8_t *response = nullptr, uint16_t response_length = 0)
+/* Caller holds ctrl_mutex. */
+static esp_err_t ctrl_transfer_locked(esp_rtl_sdr_handle *h, usb_device_handle_t dev, uint8_t bm,
+                                      uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
+                                      const uint8_t *data, uint16_t wLength, bool expect_stall,
+                                      uint8_t *response, uint16_t response_length)
 {
-    if (h->ctrl_xfer == nullptr || dev == nullptr) {
-        return ESP_RTL_SDR_ERR_USB;
+    if (h->ctrl_inflight.load(std::memory_order_acquire)) {
+        /* A timed-out transfer has not completed yet; ctrl_xfer cannot be reused. */
+        return ESP_RTL_SDR_ERR_TIMEOUT;
     }
-    xSemaphoreTake(h->ctrl_mutex, portMAX_DELAY);
-
     esp_err_t final_err = ESP_FAIL;
     for (int attempt = 0; attempt < 3; ++attempt) {
         usb_transfer_t *x = h->ctrl_xfer;
@@ -798,8 +850,10 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t d
         h->ctrl_stall = false;
         xSemaphoreTake(h->ctrl_sem, 0);
 
+        h->ctrl_inflight.store(true, std::memory_order_release);
         esp_err_t ret = usb_host_transfer_submit_control(h->client, x);
         if (ret != ESP_OK) {
+            h->ctrl_inflight.store(false, std::memory_order_release);
             final_err = ESP_RTL_SDR_ERR_USB;
             break;
         }
@@ -843,17 +897,41 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t d
         final_err = ESP_RTL_SDR_ERR_USB;
         break;
     }
-
-    xSemaphoreGive(h->ctrl_mutex);
     return final_err;
+}
+
+static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t dev, uint8_t bm,
+                                    uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
+                                    const uint8_t *data, uint16_t wLength, bool expect_stall,
+                                    uint8_t *response = nullptr, uint16_t response_length = 0)
+{
+    if (h->ctrl_xfer == nullptr || dev == nullptr) {
+        return ESP_RTL_SDR_ERR_USB;
+    }
+    xSemaphoreTake(h->ctrl_mutex, portMAX_DELAY);
+    const esp_err_t err = ctrl_transfer_locked(h, dev, bm, bRequest, wValue, wIndex, data,
+                                               wLength, expect_stall, response, response_length);
+    xSemaphoreGive(h->ctrl_mutex);
+    return err;
 }
 
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest,
                              uint16_t wValue, uint16_t wIndex, const uint8_t *data,
                              uint16_t wLength, bool expect_stall)
 {
-    return ctrl_submit_device(h, h != nullptr ? h->dev : nullptr, bm, bRequest, wValue, wIndex,
-                              data, wLength, expect_stall);
+    if (h == nullptr || h->ctrl_xfer == nullptr) {
+        return ESP_RTL_SDR_ERR_USB;
+    }
+    /* Read h->dev under ctrl_mutex: a disconnect closes it under the same lock,
+     * so a transfer can never be submitted to a device that was just closed. */
+    xSemaphoreTake(h->ctrl_mutex, portMAX_DELAY);
+    usb_device_handle_t dev = h->dev;
+    const esp_err_t err =
+        dev == nullptr ? ESP_RTL_SDR_ERR_USB
+                       : ctrl_transfer_locked(h, dev, bm, bRequest, wValue, wIndex, data,
+                                              wLength, expect_stall, nullptr, 0);
+    xSemaphoreGive(h->ctrl_mutex);
+    return err;
 }
 
 static uint16_t tuner_i2c_value_for_handle(const esp_rtl_sdr_handle *h)
@@ -2436,7 +2514,7 @@ static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate
     usb_device_info_t info{};
     if (usb_host_get_device_descriptor(dev, &dd) != ESP_OK ||
         usb_host_device_info(dev, &info) != ESP_OK) {
-        usb_host_device_close(h->client, dev);
+        close_device_safely(h, dev);
         if (keep_open) {
             if (session_lock()) {
                 rtl_claim_release(&s_usb_session.claims, addr, h->logical_index);
@@ -2448,7 +2526,7 @@ static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate
     esp_rtl_sdr_device_info_t di{};
     const RtlProfileId profile = identify_profile(h, dev, dd, &info, &di);
     if (profile == RtlProfileId::Unknown) {
-        usb_host_device_close(h->client, dev);
+        close_device_safely(h, dev);
         if (keep_open) {
             if (session_lock()) {
                 rtl_claim_release(&s_usb_session.claims, addr, h->logical_index);
@@ -2474,7 +2552,7 @@ static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate
         apply_profile_to_handle(h, profile, di);
         return true;
     }
-    usb_host_device_close(h->client, dev);
+    close_device_safely(h, dev);
     if (keep_open) {
         if (session_lock()) {
             rtl_claim_release(&s_usb_session.claims, addr, h->logical_index);
@@ -4177,7 +4255,7 @@ esp_err_t esp_rtl_sdr_hub_port_power_cycle(esp_rtl_sdr_handle_t handle, uint32_t
         const usb_device_desc_t *dd = nullptr;
         if (usb_host_get_device_descriptor(dev, &dd) != ESP_OK || dd == nullptr ||
             dd->bDeviceClass != kHubClass) {
-            usb_host_device_close(h->client, dev);
+            close_device_safely(h, dev);
             continue;
         }
 
@@ -4215,7 +4293,7 @@ esp_err_t esp_rtl_sdr_hub_port_power_cycle(esp_rtl_sdr_handle_t handle, uint32_t
                  static_cast<unsigned>(addrs[i]), off_ok, kMaxPorts, on_ok, kMaxPorts);
         ESP_LOGW(TAG, "hub at addr %u: downstream port power restored",
                  static_cast<unsigned>(addrs[i]));
-        usb_host_device_close(h->client, dev);
+        close_device_safely(h, dev);
         hubs++;
     }
     return (hubs > 0) ? ESP_OK : ESP_ERR_NOT_FOUND;

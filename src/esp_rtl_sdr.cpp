@@ -313,6 +313,8 @@ struct esp_rtl_sdr_handle {
     uint64_t counter_breaks = 0;
     uint64_t counter_first_break = 0;
     uint64_t counter_last_break = 0;
+    uint64_t counter_steady_breaks = 0;
+    uint64_t counter_inside_packet = 0;
     uint8_t counter_expected = 0;
     uint32_t in_callback_depth = 0;
     /** Task currently inside emit_after_unlock; null if depth == 0. */
@@ -1432,6 +1434,10 @@ static void bulk_cb(usb_transfer_t *xfer)
             if (value != expected) {
                 if (h->counter_breaks == 0) h->counter_first_break = h->counter_checked + i;
                 h->counter_last_break = h->counter_checked + i;
+                if (h->counter_checked + i >= 65536u) {
+                    ++h->counter_steady_breaks;
+                    if (i % 512u != 0) ++h->counter_inside_packet;
+                }
                 ++h->counter_breaks;
             }
             expected = static_cast<uint8_t>(value + 1u);
@@ -1460,7 +1466,7 @@ static void bulk_cb(usb_transfer_t *xfer)
             esp_rtl_sdr_delivery_mode_uses_read(h->cfg.delivery_mode) &&
             !esp_rtl_sdr_delivery_mode_uses_callback_iq(h->cfg.delivery_mode)) {
             const size_t n = static_cast<size_t>(xfer->actual_num_bytes);
-            pull_ring_push(h, xfer->data_buffer, n);
+            // Diagnostic USB sink: omit the application copy to isolate servicing cost.
             h->metrics.bytes_total += n;
             h->metrics.blocks_total++;
             h->last_xfer_timestamp_us = esp_timer_get_time();
@@ -3701,6 +3707,8 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->counter_breaks = 0;
         handle->counter_first_break = 0;
         handle->counter_last_break = 0;
+        handle->counter_steady_breaks = 0;
+        handle->counter_inside_packet = 0;
         RTL_LOGW(handle, "COUNTER PROBE ACTIVE sps=%u: synthetic bytes, not RF",
                  static_cast<unsigned>(local.sample_rate_sps));
         handle->streaming = true;
@@ -3832,12 +3840,14 @@ esp_err_t esp_rtl_sdr_stop(esp_rtl_sdr_handle_t handle, uint32_t timeout_ms)
     }
     const esp_err_t stopped = stop_stream_internal(handle, timeout_ms);
     if (stopped == ESP_OK) {
-        RTL_LOGI(handle, "COUNTER PROBE result sps=%u checked=%llu breaks=%llu first=%llu last=%llu",
+        RTL_LOGI(handle, "COUNTER PROBE result sps=%u checked=%llu breaks=%llu first=%llu last=%llu steady=%llu interior=%llu",
                  static_cast<unsigned>(handle->sample_rate_sps),
                  static_cast<unsigned long long>(handle->counter_checked),
                  static_cast<unsigned long long>(handle->counter_breaks),
                  static_cast<unsigned long long>(handle->counter_first_break),
-                 static_cast<unsigned long long>(handle->counter_last_break));
+                 static_cast<unsigned long long>(handle->counter_last_break),
+                 static_cast<unsigned long long>(handle->counter_steady_breaks),
+                 static_cast<unsigned long long>(handle->counter_inside_packet));
     }
     return stopped;
 }

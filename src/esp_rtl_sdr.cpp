@@ -879,11 +879,23 @@ static RtlControlRecord map_tuner_record_for_profile(esp_rtl_sdr_handle *h,
 }
 
 static esp_err_t run_record(esp_rtl_sdr_handle *h, const RtlControlRecord &rec,
-                            bool expect_stall)
+                           bool expect_stall)
 {
     const RtlControlRecord mapped = map_tuner_record_for_profile(h, rec);
     const esp_err_t err = ctrl_submit(h, mapped.request_type, 0, mapped.value, mapped.index,
                                       mapped.data, mapped.length, expect_stall);
+    if (err != ESP_OK || h->ctrl_stall) {
+        h->tuner_reg_known = 0;
+    } else if (mapped.request_type == 0x40 && mapped.index == 0x0610 &&
+               mapped.value == tuner_i2c_value_for_handle(h)) {
+        if (mapped.length == 2 && mapped.data[0] < 32) {
+            const uint8_t reg = mapped.data[0];
+            h->tuner_reg_val[reg] = mapped.data[1];
+            h->tuner_reg_known |= (1u << reg);
+        } else if (mapped.length != 1) {
+            h->tuner_reg_known = 0;
+        }
+    }
     if (err != ESP_OK && !expect_stall) {
         /* Name the record the device rejected.
          *
@@ -1188,11 +1200,6 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         const int64_t t_rec0 = esp_timer_get_time();
         esp_err_t e = run_record(h, rec, false);
         rec_us[i] = (uint32_t)(esp_timer_get_time() - t_rec0);
-        if (rec.request_type == 0x40 && rec.length == 2 && rec.data[0] < 32) {
-            const uint8_t reg = rec.data[0];
-            h->tuner_reg_val[reg] = rec.data[1];
-            h->tuner_reg_known |= (1u << reg);
-        }
         if (e != ESP_OK) {
             return e;
         }
@@ -1243,24 +1250,9 @@ static esp_err_t run_profile_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
         }
         return err;
     }
-    /* Open the I2C repeater before touching the tuner.
-     *
-     * The RTL2832U reaches the tuner through a repeater gate. It was only
-     * opened on the cold-init path and when leaving direct sampling, so an
-     * ordinary VHF/UHF hot retune wrote tuner registers with the gate in
-     * whatever state the previous operation left it.
-     *
-     * Measured on a Blog V3c scanning FM: 430 "Dev 2 EP 0 STALL" and 112
-     * "hot retune EP0 failed" in 75 s, every rejected record an I2C write
-     * to 0x34 carrying an R820T2 register (0x08, 0x09, 0x0c, 0x10, 0x17,
-     * 0x1a, 0x1b). The Blog V4 retunes cleanly through the same code
-     * because its R828D is addressed directly and does not depend on this
-     * gate.
-     *
-     * Re-asserting is idempotent - the records set the bit and read back -
-     * so this costs two control transfers per retune and only applies to
-     * profiles that use the remapped tuner address. */
-    if (rtl_profile_uses_r820t2_i2c_remap(h->profile)) {
+    /* The RTL2832U I2C repeater is needed for tuner writes at both 0x34
+     * (V3c/V4L) and 0x74 (Blog V4). Re-assert it before every hot retune. */
+    if (rtl_profile_tuner_i2c_value(h->profile) != 0) {
         const int64_t t_rep0 = esp_timer_get_time();
         const esp_err_t rep = run_records(h, kBlogV3TunerRepeaterOn,
                                           std::size(kBlogV3TunerRepeaterOn));
@@ -1270,6 +1262,7 @@ static esp_err_t run_profile_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
         if (rep != ESP_OK) {
             RTL_LOGW(h, "tuner repeater enable failed: %s",
                      esp_rtl_sdr_err_to_name(rep));
+            return rep;
         }
     }
     return run_tune(h, frequency_hz);

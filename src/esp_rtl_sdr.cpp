@@ -776,17 +776,22 @@ static void close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
     }
     const uint32_t wait_ms = h->cfg.control_timeout_ms + 500;
     (void)wait_ctrl_idle(h, wait_ms);  // lets a submitter finish and drop ctrl_mutex
-    const bool locked =
-        h->ctrl_mutex != nullptr &&
-        xSemaphoreTake(h->ctrl_mutex, pdMS_TO_TICKS(wait_ms)) == pdTRUE;
+    /* A holder can keep ctrl_mutex through all three attempts of
+     * ctrl_transfer_locked(), each up to control_timeout_ms + 200 ms, plus
+     * the STALL back-off. ctrl_inflight is false during that back-off, so
+     * only holding the lock proves no further attempt can reach dev. */
+    const uint32_t lock_ms = 3 * (h->cfg.control_timeout_ms + 200) + 200;
+    if (h->ctrl_mutex == nullptr ||
+        xSemaphoreTake(h->ctrl_mutex, pdMS_TO_TICKS(lock_ms)) != pdTRUE) {
+        ESP_LOGE(TAG, "device close skipped: control transfer path still busy");
+        return;
+    }
     if (wait_ctrl_idle(h, wait_ms)) {
         usb_host_device_close(h->client, dev);
     } else {
         ESP_LOGE(TAG, "device close skipped: control transfer still in flight");
     }
-    if (locked) {
-        xSemaphoreGive(h->ctrl_mutex);
-    }
+    xSemaphoreGive(h->ctrl_mutex);
 }
 
 static void close_opened_device(esp_rtl_sdr_handle *h)

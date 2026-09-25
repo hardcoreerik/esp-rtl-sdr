@@ -202,13 +202,13 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
  *
  * Low band: **> 225 kHz … 300 kHz** (desktop librtlsdr rejects rate <= 225000;
  * at exactly 225000 the 28-bit ratio field masks to 0 and cannot be programmed).
- * High band: 900 kHz … 3.6 MHz in this experimental probe build.
- * Rates above 3.2 MHz are unvalidated; gap 300001–899999 is rejected.
+ * High band: 900 kHz … 3.2 MHz. Rates above 3.2 MHz lost data in
+ * board and PC probes; gap 300001–899999 is rejected.
  */
 #define ESP_RTL_SDR_RATE_LOW_MIN_HZ    225001u
 #define ESP_RTL_SDR_RATE_LOW_MAX_HZ    300000u
 #define ESP_RTL_SDR_RATE_HIGH_MIN_HZ   900000u
-#define ESP_RTL_SDR_RATE_HIGH_MAX_HZ   3600000u
+#define ESP_RTL_SDR_RATE_HIGH_MAX_HZ   3200000u
 /** Vendor stable IQ bandwidth claim (Blog V4 datasheet). */
 #define ESP_RTL_SDR_RATE_STABLE_MAX_HZ 2560000u
 

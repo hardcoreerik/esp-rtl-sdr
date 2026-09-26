@@ -17,7 +17,7 @@ Private test builds do not create another version stage. Identify them by the
 reported version, full commit SHA, artifact SHA-256, and an optional CI/build
 number. Tags are created only for published releases.
 
-The `0.8.0-rc3` train is an RC because the `0.8.0` public driver contract and
-supported scope are frozen. Provisional device profiles remain explicitly
-provisional capability within that contract; they do not turn an RC back into
-a product beta.
+`0.9.0` is a stable pre-1.0 release: the Blog V4, V4L and V3/V3c profiles are
+hardware-verified and the public contract is expected to carry into `1.0.0`.
+The Nooelec SMArt v5 profile remains explicitly provisional (no hardware has
+been tested); provisional profiles do not turn a release back into a beta.

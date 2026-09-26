@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 # Pin app version so idf.py project_description is 0.8.0-rc3, not git-describe
 # of an older tag.
-set(PROJECT_VER "0.8.0-rc3")
+set(PROJECT_VER "0.9.0")
 
 # IDF 5.5.4 defaults SDKCONFIG to ${CMAKE_SOURCE_DIR}/sdkconfig. -B only
 # changes the binary dir, so two URB images would share one config. Keep

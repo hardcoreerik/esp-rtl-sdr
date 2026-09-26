@@ -3,9 +3,10 @@
  * @brief esp_rtl_sdr — production public C API (best-in-class contract)
  *
  * Standalone ESP-IDF USB Host client for RTL2832U-class SDR dongles.
- * Blog V4 (R828D) is the measured streaming path. Nooelec NESDR SMArt v5 and
- * Blog V3 are provisional R820T2 streams (I2C 0x34 remap; maintainer-
- * unverified). Transfer sequences are clean-room / measured where stated —
+ * Blog V4 (R828D), Blog V4L (R828S) and Blog V3/V3c (R820T2, I2C 0x34 remap)
+ * are hardware-verified streaming profiles. Nooelec NESDR SMArt v5 remains a
+ * provisional R820T2 stream (no hardware tested). Transfer sequences are
+ * clean-room / measured where stated —
  * this is not a librtlsdr port.
  *
  * ---------------------------------------------------------------------------
@@ -88,12 +89,12 @@ extern "C" {
 
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
-#define ESP_RTL_SDR_VERSION_MINOR 8
+#define ESP_RTL_SDR_VERSION_MINOR 9
 #define ESP_RTL_SDR_VERSION_PATCH 0
 /** 1 while experimental prerelease; 0 for stable X.Y.Z. */
-#define ESP_RTL_SDR_VERSION_IS_PRERELEASE 1
-/** Token for prerelease suffix (stringized into VERSION_STRING). */
-#define ESP_RTL_SDR_VERSION_PRERELEASE rc4
+#define ESP_RTL_SDR_VERSION_IS_PRERELEASE 0
+/** Token for prerelease suffix (stringized into VERSION_STRING when IS_PRERELEASE). */
+#define ESP_RTL_SDR_VERSION_PRERELEASE rc1
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -124,7 +125,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.8.0-rc4". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.9.0". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */
@@ -383,7 +384,7 @@ typedef enum {
 typedef enum {
     ESP_RTL_SDR_PROFILE_UNKNOWN = 0,          /**< default until identified / after detach */
     ESP_RTL_SDR_PROFILE_BLOG_V4 = 1,          /**< RTL-SDR Blog V4 / R828D + HF upconverter */
-    ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / R820T2 provisional stream */
+    ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / V3c, R820T2 (0x34 remap) */
     ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5 = 3, /**< NESDR SMArt v5 / R820T2-R860 provisional */
     ESP_RTL_SDR_PROFILE_BLOG_V4L = 4,         /**< RTL-SDR Blog V4L (Lite) / R828S */
 } esp_rtl_sdr_profile_t;
@@ -1022,7 +1023,7 @@ esp_err_t esp_rtl_sdr_set_freq_correction(esp_rtl_sdr_handle_t handle, int ppm);
 esp_err_t esp_rtl_sdr_get_freq_correction(esp_rtl_sdr_handle_t handle, int *out_ppm);
 
 /**
- * Rescan USB for accepted profile devices (Blog V4 / provisional Nooelec / provisional V3).
+ * Rescan USB for accepted profile devices (Blog V4 / V4L / V3 / provisional Nooelec).
  * Updates internal candidate list used by get_device_count / select_*.
  * Does not close the currently open device unless it vanished.
  */

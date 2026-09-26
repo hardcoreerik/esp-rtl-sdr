@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased — concurrent multi-receiver foundation (`esp-rtl-sdr-signal-anomaly`)
+## 0.9.0 (2026-09-26) — V4L, V3c and V4 hardware-verified; pre-1.0
+
+The Blog V3/V3c and V4L profiles are no longer provisional; Blog V4, V4L and
+V3c are hardware-verified on the M5 Tab5 (see PROJECT_TRUTH.md). The Nooelec
+SMArt v5 profile stays provisional: no hardware has been tested. This release
+also carries the concurrent multi-receiver foundation below.
 
 ### Added
 

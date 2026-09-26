@@ -269,6 +269,20 @@ static void test_v4l_direct_route(void)
     EXPECT_EQ_U(rec.data[1], 0x20);
     EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, cb20), 4u);
     EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, cb20, true), 7u);
+
+    /* V4: direct = its VHF input (Cable-2 off the upconverter), tuner = RF. */
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4, cb20), cb20 + 28800000u);
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4, cb20, true), cb20);
+    const auto v4_up = measured_v4_frontend_plan(cb20, false, 3);
+    const auto v4_direct = measured_v4_frontend_plan(cb20, false, 3, true);
+    const auto v4_vhf = measured_v4_frontend_plan(96100000u, false, 3);
+    EXPECT_TRUE(v4_up.band == MeasuredV4FrontendBand::HF);
+    EXPECT_TRUE(v4_direct.band == MeasuredV4FrontendBand::VHF);
+    EXPECT_EQ_U(v4_direct.reg06, v4_vhf.reg06);
+    EXPECT_EQ_U(v4_direct.gpo, v4_vhf.gpo);
+    EXPECT_EQ_U(v4_direct.reg05, v4_vhf.reg05);
+    EXPECT_EQ_U(v4_up.reg06, 0x38);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4, cb20, true), 7u);
 }
 
 static void test_bandwidth_plan_and_rollback(void)

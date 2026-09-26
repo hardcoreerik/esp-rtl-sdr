@@ -1244,13 +1244,19 @@ static esp_err_t run_v3_leave_direct(esp_rtl_sdr_handle *h)
     return err;
 }
 
-/* V4L: tune this RF directly on the R828S (no 28.8 MHz upconverter). The
+static bool profile_has_hf_direct_route(RtlProfileId profile)
+{
+    return profile == RtlProfileId::BlogV4L || profile == RtlProfileId::BlogV4;
+}
+
+/* V4L/V4: tune this RF directly on the tuner (no 28.8 MHz upconverter). The
  * upconverter's LO harmonic folds strong MW (f) onto 28.8 MHz - f, which puts
  * AM broadcast stations on CB channels; the direct input avoids that. */
-static bool v4l_direct_route(const esp_rtl_sdr_handle *h, uint32_t rf_hz)
+static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t rf_hz)
 {
-    return h != nullptr && h->profile == RtlProfileId::BlogV4L && h->hf_direct_min_hz != 0 &&
-           rf_hz >= h->hf_direct_min_hz && rf_hz < ESP_RTL_SDR_XTAL_HZ;
+    return h != nullptr && profile_has_hf_direct_route(h->profile) &&
+           h->hf_direct_min_hz != 0 && rf_hz >= h->hf_direct_min_hz &&
+           rf_hz < ESP_RTL_SDR_XTAL_HZ;
 }
 
 /**
@@ -1267,9 +1273,9 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
     const RtlProfileId profile = h != nullptr ? h->profile : RtlProfileId::BlogV4;
-    const bool v4l_direct = v4l_direct_route(h, frequency_hz);
+    const bool hf_direct = hf_direct_route(h, frequency_hz);
     const uint32_t tuner_base =
-        rtl_profile_tuner_frequency_hz(profile, frequency_hz, v4l_direct);
+        rtl_profile_tuner_frequency_hz(profile, frequency_hz, hf_direct);
     const uint32_t tune_hz =
         apply_freq_correction_hz(tuner_base, h != nullptr ? h->freq_correction_ppm : 0);
     uint8_t r16_setup = 0, r16_active = 0, r20 = 0, r21 = 0, r22 = 0;
@@ -1282,7 +1288,7 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
     }
     const bool hf = (rtl_profile_device_capabilities(profile) &
                      ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0 &&
-                    esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz) && !v4l_direct;
+                    esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz) && !hf_direct;
     ESP_LOGI(TAG,
              "tune rf=%u Hz tuner=%u Hz ppm=%d hf_upconv=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x pll_if_hz=%u",
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
@@ -1293,7 +1299,7 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
         RtlControlRecord rec = kRtlFinalTuneTemplate[i];
         if (profile == RtlProfileId::BlogV4L &&
-            !measured_v4l_patch_tune_record(frequency_hz, i, rec, v4l_direct)) {
+            !measured_v4l_patch_tune_record(frequency_hz, i, rec, hf_direct)) {
             rec_us[i] = 0;
             skipped++;
             continue;
@@ -1438,7 +1444,7 @@ static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz,
         return ESP_OK;
     }
     const MeasuredV4FrontendPlan plan =
-        measured_v4_frontend_plan(rf_hz, h->bias_tee_want, raw_reg05);
+        measured_v4_frontend_plan(rf_hz, h->bias_tee_want, raw_reg05, hf_direct_route(h, rf_hz));
     const bool uhf = plan.band == MeasuredV4FrontendBand::UHF;
     const bool hf = plan.band == MeasuredV4FrontendBand::HF;
     const RtlControlRecord records[] = {
@@ -1490,7 +1496,7 @@ static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz)
     if (h->profile == RtlProfileId::BlogV4L) {
         const auto plan = measured_v4l_frontend_plan(rf_hz, h->bias_tee_want,
                                                        h->tuner_reg05_low_bits,
-                                                       v4l_direct_route(h, rf_hz));
+                                                       hf_direct_route(h, rf_hz));
         const RtlControlRecord gpio[] = {
             {0x3004, 0x0210, 0x40, 1, {plan.gpd}},
             {0x3003, 0x0210, 0x40, 1, {plan.gpoe}},
@@ -1541,7 +1547,7 @@ static esp_err_t apply_bandwidth_transaction(esp_rtl_sdr_handle *h, uint32_t rf_
 {
     MeasuredTunerBandwidthPlan next{};
     if (!measured_tuner_bandwidth_plan(h->profile, rf_hz, width_hz, &next,
-                                       v4l_direct_route(h, rf_hz))) {
+                                       hf_direct_route(h, rf_hz))) {
         return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
     const auto previous = h->bandwidth_applied;
@@ -2008,11 +2014,11 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     const uint32_t requested_width = h->bandwidth_requested_hz;
     uint32_t applied_width = requested_width;
     const bool measured_bw = h->sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
-        measured_tuner_bandwidth_count(h->profile, tune_hz, v4l_direct_route(h, tune_hz)) != 0;
+        measured_tuner_bandwidth_count(h->profile, tune_hz, hf_direct_route(h, tune_hz)) != 0;
     if (measured_bw) {
         MeasuredTunerBandwidthPlan requested{};
         if (!measured_tuner_bandwidth_plan(h->profile, tune_hz, applied_width, &requested,
-                                           v4l_direct_route(h, tune_hz))) {
+                                           hf_direct_route(h, tune_hz))) {
             applied_width = 0; /* width from a different route class */
         }
         err = apply_bandwidth_transaction(h, tune_hz, applied_width);
@@ -2047,7 +2053,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         ESP_LOGI(TAG, "hot retune applied rf=%u Hz tuner=%u Hz direct=%d",
                  static_cast<unsigned>(tune_hz),
                  static_cast<unsigned>(rtl_profile_tuner_frequency_hz(
-                     h->profile, tune_hz, v4l_direct_route(h, tune_hz))),
+                     h->profile, tune_hz, hf_direct_route(h, tune_hz))),
                  rtl_profile_uses_v3_direct_sampling(h->profile, tune_hz) ? 1 : 0);
     } else {
         ESP_LOGW(TAG, "hot retune EP0 failed: %s (tune/route may be partially applied)",
@@ -3517,7 +3523,7 @@ esp_err_t esp_rtl_sdr_get_capture_meta(esp_rtl_sdr_handle_t handle,
     }
     const uint32_t center = handle->frequency_hz != 0 ? handle->frequency_hz
                                                       : handle->preferred_frequency_hz;
-    const uint32_t tuner = v4l_direct_route(handle, center)
+    const uint32_t tuner = hf_direct_route(handle, center)
                                ? center
                                : esp_rtl_sdr_tuner_frequency_hz(center);
     esp_rtl_sdr_fill_capture_meta(
@@ -3850,7 +3856,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             }
         }
         if (local.sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
-            measured_tuner_bandwidth_count(handle->profile, freq, v4l_direct_route(handle, freq)) != 0) {
+            measured_tuner_bandwidth_count(handle->profile, freq, hf_direct_route(handle, freq)) != 0) {
             ret = apply_bandwidth_transaction(handle, freq, 0);
         } else {
             ret = run_profile_tune(handle, freq, 0);
@@ -5120,7 +5126,7 @@ static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
 
     const uint8_t reg05 = h->profile == RtlProfileId::BlogV4L
         ? measured_v4l_frontend_plan(frontend_rf_hz(h), h->bias_tee_want, st.reg05,
-                                     v4l_direct_route(h, frontend_rf_hz(h))).reg05
+                                     hf_direct_route(h, frontend_rf_hz(h))).reg05
         : st.reg05;
     esp_err_t err = ESP_FAIL;
     for (int pass = 0; pass < 3; ++pass) {
@@ -5191,7 +5197,7 @@ static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h)
         } else {
             const uint8_t reg05 = h->profile == RtlProfileId::BlogV4L
                 ? measured_v4l_frontend_plan(rf_hz, h->bias_tee_want, 0x03,
-                                             v4l_direct_route(h, rf_hz)).reg05
+                                             hf_direct_route(h, rf_hz)).reg05
                 : 0x88;
             const uint8_t reg07 = h->profile == RtlProfileId::BlogV4L ? 0x75 : 0x78;
             err = run_record(h, measured_v4_ir_reg_write(0x05, reg05), false);
@@ -5614,7 +5620,7 @@ esp_err_t esp_rtl_sdr_get_tuner_bandwidths(esp_rtl_sdr_handle_t handle,
     const uint32_t rf_hz = handle->pending_retune_hz != 0
         ? handle->pending_retune_hz : handle->frequency_hz;
     const size_t count = measured_tuner_bandwidth_count(handle->profile, rf_hz,
-                                                        v4l_direct_route(handle, rf_hz));
+                                                        hf_direct_route(handle, rf_hz));
     if ((handle->device_caps & ESP_RTL_SDR_CAP_TUNER_BANDWIDTH) == 0 ||
         handle->sample_rate_sps != ESP_RTL_SDR_RATE_2400K || count == 0) {
         *out_count = 0;
@@ -5645,7 +5651,7 @@ esp_err_t esp_rtl_sdr_set_tuner_bandwidth(esp_rtl_sdr_handle_t handle, uint32_t 
     if ((handle->device_caps & ESP_RTL_SDR_CAP_TUNER_BANDWIDTH) == 0 ||
         handle->sample_rate_sps != ESP_RTL_SDR_RATE_2400K ||
         !measured_tuner_bandwidth_plan(handle->profile, rf_hz, hz, &plan,
-                                       v4l_direct_route(handle, rf_hz))) {
+                                       hf_direct_route(handle, rf_hz))) {
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
         return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
@@ -5675,7 +5681,7 @@ esp_err_t esp_rtl_sdr_set_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
     }
-    if (min_hz != 0 && handle->profile != RtlProfileId::BlogV4L) {
+    if (min_hz != 0 && !profile_has_hf_direct_route(handle->profile)) {
         return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
     HandleLock lk(handle);
@@ -5685,7 +5691,7 @@ esp_err_t esp_rtl_sdr_set_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t
     const uint32_t floor_hz = kR820T2NativeMinHz;
     handle->hf_direct_min_hz =
         min_hz == 0 ? 0 : (min_hz < floor_hz ? floor_hz : min_hz);
-    ESP_LOGI(TAG, "V4L HF direct route min=%u Hz (0 = upconverter)",
+    ESP_LOGI(TAG, "HF direct route min=%u Hz (0 = upconverter)",
              static_cast<unsigned>(handle->hf_direct_min_hz));
     return ESP_OK;
 }

@@ -4,15 +4,16 @@
 
 ### Added
 
-- **Blog V4L direct HF route for 24-28.8 MHz** (`esp_rtl_sdr_set_hf_direct_min_hz`,
+- **Blog V4L and V4 direct HF route for 24-28.8 MHz** (`esp_rtl_sdr_set_hf_direct_min_hz`,
   `esp_rtl_sdr_get_hf_direct_min_hz`). Through the 28.8 MHz upconverter, a
   strong MW station at f also appears at 28.8 MHz - f (the LO's second
   harmonic), so with an MLA30+ the 1600 kHz station was heard on CB channel
   20 (27.205 MHz) on both V4L and V4. With the route enabled the R828S tunes
-  RF directly (tuner = RF, native GPIO/input/bandwidth tables), as the V3c
-  already does above 24 MHz. Off by default; cleared on attach. Tab5
-  on-air: V4L CB channel 20 went from the 1600 kHz image to clean band noise,
-  matching the V3c. Direct-input passband below 28.8 MHz is not measured.
+  RF directly (tuner = RF, native GPIO/input/bandwidth tables; the V4 uses its
+  VHF input), as the V3c already does above 24 MHz. Off by default; cleared on
+  attach. Tab5 on-air: CB channel 20 went from the 1600 kHz image to clean
+  band noise on both V4L and V4, matching the V3c. Direct-input passband and
+  CB sensitivity below 28.8 MHz are not measured.
 
 ### Fixed
 

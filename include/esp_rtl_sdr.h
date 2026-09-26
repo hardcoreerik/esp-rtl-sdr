@@ -93,7 +93,7 @@ extern "C" {
 /** 1 while experimental prerelease; 0 for stable X.Y.Z. */
 #define ESP_RTL_SDR_VERSION_IS_PRERELEASE 1
 /** Token for prerelease suffix (stringized into VERSION_STRING). */
-#define ESP_RTL_SDR_VERSION_PRERELEASE rc3
+#define ESP_RTL_SDR_VERSION_PRERELEASE rc4
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -124,7 +124,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.8.0-rc3". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.8.0-rc4". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */
@@ -327,14 +327,16 @@ typedef enum {
     ESP_RTL_SDR_CAP_NEED = 1u << 12,        /**< apply_need() intent presets */
     ESP_RTL_SDR_CAP_HEALTH = 1u << 13,      /**< get_health / EVT_HEALTH */
     ESP_RTL_SDR_CAP_PASSPORT = 1u << 14,    /**< on-device rate passport probe */
-    ESP_RTL_SDR_CAP_GAIN = 1u << 15,        /**< measured Blog V4 manual gain (0.7.5+) */
+    ESP_RTL_SDR_CAP_GAIN = 1u << 15,        /**< profile nominal manual gain ladder */
     ESP_RTL_SDR_CAP_DELIVERY_MODE = 1u << 16, /**< config.delivery_mode honored */
-    /** Blog V4 HF path: RF&lt;28.8 MHz → tuner LO RF+28.8e6 + triplexer HF input (0.7.7+). */
+    /** V4/V4L board-specific HF path: RF&lt;28.8 MHz → tuner RF+28.8 MHz. */
     ESP_RTL_SDR_CAP_HF_UPCONVERTER = 1u << 17,
-    /** Tuner AGC AUTO EP0 (R828D 05/07/0c) — measured 2026-08-26. */
+    /** Board-specific tuner AGC AUTO EP0 (05/07/0c). */
     ESP_RTL_SDR_CAP_GAIN_AUTO = 1u << 18,
     /** RTL2832 digital AGC (demod 0x19) — measured 2026-08-26; not tuner AUTO. */
     ESP_RTL_SDR_CAP_RTL_AGC = 1u << 19,
+    /** Measured tuner filter/IF control at 2.4 MS/s; direct-Q HF excluded. */
+    ESP_RTL_SDR_CAP_TUNER_BANDWIDTH = 1u << 20,
 } esp_rtl_sdr_cap_t;
 
 /**
@@ -1245,6 +1247,27 @@ esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_
  */
 esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gains_tenth_db,
                                       size_t max_count, size_t *out_count);
+
+/** Supported tuner widths in Hz for the current (or pending) RF route.
+ * Zero means automatic. At 2.4 MS/s only; not an analog passband guarantee.
+ * With max_count=0, returns the full count without copying values.
+ */
+esp_err_t esp_rtl_sdr_get_tuner_bandwidths(esp_rtl_sdr_handle_t handle,
+                                            uint32_t *out_hz, size_t max_count,
+                                            size_t *out_count);
+
+/** Request a measured tuner width while streaming at 2.4 MS/s.
+ * EP0 apply is asynchronous. On write failure the driver restores the prior
+ * filter/PLL/demod IF; failed restore enters FAULT without resuming IQ.
+ */
+esp_err_t esp_rtl_sdr_set_tuner_bandwidth(esp_rtl_sdr_handle_t handle, uint32_t hz);
+
+/** Software shadow: requested may precede applied while EP0 is queued.
+ * Check get_last_error()/get_state() for an asynchronous failure.
+ */
+esp_err_t esp_rtl_sdr_get_tuner_bandwidth_state(esp_rtl_sdr_handle_t handle,
+                                                 uint32_t *requested_hz,
+                                                 uint32_t *applied_hz);
 
 /**
  * Bias-T manual GPIO control, OFF by default and on stop/new attachment.

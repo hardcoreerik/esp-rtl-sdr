@@ -1,6 +1,6 @@
 # esp_rtl_sdr — API Reference
 
-> **Version tracked:** `0.8.0-rc3` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))
+> **Version tracked:** `0.8.0-rc4` (see `ESP_RTL_SDR_VERSION_*` in [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h))
 > **Header of record:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
 > **Design contract (invariants, ABI growth):** [`API.md`](API.md)  
 > **What works on hardware right now:** [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) wins on any claim conflict.
@@ -50,7 +50,7 @@ Best-in-class API docs (Stripe, ESP-IDF, libusb) share one pattern:
 13. [Center frequency, rate, sync read](#13-center-frequency-rate-sync-read)
 14. [PPM & multi-device](#14-ppm--multi-device)
 15. [Intent, health, passport](#15-intent-health-passport)
-16. [Gain & bias (measured V4)](#16-gain--bias-measured-v4)
+16. [Gain & bias (board-specific PC controls)](#16-gain--bias-board-specific-pc-controls)
 17. [Events catalog](#17-events-catalog)
 18. [Recipes](#18-recipes)
 19. [Symbol index](#19-symbol-index)
@@ -306,7 +306,7 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | `ESP_RTL_SDR_CAP_HOTPLUG` | 2 | **On** | Disconnect / reconnect events |
 | `ESP_RTL_SDR_CAP_METRICS` | 3 | **On** | `get_metrics` |
 | `ESP_RTL_SDR_CAP_CUSTOM_HZ` | 4 | **On** | `PRESET_CUSTOM_HZ` |
-| `ESP_RTL_SDR_CAP_BIAS_TEE` | 5 | **On** | Measured SYS bias ON/OFF (Blog V4) |
+| `ESP_RTL_SDR_CAP_BIAS_TEE` | 5 | **Profile-specific** | Manual GPIO bias control on V4/V4L/BlogV3; generic BlogV3 identity requires a user warning |
 | `ESP_RTL_SDR_CAP_DIRECT_SAMPLING` | 6 | **Profile-specific** | Blog V3/V3c Q branch below 24 MHz |
 | `ESP_RTL_SDR_CAP_IQ_ACQUIRE` | 7 | **Off** | Borrow mode only |
 | `ESP_RTL_SDR_CAP_FREQ_CORRECTION` | 8 | **On** | Software ppm |
@@ -316,11 +316,12 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 | `ESP_RTL_SDR_CAP_NEED` | 12 | **On** | `apply_need` |
 | `ESP_RTL_SDR_CAP_HEALTH` | 13 | **On** | `get_health` / `EVT_HEALTH` |
 | `ESP_RTL_SDR_CAP_PASSPORT` | 14 | **On** | `probe_rates` |
-| `ESP_RTL_SDR_CAP_GAIN` | 15 | **On** | Measured Blog V4 manual ladder (0.0…49.6 dB) |
+| `ESP_RTL_SDR_CAP_GAIN` | 15 | **Profile-specific** | Nominal manual ladder on V4/V4L/BlogV3 |
 | `ESP_RTL_SDR_CAP_DELIVERY_MODE` | 16 | **On** | `config.delivery_mode` |
 | `ESP_RTL_SDR_CAP_HF_UPCONVERTER` | 17 | **On** | RF&lt;28.8 MHz → tuner LO+28.8e6 |
 | `ESP_RTL_SDR_CAP_GAIN_AUTO` | 18 | **On** | Tuner AGC AUTO (measured 05/07/0c) |
 | `ESP_RTL_SDR_CAP_RTL_AGC` | 19 | **On** | RTL2832 digital AGC (demod 0x19) |
+| `ESP_RTL_SDR_CAP_TUNER_BANDWIDTH` | 20 | **Profile-specific** | Measured filter/PLL/demod IF choices at 2.4 MS/s; V3 direct-Q HF unsupported |
 
 ```c
 const uint32_t need = ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_SYNC_READ;
@@ -1259,8 +1260,11 @@ P4 re-soak and multimeter DC are still lab-open — see [`PHASE3_CAPTURE_REPORT.
 | `set_bias_tee` | Explicit manual ON/OFF, `3001=19/18`; OFF default, on stop and new attachment. BlogV3 identity is generic and must be user-warned before enable. |
 | `get_bias_tee` | Last requested preference |
 | `set/get_rtl_agc` | **0.7.8+** demod `0x19` ON=`0x25` OFF=`0x05` (`CAP_RTL_AGC`); get is shadow |
+| `get_tuner_bandwidths` | At 2.4 MS/s, native route: auto/200/300/500/1000/1800/2400 kHz; V4/V4L HF route: auto/200/500/2400 kHz. Size query supported. V3 direct-Q HF returns unsupported. |
+| `set_tuner_bandwidth` | Queues a live filter, PLL, and demod IF change; `ESP_OK` means accepted, not applied. Zero means automatic, not sample rate or audio bandwidth. |
+| `get_tuner_bandwidth_state` | Returns requested/applied widths separately; after a failed write, applied remains the prior width if rollback succeeded. Check state/last error; failed rollback enters FAULT without IQ resume. |
 
-While streaming, gain / mode / bias / RTL AGC **setters are async** (delivery task,
+While streaming, gain / mode / bias / RTL AGC / tuner bandwidth **setters are async** (delivery task,
 one bulk-pause window). `ESP_OK` means the request was queued or applied on the
 non-streaming path — **not** that the device ACKed each EP0 byte. A smoke app
 can prove API returns, continued IQ, metrics, and health around each transition.
@@ -1454,6 +1458,7 @@ if (err == ESP_RTL_SDR_ERR_NO_DEVICE) {
 | `esp_rtl_sdr_passport_opts_default` | §15 |
 | `esp_rtl_sdr_probe_rates` / `get_rate_passport` | §15 |
 | `esp_rtl_sdr_set/get_tuner_gain*` | §16 |
+| `esp_rtl_sdr_get/set_tuner_bandwidth*` | §16 |
 | `esp_rtl_sdr_set/get_bias_tee` | §16 |
 
 ---

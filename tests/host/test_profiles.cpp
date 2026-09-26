@@ -6,6 +6,7 @@
 #include "gain_r820t2.hpp"
 #include "measured_gain_bias_v4.hpp"
 #include "measured_v4l_frontend.hpp"
+#include "measured_tuner_bandwidth.hpp"
 #include "rtl_profile.hpp"
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
@@ -241,6 +242,67 @@ static void test_v4l_tune_records(void)
     EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 1280000u));
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::BlogV4L) &
                  ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0);
+}
+
+static void test_bandwidth_plan_and_rollback(void)
+{
+    struct Case { uint32_t hz; uint8_t reg0b, if19, if1a, if1b; uint32_t if_hz; };
+    constexpr Case native[] = {
+        {0, 0x8f, 0x3b, 0xf7, 0x78, 1814972},
+        {200000, 0xe6, 0x3b, 0x47, 0x1d, 2125000},
+        {300000, 0xe6, 0x3b, 0x47, 0x1d, 2125000},
+        {500000, 0xe8, 0x3b, 0x80, 0x00, 2025000},
+        {1000000, 0xeb, 0x3c, 0x38, 0xe4, 1700000},
+        {1800000, 0xac, 0x3c, 0x1c, 0x72, 1750000},
+        {2400000, 0x8f, 0x3b, 0xf7, 0x78, 1814972},
+    };
+    for (const auto &point : native) {
+        MeasuredTunerBandwidthPlan p{};
+        EXPECT_TRUE(measured_tuner_bandwidth_plan(RtlProfileId::BlogV4L, 96100000u,
+                                                   point.hz, &p));
+        EXPECT_EQ_U(p.reg0a, 0xc4);
+        EXPECT_EQ_U(p.reg0b, point.reg0b);
+        EXPECT_EQ_U(p.if19, point.if19);
+        EXPECT_EQ_U(p.if1a, point.if1a);
+        EXPECT_EQ_U(p.if1b, point.if1b);
+        EXPECT_EQ_U(p.if_hz, point.if_hz);
+        EXPECT_TRUE(measured_tuner_bandwidth_plan(RtlProfileId::BlogV4, 96100000u,
+                                                   point.hz, &p));
+        EXPECT_EQ_U(p.reg0a, 0xc5);
+    }
+    MeasuredTunerBandwidthPlan p{};
+    EXPECT_TRUE(measured_tuner_bandwidth_plan(RtlProfileId::BlogV4L, 1280000u,
+                                               500000u, &p));
+    EXPECT_EQ_U(p.reg0a, 0xc4);
+    EXPECT_EQ_U(p.reg0b, 0xe8);
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::BlogV4L, 1280000u,
+                                                300000u, &p));
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::BlogV3, 1280000u,
+                                                200000u, &p));
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::BlogV4, 96100000u,
+                                                400000u, &p));
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::NooelecSmartV5,
+                                                96100000u, 0u, &p));
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, 1280000u), 4u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 1280000u), 0u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 24000000u), 7u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 96100000u), 7u);
+    int calls = 0;
+    const auto prev = MeasuredTunerBandwidthPlan{0, 1814972, 0xc4, 0x8f,
+                                                  0x3b, 0xf7, 0x78};
+    const auto next = MeasuredTunerBandwidthPlan{500000, 2025000, 0xc4, 0xe8,
+                                                  0x3b, 0x80, 0x00};
+    EXPECT_EQ_U(rtl_bandwidth_commit(prev, next, [&](const auto &v, bool) {
+                    ++calls; return v.requested_hz == 0 ? 0 : -1;
+                }), RtlBandwidthCommitResult::RolledBack);
+    EXPECT_EQ_U(calls, 2);
+    calls = 0;
+    EXPECT_EQ_U(rtl_bandwidth_commit(prev, next, [&](const auto &v, bool applying_next) {
+                    ++calls; return applying_next && v.requested_hz == 500000u ? 0 : -1;
+                }), RtlBandwidthCommitResult::Applied);
+    EXPECT_EQ_U(calls, 1);
+    EXPECT_EQ_U(rtl_bandwidth_commit(prev, next, [&](const auto &, bool) { return -1; }),
+                RtlBandwidthCommitResult::Fault);
 }
 
 static void test_matched_if_policy(void)
@@ -513,6 +575,7 @@ int main(void)
     test_tuner_isolation();
     test_frequency_policy();
     test_v4l_tune_records();
+    test_bandwidth_plan_and_rollback();
     test_matched_if_policy();
     test_v3_direct_transition_records();
     test_capability_matrix();

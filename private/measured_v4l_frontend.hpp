@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
+
+#include "rtl_control.hpp"
 
 /* V4L R828S route from the 2026-09-25 vendor-driver USB capture.
  * This is not V4's R828D three-input triplexer. */
@@ -35,4 +38,29 @@ constexpr MeasuredV4LFrontendPlan measured_v4l_frontend_plan(uint32_t rf_hz,
         static_cast<uint8_t>((hf_gpio ? 0xe0 : 0x80) | (reg05_low_bits & 0x1f)),
         upconverted,
     };
+}
+
+/* Patch the existing PLL template at its capture-derived input phases. A
+ * false result skips V4-only post-PLL writes, including its reg-06 triplexer. */
+inline bool measured_v4l_patch_tune_record(uint32_t rf_hz, size_t index,
+                                            RtlControlRecord &rec)
+{
+    const auto plan = measured_v4l_frontend_plan(rf_hz, false, 0);
+    switch (index) {
+    case 0: rec.data[1] = plan.pre17; break;
+    case 1: rec.data[1] = plan.pre1a; break;
+    case 2: rec.data[1] = plan.pre1b; break;
+    case 19:
+        if (!plan.post_input) return false;
+        rec.data[1] = plan.post1a;
+        break;
+    case 20:
+        if (!plan.post_input) return false;
+        rec.data[0] = 0x1b;
+        rec.data[1] = plan.post1b;
+        break;
+    case 21: return false;
+    default: break;
+    }
+    return true;
 }

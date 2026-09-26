@@ -36,6 +36,7 @@
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
 #include "measured_gain_bias_v4.hpp"
+#include "measured_v4l_frontend.hpp"
 #include "gain_r820t2.hpp"
 #include "reentrancy.hpp"
 #include "rtl_multi.hpp"
@@ -1252,7 +1253,8 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
                          &r22)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
-    const bool hf = rtl_profile_uses_v4_hf_routing(profile) &&
+    const bool hf = (rtl_profile_device_capabilities(profile) &
+                     ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0 &&
                     esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz);
     ESP_LOGI(TAG,
              "tune rf=%u Hz tuner=%u Hz ppm=%d hf_upconv=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x pll_if_hz=%u",
@@ -1263,6 +1265,12 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     int skipped = 0;
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
         RtlControlRecord rec = kRtlFinalTuneTemplate[i];
+        if (profile == RtlProfileId::BlogV4L &&
+            !measured_v4l_patch_tune_record(frequency_hz, i, rec)) {
+            rec_us[i] = 0;
+            skipped++;
+            continue;
+        }
         if (i == 3 || i == 7) {
             rec.data[1] = r16_setup;
         }
@@ -1451,6 +1459,20 @@ static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz,
 
 static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz)
 {
+    if (h->profile == RtlProfileId::BlogV4L) {
+        const auto plan = measured_v4l_frontend_plan(rf_hz, h->bias_tee_want,
+                                                       h->tuner_reg05_low_bits);
+        const RtlControlRecord gpio[] = {
+            {0x3004, 0x0210, 0x40, 1, {plan.gpd}},
+            {0x3003, 0x0210, 0x40, 1, {plan.gpoe}},
+            {0x3001, 0x0210, 0x40, 1, {plan.gpo}},
+        };
+        esp_err_t err = run_records(h, gpio, std::size(gpio));
+        if (err == ESP_OK) {
+            err = run_record(h, measured_v4_ir_reg_write(0x05, plan.reg05), false);
+        }
+        return err;
+    }
     const bool uhf = measured_v4_frontend_band(rf_hz) == MeasuredV4FrontendBand::UHF;
     const uint8_t reg0c = (h->tuner_auto_applied || uhf) ? kMeasuredV4TunerAgcReg0c
                                                         : kMeasuredV4GainReg0c;
@@ -3607,15 +3629,10 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                          "2026-09-21 (1.62 GB, 787 s, 0 usb errors)",
                          rtl_profile_name(handle->profile));
             } else if (handle->profile == RtlProfileId::BlogV4L) {
-                /* R828S on the V4L answers where an R820T/R860 would, so it
-                 * shares this remapped stream path. What it does NOT share
-                 * is the V3's HF handling: the V4L reaches HF through an
-                 * upconverter, so direct sampling is disabled for it and
-                 * tuning below the native floor fails closed until that
-                 * upconverter's control is captured. */
-                ESP_LOGW(TAG,
+                /* Separate captured V4L upconverter route, not V3 direct Q. */
+                ESP_LOGI(TAG,
                          "%s: R828S on the shared R820T2 stream path "
-                         "(I2C 0x34 remap); VHF/UHF only, HF fails closed",
+                         "(I2C 0x34 remap); measured HF upconverter route",
                          rtl_profile_name(handle->profile));
             } else {
                 ESP_LOGW(TAG,

@@ -141,7 +141,7 @@ static void test_frequency_policy(void)
         EXPECT_EQ_U(plan.pre1b, 0xdf);
         EXPECT_EQ_U(plan.gpo, 0x18);
         EXPECT_EQ_U(plan.reg05, 0xe3);
-        EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, rf));
+        EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, rf));
     }
     const uint32_t v4l_native[] = {28800000u, 28800001u, 96100000u,
                                     250000000u, 1090000000u};
@@ -211,6 +211,36 @@ static void test_frequency_policy(void)
     EXPECT_EQ_U(rtl_profile_v3_direct_nco_word(147300u, 100), 0x3fac32u);
     EXPECT_EQ_U(rtl_profile_v3_direct_nco_word(147300u, -100), 0x3fac36u);
     EXPECT_EQ_U(rtl_profile_v3_direct_nco_word(23999999u, 1000), 0x0a9d04u);
+}
+
+static void test_v4l_tune_records(void)
+{
+    RtlControlRecord rec = kRtlFinalTuneTemplate[0];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 0, rec));
+    EXPECT_EQ_U(rec.data[0], 0x17);
+    EXPECT_EQ_U(rec.data[1], 0x28);
+    rec = kRtlFinalTuneTemplate[2];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 2, rec));
+    EXPECT_EQ_U(rec.data[1], 0xdf);
+    rec = kRtlFinalTuneTemplate[19];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 19, rec));
+    EXPECT_EQ_U(rec.data[0], 0x1a);
+    EXPECT_EQ_U(rec.data[1], 0x68);
+    rec = kRtlFinalTuneTemplate[20];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 20, rec));
+    EXPECT_EQ_U(rec.data[0], 0x1b);
+    EXPECT_EQ_U(rec.data[1], 0x00);
+    rec = kRtlFinalTuneTemplate[21];
+    EXPECT_TRUE(!measured_v4l_patch_tune_record(1280000u, 21, rec));
+    rec = kRtlFinalTuneTemplate[19];
+    EXPECT_TRUE(!measured_v4l_patch_tune_record(96100000u, 19, rec));
+    rec = kRtlFinalTuneTemplate[0];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(96100000u, 0, rec));
+    EXPECT_EQ_U(rec.data[1], 0x20);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(28800000u, false, 3).gpo, 0x18);
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 1280000u));
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::BlogV4L) &
+                 ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0);
 }
 
 static void test_matched_if_policy(void)
@@ -446,10 +476,10 @@ static void test_blog_v4l_identity(void)
     /* Nor does it claim the V4 front-end routing, which is a different board. */
     EXPECT_TRUE(!rtl_profile_uses_v4_hf_routing(RtlProfileId::BlogV4L));
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::BlogV4L) &
-                 ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
+                 ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0);
 
-    /* HF fails closed until that upconverter's control is captured. */
-    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 10000000u));
+    /* Its separately captured upconverter now handles HF. */
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 10000000u));
     EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 100100000u));
 
     /* VHF/UHF streams, and keeps the cold tuner reinit the V4L was observed
@@ -469,6 +499,7 @@ int main(void)
     test_unknown_reject_and_v3_probe();
     test_tuner_isolation();
     test_frequency_policy();
+    test_v4l_tune_records();
     test_matched_if_policy();
     test_v3_direct_transition_records();
     test_capability_matrix();

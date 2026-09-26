@@ -44,18 +44,21 @@ struct MeasuredV4FrontendPlan {
     uint8_t gpo;
 };
 
-/** Capture-derived Blog V4 route. Exactly 28.8 MHz remains on Cable-2. */
-constexpr MeasuredV4FrontendBand measured_v4_frontend_band(uint32_t rf_hz)
+/** Capture-derived Blog V4 route. Exactly 28.8 MHz remains on Cable-2.
+ * direct: 24-28.8 MHz on the VHF input instead of the upconverter
+ * (esp_rtl_sdr_set_hf_direct_min_hz); triplexer loss there is unmeasured. */
+constexpr MeasuredV4FrontendBand measured_v4_frontend_band(uint32_t rf_hz, bool direct = false)
 {
-    return rf_hz <= 28800000u ? MeasuredV4FrontendBand::HF
+    return rf_hz <= 28800000u && !direct ? MeasuredV4FrontendBand::HF
                               : (rf_hz >= 250000000u ? MeasuredV4FrontendBand::UHF
                                                      : MeasuredV4FrontendBand::VHF);
 }
 
 constexpr MeasuredV4FrontendPlan measured_v4_frontend_plan(uint32_t rf_hz, bool bias_tee,
-                                                            uint8_t raw_reg05)
+                                                            uint8_t raw_reg05,
+                                                            bool direct = false)
 {
-    const MeasuredV4FrontendBand band = measured_v4_frontend_band(rf_hz);
+    const MeasuredV4FrontendBand band = measured_v4_frontend_band(rf_hz, direct);
     const uint8_t input = band == MeasuredV4FrontendBand::HF
                               ? 0xa0
                               : (band == MeasuredV4FrontendBand::UHF ? 0x80 : 0xe0);

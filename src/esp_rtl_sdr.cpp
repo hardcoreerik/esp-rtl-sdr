@@ -36,6 +36,8 @@
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
 #include "measured_gain_bias_v4.hpp"
+#include "measured_v4l_frontend.hpp"
+#include "measured_tuner_bandwidth.hpp"
 #include "gain_r820t2.hpp"
 #include "reentrancy.hpp"
 #include "rtl_multi.hpp"
@@ -337,6 +339,13 @@ struct esp_rtl_sdr_handle {
     /** ctrl_xfer submitted and its callback not yet run. usb_host_device_close()
      *  asserts (usbh num_ctrl_xfers_inflight == 0) while this is true. */
     std::atomic<bool> ctrl_inflight{false};
+    /** Device handles whose close was skipped because a control transfer never
+     *  finished. ESP-IDF keeps a gone device alive while it is still open, so
+     *  dropping the handle would leak the device and can block later hotplug;
+     *  the client task retries these once the control path is idle. Only the
+     *  client task (or install/uninstall with it stopped) touches this list. */
+    static constexpr size_t kMaxDeferredClose = 4;
+    usb_device_handle_t deferred_close[kMaxDeferredClose]{};
 
     usb_transfer_t **bulk = nullptr;
     uint32_t bulk_num = 0;
@@ -380,7 +389,8 @@ struct esp_rtl_sdr_handle {
     volatile bool pending_bias_enable = false;
     volatile bool pending_rtl_agc = false;
     volatile bool pending_rtl_agc_enable = false;
-    volatile bool ep0_sideband_busy = false;
+    volatile bool pending_bandwidth = false;
+    std::atomic<bool> ep0_sideband_busy{false}; /* shared retune/sideband EP0 window */
 
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
     uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
@@ -421,6 +431,12 @@ struct esp_rtl_sdr_handle {
     bool bias_tee_want = false;
     bool rtl_agc_want = false;
     bool tuner_auto_applied = false; /* true after AUTO trio actually written */
+    uint32_t bandwidth_requested_hz = 0;
+    /** V4L: RF in [hf_direct_min_hz, 28.8 MHz) skips the upconverter. 0 = off. */
+    uint32_t hf_direct_min_hz = 0;
+    MeasuredTunerBandwidthPlan bandwidth_applied{};
+    uint32_t bandwidth_applied_rf_hz = 0;
+    bool bandwidth_applied_valid = false;
     uint8_t tuner_reg05_low_bits = 0x03;
     uint8_t tuner_reg07 = 0x75;
     MeasuredV4FrontendPlan frontend_applied{};
@@ -723,7 +739,7 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->tuner_reg05_low_bits = 0x03;
     h->tuner_reg07 = 0x75;
     h->tuner_auto_applied = false;
-    h->bias_tee_want = false;
+    rtl_profile_clear_bias_request(h->bias_tee_want);
     h->rtl_agc_want = false;
     h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     h->gain_tenth_db = 0;
@@ -732,6 +748,12 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->pending_gain_mode = false;
     h->pending_bias = false;
     h->pending_rtl_agc = false;
+    h->pending_bandwidth = false;
+    h->bandwidth_requested_hz = 0;
+    h->hf_direct_min_hz = 0;
+    h->bandwidth_applied = {};
+    h->bandwidth_applied_rf_hz = 0;
+    h->bandwidth_applied_valid = false;
     h->passport = {};
     h->passport_valid = false;
 }
@@ -765,14 +787,32 @@ static bool wait_ctrl_idle(esp_rtl_sdr_handle *h, uint32_t timeout_ms)
     return true;
 }
 
+static void defer_device_close(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
+{
+    for (usb_device_handle_t &slot : h->deferred_close) {
+        if (slot == dev) {
+            return;
+        }
+    }
+    for (usb_device_handle_t &slot : h->deferred_close) {
+        if (slot == nullptr) {
+            slot = dev;
+            ESP_LOGW(TAG, "device close deferred until the control transfer completes");
+            return;
+        }
+    }
+    ESP_LOGE(TAG, "device close deferred list full: handle leaked");
+}
+
 /* usb_host_device_close() asserts if a control transfer is still in flight on
  * the device (seen on a Tab5 when a dongle dropped out mid-init). Let it
  * complete first, then close under ctrl_mutex so no new transfer can start.
- * If it never completes, leak the handle rather than crash. */
-static void close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
+ * If it never completes, park the handle for retry_deferred_closes() rather
+ * than crash or lose it. Returns true when the device was closed. */
+static bool close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
 {
     if (h == nullptr || h->client == nullptr || dev == nullptr) {
-        return;
+        return false;
     }
     const uint32_t wait_ms = h->cfg.control_timeout_ms + 500;
     (void)wait_ctrl_idle(h, wait_ms);  // lets a submitter finish and drop ctrl_mutex
@@ -784,12 +824,43 @@ static void close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
     if (h->ctrl_mutex == nullptr ||
         xSemaphoreTake(h->ctrl_mutex, pdMS_TO_TICKS(lock_ms)) != pdTRUE) {
         ESP_LOGE(TAG, "device close skipped: control transfer path still busy");
-        return;
+        defer_device_close(h, dev);
+        return false;
     }
+    bool closed = false;
     if (wait_ctrl_idle(h, wait_ms)) {
-        usb_host_device_close(h->client, dev);
+        closed = usb_host_device_close(h->client, dev) == ESP_OK;
     } else {
         ESP_LOGE(TAG, "device close skipped: control transfer still in flight");
+    }
+    xSemaphoreGive(h->ctrl_mutex);
+    if (!closed) {
+        defer_device_close(h, dev);
+    }
+    return closed;
+}
+
+/* Client task: close parked handles once the control path is idle. Never
+ * blocks, so it can run on every event pass. */
+static void retry_deferred_closes(esp_rtl_sdr_handle *h)
+{
+    if (h->client == nullptr || h->ctrl_mutex == nullptr ||
+        h->ctrl_inflight.load(std::memory_order_acquire)) {
+        return;
+    }
+    bool any = false;
+    for (usb_device_handle_t slot : h->deferred_close) {
+        any |= slot != nullptr;
+    }
+    if (!any || xSemaphoreTake(h->ctrl_mutex, 0) != pdTRUE) {
+        return;
+    }
+    for (usb_device_handle_t &slot : h->deferred_close) {
+        if (slot != nullptr && !h->ctrl_inflight.load(std::memory_order_acquire) &&
+            usb_host_device_close(h->client, slot) == ESP_OK) {
+            ESP_LOGI(TAG, "deferred device close completed");
+            slot = nullptr;
+        }
     }
     xSemaphoreGive(h->ctrl_mutex);
 }
@@ -1229,12 +1300,28 @@ static esp_err_t run_v3_leave_direct(esp_rtl_sdr_handle *h)
     return err;
 }
 
+static bool profile_has_hf_direct_route(RtlProfileId profile)
+{
+    return profile == RtlProfileId::BlogV4L || profile == RtlProfileId::BlogV4;
+}
+
+/* V4L/V4: tune this RF directly on the tuner (no 28.8 MHz upconverter). The
+ * upconverter's LO harmonic folds strong MW (f) onto 28.8 MHz - f, which puts
+ * AM broadcast stations on CB channels; the direct input avoids that. */
+static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t rf_hz)
+{
+    return h != nullptr && profile_has_hf_direct_route(h->profile) &&
+           h->hf_direct_min_hz != 0 && rf_hz >= h->hf_direct_min_hz &&
+           rf_hz < ESP_RTL_SDR_XTAL_HZ;
+}
+
 /**
  * Program R828D PLL for *user RF* frequency_hz.
  * Blog V4 HF (public): RF < 28.8 MHz is upconverted by 28.8 MHz before the tuner.
  * User-facing metrics keep RF; only the PLL pack uses tuner_hz.
  */
-static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
+static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
+                          uint32_t tuner_if_hz = 0)
 {
     if (h != nullptr && !rtl_profile_supports_rf_hz(h->profile, frequency_hz)) {
         ESP_LOGW(TAG, "profile %s rejects rf=%u",
@@ -1242,18 +1329,22 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
     const RtlProfileId profile = h != nullptr ? h->profile : RtlProfileId::BlogV4;
-    const uint32_t tuner_base = rtl_profile_tuner_frequency_hz(profile, frequency_hz);
+    const bool hf_direct = hf_direct_route(h, frequency_hz);
+    const uint32_t tuner_base =
+        rtl_profile_tuner_frequency_hz(profile, frequency_hz, hf_direct);
     const uint32_t tune_hz =
         apply_freq_correction_hz(tuner_base, h != nullptr ? h->freq_correction_ppm : 0);
     uint8_t r16_setup = 0, r16_active = 0, r20 = 0, r21 = 0, r22 = 0;
     const double xtal_hz = rtl_profile_pll_xtal_hz(profile);
-    const double if_offset_hz = rtl_profile_pll_if_offset_hz(profile);
+    const double if_offset_hz = tuner_if_hz != 0 ? static_cast<double>(tuner_if_hz)
+                                                  : rtl_profile_pll_if_offset_hz(profile);
     if (!encode_r820_pll(tune_hz, xtal_hz, if_offset_hz, &r16_setup, &r16_active, &r20, &r21,
                          &r22)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
-    const bool hf = rtl_profile_uses_v4_hf_routing(profile) &&
-                    esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz);
+    const bool hf = (rtl_profile_device_capabilities(profile) &
+                     ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0 &&
+                    esp_rtl_sdr_frequency_uses_hf_upconverter(frequency_hz) && !hf_direct;
     ESP_LOGI(TAG,
              "tune rf=%u Hz tuner=%u Hz ppm=%d hf_upconv=%d r16=%02x/%02x r20=%02x r21=%02x r22=%02x pll_if_hz=%u",
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
@@ -1263,6 +1354,12 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     int skipped = 0;
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
         RtlControlRecord rec = kRtlFinalTuneTemplate[i];
+        if (profile == RtlProfileId::BlogV4L &&
+            !measured_v4l_patch_tune_record(frequency_hz, i, rec, hf_direct)) {
+            rec_us[i] = 0;
+            skipped++;
+            continue;
+        }
         if (i == 3 || i == 7) {
             rec.data[1] = r16_setup;
         }
@@ -1320,7 +1417,8 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
 }
 
 static esp_err_t run_profile_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
-                                  uint32_t previous_frequency_hz)
+                                  uint32_t previous_frequency_hz,
+                                  uint32_t tuner_if_hz = 0)
 {
     const bool direct = rtl_profile_uses_v3_direct_sampling(h->profile, frequency_hz);
     const bool was_direct = previous_frequency_hz != 0 &&
@@ -1340,7 +1438,7 @@ static esp_err_t run_profile_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
         if (err != ESP_OK) {
             return err;
         }
-        err = run_tune(h, frequency_hz);
+        err = run_tune(h, frequency_hz, tuner_if_hz);
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "V3 RF mode DIRECT_SAMPLING_Q -> NORMAL_TUNER");
         }
@@ -1361,7 +1459,7 @@ static esp_err_t run_profile_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
             return rep;
         }
     }
-    return run_tune(h, frequency_hz);
+    return run_tune(h, frequency_hz, tuner_if_hz);
 }
 
 /**
@@ -1402,7 +1500,7 @@ static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz,
         return ESP_OK;
     }
     const MeasuredV4FrontendPlan plan =
-        measured_v4_frontend_plan(rf_hz, h->bias_tee_want, raw_reg05);
+        measured_v4_frontend_plan(rf_hz, h->bias_tee_want, raw_reg05, hf_direct_route(h, rf_hz));
     const bool uhf = plan.band == MeasuredV4FrontendBand::UHF;
     const bool hf = plan.band == MeasuredV4FrontendBand::HF;
     const RtlControlRecord records[] = {
@@ -1451,10 +1549,105 @@ static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz,
 
 static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz)
 {
+    if (h->profile == RtlProfileId::BlogV4L) {
+        const auto plan = measured_v4l_frontend_plan(rf_hz, h->bias_tee_want,
+                                                       h->tuner_reg05_low_bits,
+                                                       hf_direct_route(h, rf_hz));
+        const RtlControlRecord gpio[] = {
+            {0x3004, 0x0210, 0x40, 1, {plan.gpd}},
+            {0x3003, 0x0210, 0x40, 1, {plan.gpoe}},
+            {0x3001, 0x0210, 0x40, 1, {plan.gpo}},
+        };
+        esp_err_t err = run_records(h, gpio, std::size(gpio));
+        if (err == ESP_OK) {
+            err = run_record(h, measured_v4_ir_reg_write(0x05, plan.reg05), false);
+        }
+        return err;
+    }
     const bool uhf = measured_v4_frontend_band(rf_hz) == MeasuredV4FrontendBand::UHF;
     const uint8_t reg0c = (h->tuner_auto_applied || uhf) ? kMeasuredV4TunerAgcReg0c
                                                         : kMeasuredV4GainReg0c;
     return run_band_frontend(h, rf_hz, h->tuner_reg05_low_bits, h->tuner_reg07, reg0c);
+}
+
+/* Filter, PLL and demod IF are one paused-IQ operation. The vendor PC
+ * captures prove matching controls at 2.4 MS/s, not analog passband. */
+static esp_err_t run_bandwidth_program(esp_rtl_sdr_handle *h, uint32_t rf_hz,
+                                       uint32_t previous_rf_hz,
+                                       const MeasuredTunerBandwidthPlan &plan)
+{
+    if (previous_rf_hz != 0 &&
+        rtl_profile_uses_v3_direct_sampling(h->profile, previous_rf_hz)) {
+        const esp_err_t leave = run_v3_leave_direct(h);
+        if (leave != ESP_OK) return leave;
+        previous_rf_hz = 0; /* already left Q-branch before filter writes */
+    }
+    esp_err_t err = run_records(h, kBlogV3TunerRepeaterOn,
+                                 std::size(kBlogV3TunerRepeaterOn));
+    if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x0a, plan.reg0a), false);
+    if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x0b, plan.reg0b), false);
+    if (err == ESP_OK) err = run_profile_tune(h, rf_hz, previous_rf_hz, plan.if_hz);
+    if (err != ESP_OK) return err;
+    const RtlControlRecord demod_if[] = {
+        {0x1920, 0x0011, 0x40, 1, {plan.if19}},
+        {0x1a20, 0x0011, 0x40, 1, {plan.if1a}},
+        {0x1b20, 0x0011, 0x40, 1, {plan.if1b}},
+    };
+    err = run_records(h, demod_if, std::size(demod_if));
+    return err == ESP_OK ? run_band_frontend(h, rf_hz) : err;
+}
+
+/* On a failed live write, restore the saved RF/filter/PLL/IF before IQ resumes. */
+static esp_err_t apply_bandwidth_transaction(esp_rtl_sdr_handle *h, uint32_t rf_hz,
+                                               uint32_t width_hz)
+{
+    MeasuredTunerBandwidthPlan next{};
+    if (!measured_tuner_bandwidth_plan(h->profile, rf_hz, width_hz, &next,
+                                       hf_direct_route(h, rf_hz))) {
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
+    const auto previous = h->bandwidth_applied;
+    const uint32_t previous_rf = h->bandwidth_applied_rf_hz;
+    const uint32_t tune_from = h->frequency_hz;
+    if (!h->bandwidth_applied_valid) {
+        const esp_err_t err = run_bandwidth_program(h, rf_hz, tune_from, next);
+        if (err != ESP_OK) {
+            if (h->streaming) {
+                h->state = ESP_RTL_SDR_STATE_FAULT;
+                h->streaming = false;
+                h->pause_resubmit = true;
+                set_error_unlocked(h, ESP_RTL_SDR_ERR_FAULT);
+                return ESP_RTL_SDR_ERR_FAULT;
+            }
+            return err;
+        }
+    } else {
+        esp_err_t write_error = ESP_OK;
+        const auto outcome = rtl_bandwidth_commit(previous, next,
+            [&](const MeasuredTunerBandwidthPlan &plan, bool applying_next) {
+                const esp_err_t err = run_bandwidth_program(
+                    h, applying_next ? rf_hz : previous_rf,
+                    applying_next ? tune_from : rf_hz, plan);
+                if (applying_next) write_error = err;
+                return err;
+            });
+        if (outcome == RtlBandwidthCommitResult::Fault) {
+            h->state = ESP_RTL_SDR_STATE_FAULT;
+            h->streaming = false;
+            h->pause_resubmit = true;
+            set_error_unlocked(h, ESP_RTL_SDR_ERR_FAULT);
+            return ESP_RTL_SDR_ERR_FAULT;
+        }
+        if (outcome == RtlBandwidthCommitResult::RolledBack) {
+            set_error_unlocked(h, write_error);
+            return write_error;
+        }
+    }
+    h->bandwidth_applied = next;
+    h->bandwidth_applied_rf_hz = rf_hz;
+    h->bandwidth_applied_valid = true;
+    set_error_unlocked(h, ESP_OK);
+    return ESP_OK;
 }
 
 static uint32_t frontend_rf_hz(const esp_rtl_sdr_handle *h)
@@ -1462,11 +1655,28 @@ static uint32_t frontend_rf_hz(const esp_rtl_sdr_handle *h)
     return h->frequency_hz != 0 ? h->frequency_hz : h->preferred_frequency_hz;
 }
 
+static esp_err_t run_bias_gpio_records(esp_rtl_sdr_handle *h, bool enable)
+{
+    const RtlControlRecord records[] = {
+        {0x3004, 0x0210, 0x40, 1, {0x06}},
+        {0x3003, 0x0210, 0x40, 1, {0x19}},
+        {0x3001, 0x0210, 0x40, 1, {static_cast<uint8_t>(enable ? 0x19 : 0x18)}},
+    };
+    return run_records(h, records, std::size(records));
+}
+
 static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
 {
-    if (h == nullptr || h->profile != RtlProfileId::BlogV4) {
+    if (h == nullptr) {
         return;
     }
+    if ((h->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0) {
+        (void)run_bias_gpio_records(h, false);
+    }
+    if (h->profile == RtlProfileId::BlogV3 || h->profile == RtlProfileId::BlogV4L) {
+        return;
+    }
+    if (h->profile != RtlProfileId::BlogV4) return;
     for (const auto &rec : kRtlCleanupTransfers) {
         (void)run_record(h, rec, true);
     }
@@ -1820,7 +2030,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     if (freq == 0) {
         return ESP_OK;
     }
-    if (h->retune_busy) {
+    if (h->ep0_sideband_busy.exchange(true)) {
         return ESP_OK; /* another apply in flight; pending remains */
     }
     h->retune_busy = true;
@@ -1836,6 +2046,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 
     if (!bulk_pause_and_drain(h)) {
         h->retune_busy = false;
+        h->ep0_sideband_busy = false;
         return ESP_RTL_SDR_ERR_TIMEOUT;
     }
 
@@ -1845,6 +2056,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
             h->pending_retune_hz = 0;
         }
         h->retune_busy = false;
+        h->ep0_sideband_busy = false;
         return ESP_RTL_SDR_ERR_NOT_STREAMING;
     }
 
@@ -1854,16 +2066,38 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 
     t_drained = esp_timer_get_time();
     h->frontend_applied_valid = false;
-    esp_err_t err = run_profile_tune(h, tune_hz, h->frequency_hz);
-    t_tuned = esp_timer_get_time();
-    if (err == ESP_OK) {
-        err = run_band_frontend(h, tune_hz);
+    esp_err_t err = ESP_OK;
+    const uint32_t requested_width = h->bandwidth_requested_hz;
+    uint32_t applied_width = requested_width;
+    const bool measured_bw = h->sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
+        measured_tuner_bandwidth_count(h->profile, tune_hz, hf_direct_route(h, tune_hz)) != 0;
+    if (measured_bw) {
+        MeasuredTunerBandwidthPlan requested{};
+        if (!measured_tuner_bandwidth_plan(h->profile, tune_hz, applied_width, &requested,
+                                           hf_direct_route(h, tune_hz))) {
+            applied_width = 0; /* width from a different route class */
+        }
+        err = apply_bandwidth_transaction(h, tune_hz, applied_width);
+    } else {
+        err = run_profile_tune(h, tune_hz, h->frequency_hz);
+        if (err == ESP_OK) err = run_band_frontend(h, tune_hz);
     }
+    t_tuned = esp_timer_get_time();
     t_frontend = esp_timer_get_time();
     if (err == ESP_OK) {
         h->frequency_hz = tune_hz;
         h->metrics.frequency_hz = tune_hz;
         h->preferred_frequency_hz = tune_hz;
+        if (measured_bw) {
+            if (h->bandwidth_requested_hz == requested_width) {
+                h->bandwidth_requested_hz = applied_width;
+                h->pending_bandwidth = false;
+            }
+        } else {
+            h->bandwidth_applied_valid = false;
+            h->bandwidth_requested_hz = 0;
+            h->pending_bandwidth = false;
+        }
         if (rtl_profile_uses_v3_direct_sampling(h->profile, tune_hz)) {
             /* The tuner is bypassed in V3 Q-branch mode. */
             h->pending_gain = false;
@@ -1874,17 +2108,21 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         }
         ESP_LOGI(TAG, "hot retune applied rf=%u Hz tuner=%u Hz direct=%d",
                  static_cast<unsigned>(tune_hz),
-                 static_cast<unsigned>(rtl_profile_tuner_frequency_hz(h->profile, tune_hz)),
+                 static_cast<unsigned>(rtl_profile_tuner_frequency_hz(
+                     h->profile, tune_hz, hf_direct_route(h, tune_hz))),
                  rtl_profile_uses_v3_direct_sampling(h->profile, tune_hz) ? 1 : 0);
     } else {
         ESP_LOGW(TAG, "hot retune EP0 failed: %s (tune/route may be partially applied)",
                  esp_rtl_sdr_err_to_name(err));
+        if (measured_bw && h->bandwidth_requested_hz == requested_width) {
+            h->pending_bandwidth = false; /* failed bundled request; do not apply at old RF */
+        }
         if (h->pending_retune_hz == tune_hz) {
             h->pending_retune_hz = 0;
         }
     }
 
-    bulk_resume(h);
+    if (h->state != ESP_RTL_SDR_STATE_FAULT) bulk_resume(h);
     const int64_t t_resumed = esp_timer_get_time();
     RTL_LOGD(h, "retune phases us: drain=%lld tune=%lld frontend=%lld resume=%lld total=%lld",
              (long long)(t_drained - t_rt0), (long long)(t_tuned - t_drained),
@@ -1892,6 +2130,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
              (long long)(t_resumed - t_rt0));
 
     h->retune_busy = false;
+    h->ep0_sideband_busy = false;
 
     if (err == ESP_OK) {
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
@@ -2166,7 +2405,7 @@ static void delivery_task_fn(void *arg)
         }
         if (h->streaming && !h->retune_busy && !h->ep0_sideband_busy &&
             (h->pending_gain || h->pending_bias || h->pending_gain_mode ||
-             h->pending_rtl_agc)) {
+             h->pending_rtl_agc || h->pending_bandwidth)) {
             (void)apply_pending_sideband_ep0(h);
         }
 
@@ -2788,6 +3027,7 @@ static void client_task_fn(void *arg)
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
         usb_host_client_handle_events(h->client, pdMS_TO_TICKS(20));
+        retry_deferred_closes(h);
         if (h->device_gone) {
             h->device_gone = false;
             RTL_LOGW(h, "usb disconnected profile=%s addr=%u (other handles unaffected)",
@@ -3136,6 +3376,7 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     handle->worker_task_count = 0;
 
     close_opened_device(handle);
+    retry_deferred_closes(handle);  // workers are joined: last chance before deregister
     if (handle->client_registered) {
         usb_host_client_deregister(handle->client);
         handle->client_registered = false;
@@ -3340,7 +3581,9 @@ esp_err_t esp_rtl_sdr_get_capture_meta(esp_rtl_sdr_handle_t handle,
     }
     const uint32_t center = handle->frequency_hz != 0 ? handle->frequency_hz
                                                       : handle->preferred_frequency_hz;
-    const uint32_t tuner = esp_rtl_sdr_tuner_frequency_hz(center);
+    const uint32_t tuner = hf_direct_route(handle, center)
+                               ? center
+                               : esp_rtl_sdr_tuner_frequency_hz(center);
     esp_rtl_sdr_fill_capture_meta(
         out, handle->logical_index, handle->open_addr, handle->usb_hub_port, handle->iq_sequence,
         handle->last_xfer_timestamp_us, 0, center, tuner, handle->sample_rate_sps,
@@ -3416,6 +3659,15 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
         timeout_ms = ESP_RTL_SDR_MAX_TIMEOUT_MS;
     }
 
+    /* Stop owns the same EP0 window as live retune/sideband, so a queued
+     * bias ON can never race the final OFF cleanup. */
+    const int64_t deadline_us = esp_timer_get_time() +
+                                static_cast<int64_t>(timeout_ms) * 1000;
+    while (h->ep0_sideband_busy.exchange(true)) {
+        if (esp_timer_get_time() >= deadline_us) return ESP_RTL_SDR_ERR_TIMEOUT;
+        vTaskDelay(1);
+    }
+
     const bool was_streaming = h->streaming || h->state == ESP_RTL_SDR_STATE_STREAMING ||
                                h->state == ESP_RTL_SDR_STATE_STOPPING;
     h->state = ESP_RTL_SDR_STATE_STOPPING;
@@ -3426,8 +3678,11 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_bias = false;
+    rtl_profile_clear_bias_request(h->bias_tee_want);
     h->pending_rtl_agc = false;
-    h->ep0_sideband_busy = false;
+    h->pending_bandwidth = false;
+    h->bandwidth_applied_valid = false;
+    h->bandwidth_requested_hz = 0;
 
     /* Same order as bulk_pause_and_drain (shared drain_live_urbs): poll natural
      * completions first, halt/flush/clear only if still live, poll again.
@@ -3482,6 +3737,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
         set_error_unlocked(h, ESP_RTL_SDR_ERR_TIMEOUT);
     }
 
+    h->ep0_sideband_busy = false;
     if (was_streaming && !h->destroying) {
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
         void *ctx = h->cfg.event_ctx;
@@ -3607,15 +3863,10 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                          "2026-09-21 (1.62 GB, 787 s, 0 usb errors)",
                          rtl_profile_name(handle->profile));
             } else if (handle->profile == RtlProfileId::BlogV4L) {
-                /* R828S on the V4L answers where an R820T/R860 would, so it
-                 * shares this remapped stream path. What it does NOT share
-                 * is the V3's HF handling: the V4L reaches HF through an
-                 * upconverter, so direct sampling is disabled for it and
-                 * tuning below the native floor fails closed until that
-                 * upconverter's control is captured. */
-                ESP_LOGW(TAG,
+                /* Separate captured V4L upconverter route, not V3 direct Q. */
+                ESP_LOGI(TAG,
                          "%s: R828S on the shared R820T2 stream path "
-                         "(I2C 0x34 remap); VHF/UHF only, HF fails closed",
+                         "(I2C 0x34 remap); measured HF upconverter route",
                          rtl_profile_name(handle->profile));
             } else {
                 ESP_LOGW(TAG,
@@ -3627,6 +3878,11 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         ret = run_init_table(handle);
         if (ret != ESP_OK) {
             break;
+        }
+        /* A reused handle never carries an ON request across attachments. */
+        if ((handle->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0) {
+            ret = run_bias_gpio_records(handle, false);
+            if (ret != ESP_OK) break;
         }
         ret = run_sample_rate(handle, local.sample_rate_sps);
         if (ret != ESP_OK) {
@@ -3657,11 +3913,13 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                 break;
             }
         }
-        ret = run_profile_tune(handle, freq, 0);
-        if (ret != ESP_OK) {
-            break;
+        if (local.sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
+            measured_tuner_bandwidth_count(handle->profile, freq, hf_direct_route(handle, freq)) != 0) {
+            ret = apply_bandwidth_transaction(handle, freq, 0);
+        } else {
+            ret = run_profile_tune(handle, freq, 0);
+            if (ret == ESP_OK) ret = run_band_frontend(handle, freq);
         }
-        ret = run_band_frontend(handle, freq);
         if (ret != ESP_OK) {
             break;
         }
@@ -4924,20 +5182,13 @@ static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
     const size_t idx = r820t2_nearest_gain_index(tenth_db);
     const R820T2GainStep &st = kR820T2GainSteps[idx];
 
-    /*
-     * V4's manual gain path also writes reg0x0c (kMeasuredV4GainReg0c=0x68,
-     * measured constant across V4's entire gain ladder -- see
-     * measured_gain_bias_v4.hpp). The first cut of this function omitted it,
-     * leaving that VGA/IF gain stage at whatever run_demod_bringup/tuner
-     * init last left it. R828D (V4) and R820T2/R860 (V3c) are both Rafael
-     * Micro R82xx-family parts with the same register layout for 05/07/0c,
-     * so borrowing V4's measured reg0c value here is a reasonable first
-     * attempt, not an independent R820T2 measurement -- flag if it doesn't
-     * hold up on real hardware.
-     */
+    const uint8_t reg05 = h->profile == RtlProfileId::BlogV4L
+        ? measured_v4l_frontend_plan(frontend_rf_hz(h), h->bias_tee_want, st.reg05,
+                                     hf_direct_route(h, frontend_rf_hz(h))).reg05
+        : st.reg05;
     esp_err_t err = ESP_FAIL;
     for (int pass = 0; pass < 3; ++pass) {
-        err = run_record(h, measured_v4_ir_reg_write(0x05, st.reg05), false);
+        err = run_record(h, measured_v4_ir_reg_write(0x05, reg05), false);
         if (err == ESP_OK) {
             err = run_record(h, measured_v4_ir_reg_write(0x07, st.reg07), false);
         }
@@ -4953,6 +5204,8 @@ static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
     if (err != ESP_OK) {
         return err;
     }
+    h->tuner_reg05_low_bits = st.reg05 & 0x1f;
+    h->tuner_reg07 = st.reg07;
     if (applied_tenth != nullptr) {
         *applied_tenth = st.tenth_db;
     }
@@ -4996,8 +5249,23 @@ static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h)
     esp_err_t err = ESP_FAIL;
     const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 3; ++pass) {
-        err = run_band_frontend(h, rf_hz, kMeasuredV4TunerAgcReg05,
-                                kMeasuredV4TunerAgcReg07, kMeasuredV4TunerAgcReg0c);
+        if (h->profile == RtlProfileId::BlogV4) {
+            err = run_band_frontend(h, rf_hz, kMeasuredV4TunerAgcReg05,
+                                    kMeasuredV4TunerAgcReg07, kMeasuredV4TunerAgcReg0c);
+        } else {
+            const uint8_t reg05 = h->profile == RtlProfileId::BlogV4L
+                ? measured_v4l_frontend_plan(rf_hz, h->bias_tee_want, 0x03,
+                                             hf_direct_route(h, rf_hz)).reg05
+                : 0x88;
+            const uint8_t reg07 = h->profile == RtlProfileId::BlogV4L ? 0x75 : 0x78;
+            err = run_record(h, measured_v4_ir_reg_write(0x05, reg05), false);
+            if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x07, reg07), false);
+            if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x0c, 0x6b), false);
+            if (err == ESP_OK) {
+                h->tuner_reg05_low_bits = reg05 & 0x1f;
+                h->tuner_reg07 = reg07;
+            }
+        }
         if (err == ESP_OK) {
             return ESP_OK;
         }
@@ -5028,6 +5296,11 @@ static esp_err_t apply_rtl_agc_records(esp_rtl_sdr_handle *h, bool enable)
 /** Apply Bias-T and the current route together (caller owns bulk pause). */
 static esp_err_t apply_bias_records(esp_rtl_sdr_handle *h, bool enable)
 {
+    if (h->profile != RtlProfileId::BlogV4) {
+        const esp_err_t err = run_bias_gpio_records(h, enable);
+        if (err == ESP_OK) h->bias_tee_want = enable;
+        return err;
+    }
     esp_err_t err = ESP_OK;
     const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 2; ++pass) {
@@ -5061,10 +5334,10 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         return ESP_OK;
     }
     if (!h->pending_gain && !h->pending_bias && !h->pending_gain_mode &&
-        !h->pending_rtl_agc) {
+        !h->pending_rtl_agc && !h->pending_bandwidth) {
         return ESP_OK;
     }
-    h->ep0_sideband_busy = true;
+    if (h->ep0_sideband_busy.exchange(true)) return ESP_OK;
 
     const bool do_bias = h->pending_bias;
     const bool bias_en = h->pending_bias_enable;
@@ -5074,16 +5347,20 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
     const int gain_t = h->pending_gain_tenth;
     const bool do_rtl = h->pending_rtl_agc;
     const bool rtl_en = h->pending_rtl_agc_enable;
+    const bool do_bandwidth = h->pending_bandwidth;
+    const uint32_t width_hz = h->bandwidth_requested_hz;
     h->pending_bias = false;
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_rtl_agc = false;
+    h->pending_bandwidth = false;
 
     if (!bulk_pause_and_drain(h)) {
         h->pending_bias |= do_bias;
         h->pending_gain |= do_gain;
         h->pending_gain_mode |= do_mode;
         h->pending_rtl_agc |= do_rtl;
+        h->pending_bandwidth |= do_bandwidth;
         h->ep0_sideband_busy = false;
         return ESP_RTL_SDR_ERR_TIMEOUT;
     }
@@ -5093,9 +5370,11 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         err = apply_bias_records(h, bias_en);
         if (err == ESP_OK) {
             h->bias_tee_want = bias_en;
-            ESP_LOGI(TAG, "bias-T %s [measured V4, async]", bias_en ? "ON" : "OFF");
+            ESP_LOGI(TAG, "bias-T %s [profile GPIO, async]", bias_en ? "ON" : "OFF");
         } else {
             ESP_LOGW(TAG, "bias-T EP0 failed: %s", esp_rtl_sdr_err_to_name(err));
+            rtl_profile_clear_bias_request(h->bias_tee_want);
+            (void)run_bias_gpio_records(h, false);
         }
     }
 
@@ -5109,7 +5388,7 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         if (aerr == ESP_OK) {
             h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
             h->tuner_auto_applied = true;
-            ESP_LOGI(TAG, "tuner AGC AUTO [measured V4, async]");
+            ESP_LOGI(TAG, "tuner AGC AUTO [profile, async]");
         } else {
             ESP_LOGW(TAG, "tuner AGC AUTO EP0 failed: %s", esp_rtl_sdr_err_to_name(aerr));
             if (err == ESP_OK) {
@@ -5147,7 +5426,12 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         }
     }
 
-    bulk_resume(h);
+    if (do_bandwidth && h->state != ESP_RTL_SDR_STATE_FAULT) {
+        const esp_err_t berr = apply_bandwidth_transaction(h, h->frequency_hz, width_hz);
+        if (berr != ESP_OK && err == ESP_OK) err = berr;
+    }
+
+    if (h->state != ESP_RTL_SDR_STATE_FAULT) bulk_resume(h);
     h->ep0_sideband_busy = false;
 
     /* If newer requests arrived while busy, leave them for next delivery pass. */
@@ -5171,7 +5455,7 @@ static esp_err_t apply_profile_gain(esp_rtl_sdr_handle *h, int tenth_db, int *ap
     return apply_gain_records(h, tenth_db, applied_tenth);
 }
 
-static esp_err_t apply_measured_v4_bias(esp_rtl_sdr_handle *h, bool enable)
+static esp_err_t apply_profile_bias(esp_rtl_sdr_handle *h, bool enable)
 {
     if (h->streaming) {
         h->pending_bias_enable = enable;
@@ -5367,16 +5651,122 @@ esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gain
         *out_count = 0;
         return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
-    *out_count = kMeasuredV4GainStepCount;
+    const bool r820 = handle->profile == RtlProfileId::BlogV3 ||
+                      handle->profile == RtlProfileId::BlogV4L;
+    const size_t count = r820 ? kR820T2GainStepCount : kMeasuredV4GainStepCount;
+    *out_count = count;
     if (out_gains_tenth_db == nullptr || max_count == 0) {
         return ESP_OK; /* size query */
     }
-    const size_t n =
-        (max_count < kMeasuredV4GainStepCount) ? max_count : kMeasuredV4GainStepCount;
+    const size_t n = (max_count < count) ? max_count : count;
     for (size_t i = 0; i < n; ++i) {
-        out_gains_tenth_db[i] = kMeasuredV4GainSteps[i].tenth_db;
+        out_gains_tenth_db[i] = r820 ? kR820T2GainSteps[i].tenth_db
+                                       : kMeasuredV4GainSteps[i].tenth_db;
     }
     *out_count = n;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_tuner_bandwidths(esp_rtl_sdr_handle_t handle,
+                                            uint32_t *out_hz, size_t max_count,
+                                            size_t *out_count)
+{
+    if (out_count == nullptr) return ESP_ERR_INVALID_ARG;
+    if (!handle_ok(handle)) return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) return ESP_RTL_SDR_ERR_TIMEOUT;
+    const uint32_t rf_hz = handle->pending_retune_hz != 0
+        ? handle->pending_retune_hz : handle->frequency_hz;
+    const size_t count = measured_tuner_bandwidth_count(handle->profile, rf_hz,
+                                                        hf_direct_route(handle, rf_hz));
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_TUNER_BANDWIDTH) == 0 ||
+        handle->sample_rate_sps != ESP_RTL_SDR_RATE_2400K || count == 0) {
+        *out_count = 0;
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
+    *out_count = count;
+    if (out_hz == nullptr || max_count == 0) return ESP_OK;
+    const bool hf = handle->profile != RtlProfileId::BlogV3 &&
+                    rf_hz <= ESP_RTL_SDR_XTAL_HZ;
+    const uint32_t *values = hf ? kMeasuredHfBandwidths : kMeasuredNativeBandwidths;
+    const size_t n = max_count < count ? max_count : count;
+    for (size_t i = 0; i < n; ++i) out_hz[i] = values[i];
+    *out_count = n;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_set_tuner_bandwidth(esp_rtl_sdr_handle_t handle, uint32_t hz)
+{
+    if (!handle_ok(handle)) return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    HandleLock lk(handle);
+    if (!lk.ok()) return ESP_RTL_SDR_ERR_TIMEOUT;
+    if (!handle->streaming || !handle->iface_claimed) {
+        return ESP_RTL_SDR_ERR_NOT_STREAMING;
+    }
+    const uint32_t rf_hz = handle->pending_retune_hz != 0
+        ? handle->pending_retune_hz : handle->frequency_hz;
+    MeasuredTunerBandwidthPlan plan{};
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_TUNER_BANDWIDTH) == 0 ||
+        handle->sample_rate_sps != ESP_RTL_SDR_RATE_2400K ||
+        !measured_tuner_bandwidth_plan(handle->profile, rf_hz, hz, &plan,
+                                       hf_direct_route(handle, rf_hz))) {
+        set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
+    handle->bandwidth_requested_hz = hz;
+    handle->pending_bandwidth = true;
+    set_error_unlocked(handle, ESP_OK); /* accepted, not yet applied */
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_tuner_bandwidth_state(esp_rtl_sdr_handle_t handle,
+                                                 uint32_t *requested_hz,
+                                                 uint32_t *applied_hz)
+{
+    if (requested_hz == nullptr || applied_hz == nullptr) return ESP_ERR_INVALID_ARG;
+    if (!handle_ok(handle)) return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) return ESP_RTL_SDR_ERR_TIMEOUT;
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_TUNER_BANDWIDTH) == 0 ||
+        !handle->bandwidth_applied_valid) return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    *requested_hz = handle->bandwidth_requested_hz;
+    *applied_hz = handle->bandwidth_applied.requested_hz;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_set_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t min_hz)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if (min_hz != 0 && !profile_has_hf_direct_route(handle->profile)) {
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    }
+    HandleLock lk(handle);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    const uint32_t floor_hz = kR820T2NativeMinHz;
+    handle->hf_direct_min_hz =
+        min_hz == 0 ? 0 : (min_hz < floor_hz ? floor_hz : min_hz);
+    ESP_LOGI(TAG, "HF direct route min=%u Hz (0 = upconverter)",
+             static_cast<unsigned>(handle->hf_direct_min_hz));
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t *out_min_hz)
+{
+    if (out_min_hz == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) {
+        return ESP_RTL_SDR_ERR_TIMEOUT;
+    }
+    *out_min_hz = handle->hf_direct_min_hz;
     return ESP_OK;
 }
 
@@ -5404,7 +5794,13 @@ esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
         handle->bias_tee_want = enable;
     }
 
-    const esp_err_t err = apply_measured_v4_bias(handle, enable);
+    if (enable && handle->profile == RtlProfileId::BlogV3) {
+        ESP_LOGW(TAG, "BlogV3 identity may be a generic R820T2 stick: verify antenna/load safety before enabling bias-T");
+    }
+    const esp_err_t err = apply_profile_bias(handle, enable);
+    if (err != ESP_OK) {
+        (void)run_bias_gpio_records(handle, false);
+    }
 
     HandleLock lk(handle);
     if (!lk.ok()) {
@@ -5412,8 +5808,9 @@ esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
     }
     if (err == ESP_OK) {
         set_error_unlocked(handle, ESP_OK);
-        ESP_LOGI(TAG, "bias-T %s [measured V4 SYS sequence]", enable ? "ON" : "OFF");
+        ESP_LOGI(TAG, "bias-T %s [profile GPIO sequence]", enable ? "ON" : "OFF");
     } else {
+        rtl_profile_clear_bias_request(handle->bias_tee_want);
         set_error_unlocked(handle, err);
     }
     return err;
@@ -5423,6 +5820,9 @@ esp_err_t esp_rtl_sdr_set_rtl_agc(esp_rtl_sdr_handle_t handle, bool enable)
 {
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_RTL_AGC) == 0) {
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
     if (check_not_reentrant(handle) != ESP_OK) {
         return ESP_RTL_SDR_ERR_REENTRANT;

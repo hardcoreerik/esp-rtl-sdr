@@ -3,9 +3,10 @@
  * @brief esp_rtl_sdr — production public C API (best-in-class contract)
  *
  * Standalone ESP-IDF USB Host client for RTL2832U-class SDR dongles.
- * Blog V4 (R828D) is the measured streaming path. Nooelec NESDR SMArt v5 and
- * Blog V3 are provisional R820T2 streams (I2C 0x34 remap; maintainer-
- * unverified). Transfer sequences are clean-room / measured where stated —
+ * Blog V4 (R828D), Blog V4L (R828S) and Blog V3/V3c (R820T2, I2C 0x34 remap)
+ * are hardware-verified streaming profiles. Nooelec NESDR SMArt v5 remains a
+ * provisional R820T2 stream (no hardware tested). Transfer sequences are
+ * clean-room / measured where stated —
  * this is not a librtlsdr port.
  *
  * ---------------------------------------------------------------------------
@@ -88,12 +89,12 @@ extern "C" {
 
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
-#define ESP_RTL_SDR_VERSION_MINOR 8
+#define ESP_RTL_SDR_VERSION_MINOR 9
 #define ESP_RTL_SDR_VERSION_PATCH 0
 /** 1 while experimental prerelease; 0 for stable X.Y.Z. */
-#define ESP_RTL_SDR_VERSION_IS_PRERELEASE 1
-/** Token for prerelease suffix (stringized into VERSION_STRING). */
-#define ESP_RTL_SDR_VERSION_PRERELEASE rc3
+#define ESP_RTL_SDR_VERSION_IS_PRERELEASE 0
+/** Token for prerelease suffix (stringized into VERSION_STRING when IS_PRERELEASE). */
+#define ESP_RTL_SDR_VERSION_PRERELEASE rc1
 
 #define ESP_RTL_SDR_VERSION_NUMBER                                      \
     ((ESP_RTL_SDR_VERSION_MAJOR * 10000) +                              \
@@ -124,7 +125,7 @@ extern "C" {
  */
 uint32_t esp_rtl_sdr_get_version(void);
 
-/** Human-readable version, e.g. "0.8.0-rc3". Never NULL; static storage. */
+/** Human-readable version, e.g. "0.9.0". Never NULL; static storage. */
 const char *esp_rtl_sdr_get_version_string(void);
 
 /* -------------------------------------------------------------------------- */
@@ -317,7 +318,7 @@ typedef enum {
     ESP_RTL_SDR_CAP_HOTPLUG = 1u << 2,      /**< disconnect/reconnect events */
     ESP_RTL_SDR_CAP_METRICS = 1u << 3,      /**< get_metrics live */
     ESP_RTL_SDR_CAP_CUSTOM_HZ = 1u << 4,    /**< CUSTOM_HZ preset */
-    ESP_RTL_SDR_CAP_BIAS_TEE = 1u << 5,     /**< measured Blog V4 SYS bias (0.7.5+) */
+    ESP_RTL_SDR_CAP_BIAS_TEE = 1u << 5,     /**< manual bias GPIO control; BlogV3 identity is generic */
     ESP_RTL_SDR_CAP_DIRECT_SAMPLING = 1u << 6, /**< profile supports direct ADC sampling */
     ESP_RTL_SDR_CAP_IQ_ACQUIRE = 1u << 7,   /**< release_iq_block required */
     ESP_RTL_SDR_CAP_FREQ_CORRECTION = 1u << 8, /**< software ppm LO offset */
@@ -327,14 +328,16 @@ typedef enum {
     ESP_RTL_SDR_CAP_NEED = 1u << 12,        /**< apply_need() intent presets */
     ESP_RTL_SDR_CAP_HEALTH = 1u << 13,      /**< get_health / EVT_HEALTH */
     ESP_RTL_SDR_CAP_PASSPORT = 1u << 14,    /**< on-device rate passport probe */
-    ESP_RTL_SDR_CAP_GAIN = 1u << 15,        /**< measured Blog V4 manual gain (0.7.5+) */
+    ESP_RTL_SDR_CAP_GAIN = 1u << 15,        /**< profile nominal manual gain ladder */
     ESP_RTL_SDR_CAP_DELIVERY_MODE = 1u << 16, /**< config.delivery_mode honored */
-    /** Blog V4 HF path: RF&lt;28.8 MHz → tuner LO RF+28.8e6 + triplexer HF input (0.7.7+). */
+    /** V4/V4L board-specific HF path: RF&lt;28.8 MHz → tuner RF+28.8 MHz. */
     ESP_RTL_SDR_CAP_HF_UPCONVERTER = 1u << 17,
-    /** Tuner AGC AUTO EP0 (R828D 05/07/0c) — measured 2026-08-26. */
+    /** Board-specific tuner AGC AUTO EP0 (05/07/0c). */
     ESP_RTL_SDR_CAP_GAIN_AUTO = 1u << 18,
     /** RTL2832 digital AGC (demod 0x19) — measured 2026-08-26; not tuner AUTO. */
     ESP_RTL_SDR_CAP_RTL_AGC = 1u << 19,
+    /** Measured tuner filter/IF control at 2.4 MS/s; direct-Q HF excluded. */
+    ESP_RTL_SDR_CAP_TUNER_BANDWIDTH = 1u << 20,
 } esp_rtl_sdr_cap_t;
 
 /**
@@ -381,7 +384,7 @@ typedef enum {
 typedef enum {
     ESP_RTL_SDR_PROFILE_UNKNOWN = 0,          /**< default until identified / after detach */
     ESP_RTL_SDR_PROFILE_BLOG_V4 = 1,          /**< RTL-SDR Blog V4 / R828D + HF upconverter */
-    ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / R820T2 provisional stream */
+    ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / V3c, R820T2 (0x34 remap) */
     ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5 = 3, /**< NESDR SMArt v5 / R820T2-R860 provisional */
     ESP_RTL_SDR_PROFILE_BLOG_V4L = 4,         /**< RTL-SDR Blog V4L (Lite) / R828S */
 } esp_rtl_sdr_profile_t;
@@ -1020,7 +1023,7 @@ esp_err_t esp_rtl_sdr_set_freq_correction(esp_rtl_sdr_handle_t handle, int ppm);
 esp_err_t esp_rtl_sdr_get_freq_correction(esp_rtl_sdr_handle_t handle, int *out_ppm);
 
 /**
- * Rescan USB for accepted profile devices (Blog V4 / provisional Nooelec / provisional V3).
+ * Rescan USB for accepted profile devices (Blog V4 / V4L / V3 / provisional Nooelec).
  * Updates internal candidate list used by get_device_count / select_*.
  * Does not close the currently open device unless it vanished.
  */
@@ -1190,12 +1193,12 @@ esp_err_t esp_rtl_sdr_get_rate_passport(esp_rtl_sdr_handle_t handle,
                                         esp_rtl_sdr_rate_passport_t *out_passport);
 
 /* -------------------------------------------------------------------------- */
-/* Phase 3 surface — gain / bias (measured Blog V4 manual + bias-T)           */
+/* Phase 3 surface — gain / bias                                               */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Tuner gain mode. MANUAL = measured ladder (CAP_GAIN). AUTO = measured
- * R828D AGC trio (CAP_GAIN_AUTO, 0.7.8+). Default get() is AUTO until the
+ * board-specific AGC trio (CAP_GAIN_AUTO). Default get() is AUTO until the
  * app forces MANUAL; AUTO EP0 is applied only after the interface is claimed.
  */
 typedef enum {
@@ -1224,8 +1227,9 @@ esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t *out_mode);
 
 /**
- * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). Applies nearest measured
- * Blog V4 step (0.0…49.6 dB ladder). Requires claimed interface (after start).
+ * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). Applies nearest board
+ * ladder step; these PC labels are nominal, not calibrated RF gain.
+ * Requires claimed interface (after start).
  * Streaming: queued on the delivery task (async). ESP_OK = accepted request.
  * Returns ESP_RTL_SDR_ERR_UNSUPPORTED while Blog V3 direct sampling bypasses
  * the tuner.
@@ -1239,15 +1243,51 @@ esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth
 esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_tenth_db);
 
 /**
- * Copy measured manual gains (tenths dB). Size-query: max_count==0 sets *out_count
- * to full ladder length (28 steps for Blog V4 measured table).
+ * Copy nominal manual gains (tenths dB). Size-query: max_count==0 sets
+ * *out_count to full ladder length (V4: 28; V4L/BlogV3: 29).
  */
 esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gains_tenth_db,
                                       size_t max_count, size_t *out_count);
 
+/** Supported tuner widths in Hz for the current (or pending) RF route.
+ * Zero means automatic. At 2.4 MS/s only; not an analog passband guarantee.
+ * With max_count=0, returns the full count without copying values.
+ */
+esp_err_t esp_rtl_sdr_get_tuner_bandwidths(esp_rtl_sdr_handle_t handle,
+                                            uint32_t *out_hz, size_t max_count,
+                                            size_t *out_count);
+
+/** Request a measured tuner width while streaming at 2.4 MS/s.
+ * EP0 apply is asynchronous. On write failure the driver restores the prior
+ * filter/PLL/demod IF; failed restore enters FAULT without resuming IQ.
+ */
+esp_err_t esp_rtl_sdr_set_tuner_bandwidth(esp_rtl_sdr_handle_t handle, uint32_t hz);
+
+/** Blog V4L and V4: RF in [min_hz, 28.8 MHz) is tuned directly on the tuner
+ * (V4: its VHF input) instead of through the 28.8 MHz HF upconverter. The upconverter folds
+ * strong MW stations onto 28.8 MHz - f (for example 1600 kHz onto CB channel
+ * 20); the direct input avoids that product. min_hz is clamped to the 24 MHz
+ * tuner floor; 0 restores the upconverter for all HF. Takes effect on the
+ * next start or retune; cleared when a device attaches. The direct input's
+ * analog passband below 28.8 MHz is not yet measured.
+ * Returns ESP_RTL_SDR_ERR_UNSUPPORTED on other profiles (min_hz != 0).
+ */
+esp_err_t esp_rtl_sdr_set_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t min_hz);
+esp_err_t esp_rtl_sdr_get_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t *out_min_hz);
+
+/** Software shadow: requested may precede applied while EP0 is queued.
+ * Check get_last_error()/get_state() for an asynchronous failure.
+ */
+esp_err_t esp_rtl_sdr_get_tuner_bandwidth_state(esp_rtl_sdr_handle_t handle,
+                                                 uint32_t *requested_hz,
+                                                 uint32_t *applied_hz);
+
 /**
- * Bias-T enable via measured Blog V4 SYS EP0 (lab 2026-08-12).
- * Requires claimed interface (after start). Multimeter DC not yet recorded.
+ * Bias-T manual GPIO control, OFF by default and on stop/new attachment.
+ * BlogV3 can be a generic R820T2 stick: its capability does not prove a bias
+ * circuit on every board. Warn the user before enabling it; use only with a
+ * compatible unpowered accessory. The three tested units measured no-load
+ * DC, not safe loaded current. Requires claimed interface (after start).
  * Streaming: async sideband queue. get_bias_tee() is last requested preference.
  */
 esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable);

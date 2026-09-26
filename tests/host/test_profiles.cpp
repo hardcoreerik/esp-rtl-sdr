@@ -5,6 +5,8 @@
 #include "esp_rtl_sdr.h"
 #include "gain_r820t2.hpp"
 #include "measured_gain_bias_v4.hpp"
+#include "measured_v4l_frontend.hpp"
+#include "measured_tuner_bandwidth.hpp"
 #include "rtl_profile.hpp"
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
@@ -132,6 +134,25 @@ static void test_tuner_isolation(void)
 
 static void test_frequency_policy(void)
 {
+    const uint32_t v4l_hf[] = {590000u, 1280000u, 23999999u, 24000000u, 28799999u};
+    for (uint32_t rf : v4l_hf) {
+        const auto plan = measured_v4l_frontend_plan(rf, false, 0x03);
+        EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, rf), rf + 28800000u);
+        EXPECT_EQ_U(plan.pre17, 0x28);
+        EXPECT_EQ_U(plan.pre1b, 0xdf);
+        EXPECT_EQ_U(plan.gpo, 0x18);
+        EXPECT_EQ_U(plan.reg05, 0xe3);
+        EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, rf));
+    }
+    const uint32_t v4l_native[] = {28800000u, 28800001u, 96100000u,
+                                    250000000u, 1090000000u};
+    for (uint32_t rf : v4l_native) {
+        const auto plan = measured_v4l_frontend_plan(rf, false, 0x03);
+        EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, rf), rf);
+        EXPECT_EQ_U(plan.pre17, 0x20);
+        EXPECT_EQ_U(plan.pre1b, 0x34);
+        EXPECT_EQ_U(plan.gpo, rf == 28800000u ? 0x18 : 0x38);
+    }
     /* V4: experimental LF/HF upconverter path, exact requested RF retained. */
     const uint32_t v4_rf_hz[] = {24000u, 60000u, 135600u, 147300u, 474000u,
                                  500000u, 1000000u, 10000000u, 28799999u,
@@ -191,6 +212,138 @@ static void test_frequency_policy(void)
     EXPECT_EQ_U(rtl_profile_v3_direct_nco_word(147300u, 100), 0x3fac32u);
     EXPECT_EQ_U(rtl_profile_v3_direct_nco_word(147300u, -100), 0x3fac36u);
     EXPECT_EQ_U(rtl_profile_v3_direct_nco_word(23999999u, 1000), 0x0a9d04u);
+}
+
+static void test_v4l_tune_records(void)
+{
+    RtlControlRecord rec = kRtlFinalTuneTemplate[0];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 0, rec));
+    EXPECT_EQ_U(rec.data[0], 0x17);
+    EXPECT_EQ_U(rec.data[1], 0x28);
+    rec = kRtlFinalTuneTemplate[2];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 2, rec));
+    EXPECT_EQ_U(rec.data[1], 0xdf);
+    rec = kRtlFinalTuneTemplate[19];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 19, rec));
+    EXPECT_EQ_U(rec.data[0], 0x1a);
+    EXPECT_EQ_U(rec.data[1], 0x68);
+    rec = kRtlFinalTuneTemplate[20];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(1280000u, 20, rec));
+    EXPECT_EQ_U(rec.data[0], 0x1b);
+    EXPECT_EQ_U(rec.data[1], 0x00);
+    rec = kRtlFinalTuneTemplate[21];
+    EXPECT_TRUE(!measured_v4l_patch_tune_record(1280000u, 21, rec));
+    rec = kRtlFinalTuneTemplate[19];
+    EXPECT_TRUE(!measured_v4l_patch_tune_record(96100000u, 19, rec));
+    rec = kRtlFinalTuneTemplate[0];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(96100000u, 0, rec));
+    EXPECT_EQ_U(rec.data[1], 0x20);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(28800000u, false, 3).gpo, 0x18);
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 1280000u));
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::BlogV4L) &
+                 ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0);
+}
+
+/* V4L direct route for 24-28.8 MHz (CB): native tuner input, no upconverter,
+ * so strong MW cannot fold onto 28.8 MHz - f. Default stays upconverted. */
+static void test_v4l_direct_route(void)
+{
+    const uint32_t cb20 = 27205000u;
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, cb20), cb20 + 28800000u);
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, cb20, true), cb20);
+    const auto up = measured_v4l_frontend_plan(cb20, false, 3);
+    const auto direct = measured_v4l_frontend_plan(cb20, false, 3, true);
+    const auto vhf = measured_v4l_frontend_plan(96100000u, false, 3);
+    EXPECT_EQ_U(up.gpo, 0x18);
+    EXPECT_TRUE(up.post_input);
+    EXPECT_EQ_U(direct.gpo, vhf.gpo);
+    EXPECT_EQ_U(direct.pre17, vhf.pre17);
+    EXPECT_EQ_U(direct.pre1b, vhf.pre1b);
+    EXPECT_EQ_U(direct.reg05, vhf.reg05);
+    EXPECT_TRUE(!direct.post_input);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(cb20, true, 3, true).gpo, 0x39);
+    RtlControlRecord rec = kRtlFinalTuneTemplate[19];
+    EXPECT_TRUE(!measured_v4l_patch_tune_record(cb20, 19, rec, true));
+    rec = kRtlFinalTuneTemplate[0];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(cb20, 0, rec, true));
+    EXPECT_EQ_U(rec.data[1], 0x20);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, cb20), 4u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, cb20, true), 7u);
+
+    /* V4: direct = its VHF input (Cable-2 off the upconverter), tuner = RF. */
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4, cb20), cb20 + 28800000u);
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4, cb20, true), cb20);
+    const auto v4_up = measured_v4_frontend_plan(cb20, false, 3);
+    const auto v4_direct = measured_v4_frontend_plan(cb20, false, 3, true);
+    const auto v4_vhf = measured_v4_frontend_plan(96100000u, false, 3);
+    EXPECT_TRUE(v4_up.band == MeasuredV4FrontendBand::HF);
+    EXPECT_TRUE(v4_direct.band == MeasuredV4FrontendBand::VHF);
+    EXPECT_EQ_U(v4_direct.reg06, v4_vhf.reg06);
+    EXPECT_EQ_U(v4_direct.gpo, v4_vhf.gpo);
+    EXPECT_EQ_U(v4_direct.reg05, v4_vhf.reg05);
+    EXPECT_EQ_U(v4_up.reg06, 0x38);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4, cb20, true), 7u);
+}
+
+static void test_bandwidth_plan_and_rollback(void)
+{
+    struct Case { uint32_t hz; uint8_t reg0b, if19, if1a, if1b; uint32_t if_hz; };
+    constexpr Case native[] = {
+        {0, 0x8f, 0x3b, 0xf7, 0x78, 1814972},
+        {200000, 0xe6, 0x3b, 0x47, 0x1d, 2125000},
+        {300000, 0xe6, 0x3b, 0x47, 0x1d, 2125000},
+        {500000, 0xe8, 0x3b, 0x80, 0x00, 2025000},
+        {1000000, 0xeb, 0x3c, 0x38, 0xe4, 1700000},
+        {1800000, 0xac, 0x3c, 0x1c, 0x72, 1750000},
+        {2400000, 0x8f, 0x3b, 0xf7, 0x78, 1814972},
+    };
+    for (const auto &point : native) {
+        MeasuredTunerBandwidthPlan p{};
+        EXPECT_TRUE(measured_tuner_bandwidth_plan(RtlProfileId::BlogV4L, 96100000u,
+                                                   point.hz, &p));
+        EXPECT_EQ_U(p.reg0a, 0xc4);
+        EXPECT_EQ_U(p.reg0b, point.reg0b);
+        EXPECT_EQ_U(p.if19, point.if19);
+        EXPECT_EQ_U(p.if1a, point.if1a);
+        EXPECT_EQ_U(p.if1b, point.if1b);
+        EXPECT_EQ_U(p.if_hz, point.if_hz);
+        EXPECT_TRUE(measured_tuner_bandwidth_plan(RtlProfileId::BlogV4, 96100000u,
+                                                   point.hz, &p));
+        EXPECT_EQ_U(p.reg0a, 0xc5);
+    }
+    MeasuredTunerBandwidthPlan p{};
+    EXPECT_TRUE(measured_tuner_bandwidth_plan(RtlProfileId::BlogV4L, 1280000u,
+                                               500000u, &p));
+    EXPECT_EQ_U(p.reg0a, 0xc4);
+    EXPECT_EQ_U(p.reg0b, 0xe8);
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::BlogV4L, 1280000u,
+                                                300000u, &p));
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::BlogV3, 1280000u,
+                                                200000u, &p));
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::BlogV4, 96100000u,
+                                                400000u, &p));
+    EXPECT_TRUE(!measured_tuner_bandwidth_plan(RtlProfileId::NooelecSmartV5,
+                                                96100000u, 0u, &p));
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, 1280000u), 4u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 1280000u), 0u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 24000000u), 7u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 96100000u), 7u);
+    int calls = 0;
+    const auto prev = MeasuredTunerBandwidthPlan{0, 1814972, 0xc4, 0x8f,
+                                                  0x3b, 0xf7, 0x78};
+    const auto next = MeasuredTunerBandwidthPlan{500000, 2025000, 0xc4, 0xe8,
+                                                  0x3b, 0x80, 0x00};
+    EXPECT_EQ_U(rtl_bandwidth_commit(prev, next, [&](const auto &v, bool) {
+                    ++calls; return v.requested_hz == 0 ? 0 : -1;
+                }), RtlBandwidthCommitResult::RolledBack);
+    EXPECT_EQ_U(calls, 2);
+    calls = 0;
+    EXPECT_EQ_U(rtl_bandwidth_commit(prev, next, [&](const auto &v, bool applying_next) {
+                    ++calls; return applying_next && v.requested_hz == 500000u ? 0 : -1;
+                }), RtlBandwidthCommitResult::Applied);
+    EXPECT_EQ_U(calls, 1);
+    EXPECT_EQ_U(rtl_bandwidth_commit(prev, next, [&](const auto &, bool) { return -1; }),
+                RtlBandwidthCommitResult::Fault);
 }
 
 static void test_matched_if_policy(void)
@@ -285,13 +438,26 @@ static void test_capability_matrix(void)
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_RETUNE) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN) != 0);
-    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN_AUTO) == 0);
-    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN_AUTO) != 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_BIAS_TEE) != 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_RTL_AGC) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_DIRECT_SAMPLING) != 0);
     EXPECT_EQ_U(rtl_profile_default_gain_mode(RtlProfileId::BlogV4),
                 ESP_RTL_SDR_GAIN_MODE_AUTO);
     EXPECT_EQ_U(rtl_profile_default_gain_mode(RtlProfileId::BlogV3),
-                ESP_RTL_SDR_GAIN_MODE_MANUAL);
+                ESP_RTL_SDR_GAIN_MODE_AUTO);
+    const uint32_t v4l = rtl_profile_device_capabilities(RtlProfileId::BlogV4L);
+    EXPECT_TRUE((v4l & ESP_RTL_SDR_CAP_GAIN_AUTO) != 0);
+    EXPECT_TRUE((v4l & ESP_RTL_SDR_CAP_RTL_AGC) != 0);
+    EXPECT_TRUE((v4l & ESP_RTL_SDR_CAP_BIAS_TEE) != 0);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(1280000u, false, 0).reg05, 0xe0);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(1280000u, false, 0x1f).reg05, 0xff);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(96100000u, false, 0).reg05, 0x80);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(96100000u, false, 0x1f).reg05, 0x9f);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(1280000u, true, 3).gpo, 0x19);
+    bool bias_request = true;
+    rtl_profile_clear_bias_request(bias_request);
+    EXPECT_TRUE(!bias_request);
 
     constexpr uint8_t expected_r820t2_stages[][2] = {
         {0x90, 0x60}, {0x91, 0x60}, {0x91, 0x61}, {0x92, 0x61},
@@ -426,10 +592,10 @@ static void test_blog_v4l_identity(void)
     /* Nor does it claim the V4 front-end routing, which is a different board. */
     EXPECT_TRUE(!rtl_profile_uses_v4_hf_routing(RtlProfileId::BlogV4L));
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::BlogV4L) &
-                 ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
+                 ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0);
 
-    /* HF fails closed until that upconverter's control is captured. */
-    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 10000000u));
+    /* Its separately captured upconverter now handles HF. */
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 10000000u));
     EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, 100100000u));
 
     /* VHF/UHF streams, and keeps the cold tuner reinit the V4L was observed
@@ -449,6 +615,9 @@ int main(void)
     test_unknown_reject_and_v3_probe();
     test_tuner_isolation();
     test_frequency_policy();
+    test_v4l_tune_records();
+    test_v4l_direct_route();
+    test_bandwidth_plan_and_rollback();
     test_matched_if_policy();
     test_v3_direct_transition_records();
     test_capability_matrix();

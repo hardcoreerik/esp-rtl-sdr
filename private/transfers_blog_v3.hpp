@@ -5,11 +5,11 @@
 /*
  * Provisional, non-invasive R820T2 identity trace (register 0 chip-id).
  *
- * Blog V3 streaming (0.8.0-rc3) is experimental/provisional: when selected, the
- * driver reuses the evidence-backed R820T2 USB IR value remap (0x74→0x34) that
- * Nooelec provisional uses for the same tuner-address template — not invented
- * V3-unique silicon init tables. No first-party V3 capture exists yet; this is
- * community hardware soak, not Hardware-verified.
+ * Blog V3/V3c streaming reuses the evidence-backed R820T2 USB IR value remap
+ * (0x74→0x34) that the provisional Nooelec profile also uses for the same
+ * tuner-address template — not invented V3-unique silicon init tables. V3c is
+ * hardware-verified: 2026-09-21 soak (1.62 GB, 0 USB errors), the 2026-09-25
+ * PC vendor-driver captures, and OrcSDR Tab5 hotplug/AM/CB use (0.9.0).
  */
 constexpr RtlControlRecord kBlogV3ProbeSelect = {
     0x0034, 0x0610, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}};

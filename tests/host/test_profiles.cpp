@@ -5,6 +5,7 @@
 #include "esp_rtl_sdr.h"
 #include "gain_r820t2.hpp"
 #include "measured_gain_bias_v4.hpp"
+#include "measured_v4l_frontend.hpp"
 #include "rtl_profile.hpp"
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
@@ -132,6 +133,25 @@ static void test_tuner_isolation(void)
 
 static void test_frequency_policy(void)
 {
+    const uint32_t v4l_hf[] = {590000u, 1280000u, 23999999u, 24000000u, 28799999u};
+    for (uint32_t rf : v4l_hf) {
+        const auto plan = measured_v4l_frontend_plan(rf, false, 0x03);
+        EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, rf), rf + 28800000u);
+        EXPECT_EQ_U(plan.pre17, 0x28);
+        EXPECT_EQ_U(plan.pre1b, 0xdf);
+        EXPECT_EQ_U(plan.gpo, 0x18);
+        EXPECT_EQ_U(plan.reg05, 0xe3);
+        EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::BlogV4L, rf));
+    }
+    const uint32_t v4l_native[] = {28800000u, 28800001u, 96100000u,
+                                    250000000u, 1090000000u};
+    for (uint32_t rf : v4l_native) {
+        const auto plan = measured_v4l_frontend_plan(rf, false, 0x03);
+        EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, rf), rf);
+        EXPECT_EQ_U(plan.pre17, 0x20);
+        EXPECT_EQ_U(plan.pre1b, 0x34);
+        EXPECT_EQ_U(plan.gpo, rf == 28800000u ? 0x18 : 0x38);
+    }
     /* V4: experimental LF/HF upconverter path, exact requested RF retained. */
     const uint32_t v4_rf_hz[] = {24000u, 60000u, 135600u, 147300u, 474000u,
                                  500000u, 1000000u, 10000000u, 28799999u,

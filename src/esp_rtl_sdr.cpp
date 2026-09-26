@@ -383,7 +383,7 @@ struct esp_rtl_sdr_handle {
     volatile bool pending_rtl_agc = false;
     volatile bool pending_rtl_agc_enable = false;
     volatile bool pending_bandwidth = false;
-    volatile bool ep0_sideband_busy = false;
+    std::atomic<bool> ep0_sideband_busy{false}; /* shared retune/sideband EP0 window */
 
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
     uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
@@ -1952,7 +1952,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     if (freq == 0) {
         return ESP_OK;
     }
-    if (h->retune_busy) {
+    if (h->ep0_sideband_busy.exchange(true)) {
         return ESP_OK; /* another apply in flight; pending remains */
     }
     h->retune_busy = true;
@@ -1968,6 +1968,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 
     if (!bulk_pause_and_drain(h)) {
         h->retune_busy = false;
+        h->ep0_sideband_busy = false;
         return ESP_RTL_SDR_ERR_TIMEOUT;
     }
 
@@ -1977,6 +1978,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
             h->pending_retune_hz = 0;
         }
         h->retune_busy = false;
+        h->ep0_sideband_busy = false;
         return ESP_RTL_SDR_ERR_NOT_STREAMING;
     }
 
@@ -2048,6 +2050,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
              (long long)(t_resumed - t_rt0));
 
     h->retune_busy = false;
+    h->ep0_sideband_busy = false;
 
     if (err == ESP_OK) {
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
@@ -3572,6 +3575,15 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
         timeout_ms = ESP_RTL_SDR_MAX_TIMEOUT_MS;
     }
 
+    /* Stop owns the same EP0 window as live retune/sideband, so a queued
+     * bias ON can never race the final OFF cleanup. */
+    const int64_t deadline_us = esp_timer_get_time() +
+                                static_cast<int64_t>(timeout_ms) * 1000;
+    while (h->ep0_sideband_busy.exchange(true)) {
+        if (esp_timer_get_time() >= deadline_us) return ESP_RTL_SDR_ERR_TIMEOUT;
+        vTaskDelay(1);
+    }
+
     const bool was_streaming = h->streaming || h->state == ESP_RTL_SDR_STATE_STREAMING ||
                                h->state == ESP_RTL_SDR_STATE_STOPPING;
     h->state = ESP_RTL_SDR_STATE_STOPPING;
@@ -3587,7 +3599,6 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->pending_bandwidth = false;
     h->bandwidth_applied_valid = false;
     h->bandwidth_requested_hz = 0;
-    h->ep0_sideband_busy = false;
 
     /* Same order as bulk_pause_and_drain (shared drain_live_urbs): poll natural
      * completions first, halt/flush/clear only if still live, poll again.
@@ -3642,6 +3653,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
         set_error_unlocked(h, ESP_RTL_SDR_ERR_TIMEOUT);
     }
 
+    h->ep0_sideband_busy = false;
     if (was_streaming && !h->destroying) {
         esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
         void *ctx = h->cfg.event_ctx;
@@ -5239,7 +5251,7 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         !h->pending_rtl_agc && !h->pending_bandwidth) {
         return ESP_OK;
     }
-    h->ep0_sideband_busy = true;
+    if (h->ep0_sideband_busy.exchange(true)) return ESP_OK;
 
     const bool do_bias = h->pending_bias;
     const bool bias_en = h->pending_bias_enable;

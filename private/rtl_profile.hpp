@@ -282,7 +282,8 @@ inline bool rtl_profile_supports_rf_hz(RtlProfileId profile, uint32_t frequency_
     return true;
 }
 
-inline uint32_t rtl_profile_tuner_frequency_hz(RtlProfileId profile, uint32_t rf_hz)
+inline uint32_t rtl_profile_tuner_frequency_hz(RtlProfileId profile, uint32_t rf_hz,
+                                               bool v4l_direct = false)
 {
     if (rtl_profile_uses_v3_direct_sampling(profile, rf_hz)) {
         return 0; /* tuner bypassed */
@@ -290,7 +291,7 @@ inline uint32_t rtl_profile_tuner_frequency_hz(RtlProfileId profile, uint32_t rf
     if (rtl_profile_uses_v4_hf_routing(profile)) {
         return esp_rtl_sdr_tuner_frequency_hz(rf_hz);
     }
-    if (profile == RtlProfileId::BlogV4L && rf_hz < ESP_RTL_SDR_XTAL_HZ) {
+    if (profile == RtlProfileId::BlogV4L && rf_hz < ESP_RTL_SDR_XTAL_HZ && !v4l_direct) {
         return rf_hz + ESP_RTL_SDR_XTAL_HZ;
     }
     return rf_hz;

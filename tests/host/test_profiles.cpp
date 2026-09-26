@@ -244,6 +244,33 @@ static void test_v4l_tune_records(void)
                  ESP_RTL_SDR_CAP_HF_UPCONVERTER) != 0);
 }
 
+/* V4L direct route for 24-28.8 MHz (CB): native tuner input, no upconverter,
+ * so strong MW cannot fold onto 28.8 MHz - f. Default stays upconverted. */
+static void test_v4l_direct_route(void)
+{
+    const uint32_t cb20 = 27205000u;
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, cb20), cb20 + 28800000u);
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::BlogV4L, cb20, true), cb20);
+    const auto up = measured_v4l_frontend_plan(cb20, false, 3);
+    const auto direct = measured_v4l_frontend_plan(cb20, false, 3, true);
+    const auto vhf = measured_v4l_frontend_plan(96100000u, false, 3);
+    EXPECT_EQ_U(up.gpo, 0x18);
+    EXPECT_TRUE(up.post_input);
+    EXPECT_EQ_U(direct.gpo, vhf.gpo);
+    EXPECT_EQ_U(direct.pre17, vhf.pre17);
+    EXPECT_EQ_U(direct.pre1b, vhf.pre1b);
+    EXPECT_EQ_U(direct.reg05, vhf.reg05);
+    EXPECT_TRUE(!direct.post_input);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(cb20, true, 3, true).gpo, 0x39);
+    RtlControlRecord rec = kRtlFinalTuneTemplate[19];
+    EXPECT_TRUE(!measured_v4l_patch_tune_record(cb20, 19, rec, true));
+    rec = kRtlFinalTuneTemplate[0];
+    EXPECT_TRUE(measured_v4l_patch_tune_record(cb20, 0, rec, true));
+    EXPECT_EQ_U(rec.data[1], 0x20);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, cb20), 4u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, cb20, true), 7u);
+}
+
 static void test_bandwidth_plan_and_rollback(void)
 {
     struct Case { uint32_t hz; uint8_t reg0b, if19, if1a, if1b; uint32_t if_hz; };
@@ -575,6 +602,7 @@ int main(void)
     test_tuner_isolation();
     test_frequency_policy();
     test_v4l_tune_records();
+    test_v4l_direct_route();
     test_bandwidth_plan_and_rollback();
     test_matched_if_policy();
     test_v3_direct_transition_records();

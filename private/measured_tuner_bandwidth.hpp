@@ -21,24 +21,28 @@ constexpr uint32_t kMeasuredNativeBandwidths[] = {
 };
 constexpr uint32_t kMeasuredHfBandwidths[] = {0u, 200000u, 500000u, 2400000u};
 
-constexpr size_t measured_tuner_bandwidth_count(RtlProfileId profile, uint32_t rf_hz)
+constexpr size_t measured_tuner_bandwidth_count(RtlProfileId profile, uint32_t rf_hz,
+                                                bool v4l_direct = false)
 {
     if (profile != RtlProfileId::BlogV4 && profile != RtlProfileId::BlogV4L &&
         profile != RtlProfileId::BlogV3) return 0;
     if (profile == RtlProfileId::BlogV3 && rf_hz < kR820T2NativeMinHz) return 0;
-    return profile != RtlProfileId::BlogV3 && rf_hz <= ESP_RTL_SDR_XTAL_HZ
+    return profile != RtlProfileId::BlogV3 && rf_hz <= ESP_RTL_SDR_XTAL_HZ && !v4l_direct
         ? sizeof(kMeasuredHfBandwidths) / sizeof(uint32_t)
         : sizeof(kMeasuredNativeBandwidths) / sizeof(uint32_t);
 }
 
 inline bool measured_tuner_bandwidth_plan(RtlProfileId profile, uint32_t rf_hz,
                                            uint32_t width_hz,
-                                           MeasuredTunerBandwidthPlan *out)
+                                           MeasuredTunerBandwidthPlan *out,
+                                           bool v4l_direct = false)
 {
-    if (out == nullptr || measured_tuner_bandwidth_count(profile, rf_hz) == 0) return false;
-    const bool hf = profile != RtlProfileId::BlogV3 && rf_hz <= ESP_RTL_SDR_XTAL_HZ;
+    if (out == nullptr || measured_tuner_bandwidth_count(profile, rf_hz, v4l_direct) == 0)
+        return false;
+    const bool hf = profile != RtlProfileId::BlogV3 && rf_hz <= ESP_RTL_SDR_XTAL_HZ &&
+                    !v4l_direct;
     const uint32_t *widths = hf ? kMeasuredHfBandwidths : kMeasuredNativeBandwidths;
-    const size_t count = measured_tuner_bandwidth_count(profile, rf_hz);
+    const size_t count = measured_tuner_bandwidth_count(profile, rf_hz, v4l_direct);
     bool found = false;
     for (size_t i = 0; i < count; ++i) found |= widths[i] == width_hz;
     if (!found) return false;

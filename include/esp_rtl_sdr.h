@@ -1262,6 +1262,18 @@ esp_err_t esp_rtl_sdr_get_tuner_bandwidths(esp_rtl_sdr_handle_t handle,
  */
 esp_err_t esp_rtl_sdr_set_tuner_bandwidth(esp_rtl_sdr_handle_t handle, uint32_t hz);
 
+/** Blog V4L only: RF in [min_hz, 28.8 MHz) is tuned directly on the R828S
+ * input instead of through the 28.8 MHz HF upconverter. The upconverter folds
+ * strong MW stations onto 28.8 MHz - f (for example 1600 kHz onto CB channel
+ * 20); the direct input avoids that product. min_hz is clamped to the 24 MHz
+ * tuner floor; 0 restores the upconverter for all HF. Takes effect on the
+ * next start or retune; cleared when a device attaches. The direct input's
+ * analog passband below 28.8 MHz is not yet measured.
+ * Returns ESP_RTL_SDR_ERR_UNSUPPORTED on other profiles (min_hz != 0).
+ */
+esp_err_t esp_rtl_sdr_set_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t min_hz);
+esp_err_t esp_rtl_sdr_get_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t *out_min_hz);
+
 /** Software shadow: requested may precede applied while EP0 is queued.
  * Check get_last_error()/get_state() for an asynchronous failure.
  */

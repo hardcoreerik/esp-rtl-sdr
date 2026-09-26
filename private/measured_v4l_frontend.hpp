@@ -20,12 +20,16 @@ struct MeasuredV4LFrontendPlan {
     bool post_input;
 };
 
+/* direct: tune 24-28.8 MHz on the tuner's native input instead of the
+ * upconverter (esp_rtl_sdr_set_hf_direct_min_hz). Same GPIO/input state the
+ * vendor driver uses above 28.8 MHz; the analog passband there is unmeasured. */
 constexpr MeasuredV4LFrontendPlan measured_v4l_frontend_plan(uint32_t rf_hz,
                                                               bool bias_on,
-                                                              uint8_t reg05_low_bits)
+                                                              uint8_t reg05_low_bits,
+                                                              bool direct = false)
 {
-    const bool upconverted = rf_hz < 28800000u;
-    const bool hf_gpio = rf_hz <= 28800000u;
+    const bool upconverted = rf_hz < 28800000u && !direct;
+    const bool hf_gpio = rf_hz <= 28800000u && !direct;
     return {
         static_cast<uint8_t>(upconverted ? 0x28 : 0x20),
         0x2a,
@@ -43,9 +47,9 @@ constexpr MeasuredV4LFrontendPlan measured_v4l_frontend_plan(uint32_t rf_hz,
 /* Patch the existing PLL template at its capture-derived input phases. A
  * false result skips V4-only post-PLL writes, including its reg-06 triplexer. */
 inline bool measured_v4l_patch_tune_record(uint32_t rf_hz, size_t index,
-                                            RtlControlRecord &rec)
+                                            RtlControlRecord &rec, bool direct = false)
 {
-    const auto plan = measured_v4l_frontend_plan(rf_hz, false, 0);
+    const auto plan = measured_v4l_frontend_plan(rf_hz, false, 0, direct);
     switch (index) {
     case 0: rec.data[1] = plan.pre17; break;
     case 1: rec.data[1] = plan.pre1a; break;

@@ -1,7 +1,8 @@
 # PC-measured RTL-SDR feature parity: driver design
 
-Status: design approved in chat on 2026-09-25; written specification awaits
-user review before an implementation plan or driver edits.
+Status: original design approved in chat on 2026-09-25; bias safety revised
+per user feedback to use an enable-time warning and attachment reset rather
+than a separate opt-in API. Implementation plan review remains open.
 
 ## Purpose and evidence
 
@@ -35,7 +36,10 @@ Implement in three independently testable stages:
    value; above it GPIO switches to VHF. Preserve V4's triplexer route and
    V3c's direct-Q HF path. Apply V4L's board route at cold start and retune,
    including the measured tuner input/filter state and bias-OFF GPIO
-   defaults. Keep tuner PLL and RTL demod IF matched to the selected tuner
+   defaults. Preserve the observed two-phase order: input writes before
+   PLL programming, then route/GPIO/gain writes after it; the V4L trace did
+   not show a hot reg-06 triplexer write. Keep tuner PLL and RTL demod IF
+   matched to the selected tuner
    bandwidth; at the dashboard's 2.4 MS/s default the PC observed about
    1.815 MHz. Remove only V4L's below-24-MHz fail-closed rule after that
    route exists. Reject frequencies outside the driver-wide policy as before.
@@ -47,17 +51,18 @@ Implement in three independently testable stages:
    V4's count. Add the captured V4L and V3c tuner-AUTO and RTL digital AGC
    records behind correct capabilities, keeping tuner AGC separate from
    RTL digital AGC. V4L and V4 advertise bias control with safe default
-   OFF and board-specific GPIO composition. A generically identified
-   BlogV3/R820T stick must **not** automatically advertise or energize a
-   bias tee based on this one V3c's measurement. Advertise a distinct
-   `BIAS_TEE_OPT_IN` capability on BlogV3, while `BIAS_TEE` remains absent.
-   An explicit per-handle opt-in API, callable only for the currently
-   claimed BlogV3 attachment, then adds `BIAS_TEE` to the active-device
-   capability mask and allows the common bias setter for that attachment.
-   Clear the opt-in and that dynamic capability on detach, device selection change,
-   uninstall, and hot-swap. The app can discover that opt-in is available,
-   present the safety choice, then use the common bias API. The opt-in does
-   not apply to Nooelec or Unknown.
+   OFF and board-specific GPIO composition. The user-identified V3c's PC
+   trace and meter reading support an explicit bias setter on BlogV3, but
+   its generic USB descriptor cannot guarantee that every look-alike stick
+   has the same hardware. Advertise `BIAS_TEE` as an available **manual
+   control** on BlogV3, document that caveat, and require OrcSDR to warn
+   when a user enables it on this generic profile. No bias state may carry
+   to another attachment: clear the desired ON state on detach, device
+   selection change, stop/cleanup, and uninstall, and initialize a newly
+   claimed device with GPIO bias OFF before streaming. A physically
+   unplugged dongle cannot receive an OFF command; loss of USB power
+   removes its USB-powered bias output. Nooelec and Unknown remain
+   unsupported.
 3. **Tuner bandwidth API and live switching.** Add a capability, supported
    width query, set and applied-state query. `0` denotes automatic tuner
    bandwidth, not IQ sample-rate or software audio bandwidth. Accept only
@@ -82,8 +87,10 @@ Implement in three independently testable stages:
 
 ## Safety and compatibility
 
-- Keep bias OFF by default, on stop/cleanup and after detach. Never enable
-  it during the user's independently powered MLA30+ reception setup.
+- Keep bias OFF by default and on stop/cleanup. Clear ON preference on
+  detach and force OFF on the next claimed attachment; never silently
+  restore ON after a hot-swap. Do not enable it during the user's
+  independently powered MLA30+ reception setup.
 - Capability bits describe what this driver can actually attempt for that
   board, not every feature named in a PC application. A setter still checks
   current mode and interface claim; V3c tuner controls that act on a
@@ -92,7 +99,8 @@ Implement in three independently testable stages:
   `struct_size` compatibility policy. Existing OrcSDR builds must still
   compile against their current API until they deliberately pin this update.
 - Preserve current V4 route/gain/bias behavior and provisional Nooelec
-  fail-closed behavior. Do not generalize the V3c bias result to every
+  fail-closed behavior. BlogV3 bias advertisement means a user-requested
+  GPIO control is available, **not** that voltage was verified on every
   generic Realtek descriptor. Do not treat nominal gain labels as calibrated
   dB or PC tuner bandwidth register choices as measured analog passbands.
 - The PC vendor driver had a same-open AM bandwidth failure and a transient

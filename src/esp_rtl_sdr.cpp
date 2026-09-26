@@ -339,6 +339,13 @@ struct esp_rtl_sdr_handle {
     /** ctrl_xfer submitted and its callback not yet run. usb_host_device_close()
      *  asserts (usbh num_ctrl_xfers_inflight == 0) while this is true. */
     std::atomic<bool> ctrl_inflight{false};
+    /** Device handles whose close was skipped because a control transfer never
+     *  finished. ESP-IDF keeps a gone device alive while it is still open, so
+     *  dropping the handle would leak the device and can block later hotplug;
+     *  the client task retries these once the control path is idle. Only the
+     *  client task (or install/uninstall with it stopped) touches this list. */
+    static constexpr size_t kMaxDeferredClose = 4;
+    usb_device_handle_t deferred_close[kMaxDeferredClose]{};
 
     usb_transfer_t **bulk = nullptr;
     uint32_t bulk_num = 0;
@@ -780,14 +787,32 @@ static bool wait_ctrl_idle(esp_rtl_sdr_handle *h, uint32_t timeout_ms)
     return true;
 }
 
+static void defer_device_close(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
+{
+    for (usb_device_handle_t &slot : h->deferred_close) {
+        if (slot == dev) {
+            return;
+        }
+    }
+    for (usb_device_handle_t &slot : h->deferred_close) {
+        if (slot == nullptr) {
+            slot = dev;
+            ESP_LOGW(TAG, "device close deferred until the control transfer completes");
+            return;
+        }
+    }
+    ESP_LOGE(TAG, "device close deferred list full: handle leaked");
+}
+
 /* usb_host_device_close() asserts if a control transfer is still in flight on
  * the device (seen on a Tab5 when a dongle dropped out mid-init). Let it
  * complete first, then close under ctrl_mutex so no new transfer can start.
- * If it never completes, leak the handle rather than crash. */
-static void close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
+ * If it never completes, park the handle for retry_deferred_closes() rather
+ * than crash or lose it. Returns true when the device was closed. */
+static bool close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
 {
     if (h == nullptr || h->client == nullptr || dev == nullptr) {
-        return;
+        return false;
     }
     const uint32_t wait_ms = h->cfg.control_timeout_ms + 500;
     (void)wait_ctrl_idle(h, wait_ms);  // lets a submitter finish and drop ctrl_mutex
@@ -799,12 +824,43 @@ static void close_device_safely(esp_rtl_sdr_handle *h, usb_device_handle_t dev)
     if (h->ctrl_mutex == nullptr ||
         xSemaphoreTake(h->ctrl_mutex, pdMS_TO_TICKS(lock_ms)) != pdTRUE) {
         ESP_LOGE(TAG, "device close skipped: control transfer path still busy");
-        return;
+        defer_device_close(h, dev);
+        return false;
     }
+    bool closed = false;
     if (wait_ctrl_idle(h, wait_ms)) {
-        usb_host_device_close(h->client, dev);
+        closed = usb_host_device_close(h->client, dev) == ESP_OK;
     } else {
         ESP_LOGE(TAG, "device close skipped: control transfer still in flight");
+    }
+    xSemaphoreGive(h->ctrl_mutex);
+    if (!closed) {
+        defer_device_close(h, dev);
+    }
+    return closed;
+}
+
+/* Client task: close parked handles once the control path is idle. Never
+ * blocks, so it can run on every event pass. */
+static void retry_deferred_closes(esp_rtl_sdr_handle *h)
+{
+    if (h->client == nullptr || h->ctrl_mutex == nullptr ||
+        h->ctrl_inflight.load(std::memory_order_acquire)) {
+        return;
+    }
+    bool any = false;
+    for (usb_device_handle_t slot : h->deferred_close) {
+        any |= slot != nullptr;
+    }
+    if (!any || xSemaphoreTake(h->ctrl_mutex, 0) != pdTRUE) {
+        return;
+    }
+    for (usb_device_handle_t &slot : h->deferred_close) {
+        if (slot != nullptr && !h->ctrl_inflight.load(std::memory_order_acquire) &&
+            usb_host_device_close(h->client, slot) == ESP_OK) {
+            ESP_LOGI(TAG, "deferred device close completed");
+            slot = nullptr;
+        }
     }
     xSemaphoreGive(h->ctrl_mutex);
 }
@@ -2971,6 +3027,7 @@ static void client_task_fn(void *arg)
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
         usb_host_client_handle_events(h->client, pdMS_TO_TICKS(20));
+        retry_deferred_closes(h);
         if (h->device_gone) {
             h->device_gone = false;
             RTL_LOGW(h, "usb disconnected profile=%s addr=%u (other handles unaffected)",
@@ -3319,6 +3376,7 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     handle->worker_task_count = 0;
 
     close_opened_device(handle);
+    retry_deferred_closes(handle);  // workers are joined: last chance before deregister
     if (handle->client_registered) {
         usb_host_client_deregister(handle->client);
         handle->client_registered = false;

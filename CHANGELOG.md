@@ -17,6 +17,13 @@
 
 ### Fixed
 
+- **A skipped device close no longer loses the handle.** When a control
+  transfer never completes, `close_device_safely()` must not call
+  `usb_host_device_close()` (it asserts), and it used to drop the handle.
+  ESP-IDF keeps a gone device alive while it is still open, so repeated bad
+  disconnects could pile up device objects and block later hotplug. Skipped
+  closes are now parked and retried by the client task once the control path
+  is idle, with a last attempt before the client deregisters on uninstall.
 - **A halted bulk IN endpoint no longer kills the stream.** A transfer error
   halts the endpoint, after which every `usb_host_transfer_submit()` on that
   pipe fails. `bulk_cb` responded by setting `streaming = false`, and since

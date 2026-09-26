@@ -724,7 +724,7 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->tuner_reg05_low_bits = 0x03;
     h->tuner_reg07 = 0x75;
     h->tuner_auto_applied = false;
-    h->bias_tee_want = false;
+    rtl_profile_clear_bias_request(h->bias_tee_want);
     h->rtl_agc_want = false;
     h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     h->gain_tenth_db = 0;
@@ -1484,11 +1484,28 @@ static uint32_t frontend_rf_hz(const esp_rtl_sdr_handle *h)
     return h->frequency_hz != 0 ? h->frequency_hz : h->preferred_frequency_hz;
 }
 
+static esp_err_t run_bias_gpio_records(esp_rtl_sdr_handle *h, bool enable)
+{
+    const RtlControlRecord records[] = {
+        {0x3004, 0x0210, 0x40, 1, {0x06}},
+        {0x3003, 0x0210, 0x40, 1, {0x19}},
+        {0x3001, 0x0210, 0x40, 1, {static_cast<uint8_t>(enable ? 0x19 : 0x18)}},
+    };
+    return run_records(h, records, std::size(records));
+}
+
 static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
 {
-    if (h == nullptr || h->profile != RtlProfileId::BlogV4) {
+    if (h == nullptr) {
         return;
     }
+    if ((h->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0) {
+        (void)run_bias_gpio_records(h, false);
+    }
+    if (h->profile == RtlProfileId::BlogV3 || h->profile == RtlProfileId::BlogV4L) {
+        return;
+    }
+    if (h->profile != RtlProfileId::BlogV4) return;
     for (const auto &rec : kRtlCleanupTransfers) {
         (void)run_record(h, rec, true);
     }
@@ -3448,6 +3465,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_bias = false;
+    rtl_profile_clear_bias_request(h->bias_tee_want);
     h->pending_rtl_agc = false;
     h->ep0_sideband_busy = false;
 
@@ -3644,6 +3662,11 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         ret = run_init_table(handle);
         if (ret != ESP_OK) {
             break;
+        }
+        /* A reused handle never carries an ON request across attachments. */
+        if ((handle->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0) {
+            ret = run_bias_gpio_records(handle, false);
+            if (ret != ESP_OK) break;
         }
         ret = run_sample_rate(handle, local.sample_rate_sps);
         if (ret != ESP_OK) {
@@ -4941,20 +4964,12 @@ static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
     const size_t idx = r820t2_nearest_gain_index(tenth_db);
     const R820T2GainStep &st = kR820T2GainSteps[idx];
 
-    /*
-     * V4's manual gain path also writes reg0x0c (kMeasuredV4GainReg0c=0x68,
-     * measured constant across V4's entire gain ladder -- see
-     * measured_gain_bias_v4.hpp). The first cut of this function omitted it,
-     * leaving that VGA/IF gain stage at whatever run_demod_bringup/tuner
-     * init last left it. R828D (V4) and R820T2/R860 (V3c) are both Rafael
-     * Micro R82xx-family parts with the same register layout for 05/07/0c,
-     * so borrowing V4's measured reg0c value here is a reasonable first
-     * attempt, not an independent R820T2 measurement -- flag if it doesn't
-     * hold up on real hardware.
-     */
+    const uint8_t reg05 = h->profile == RtlProfileId::BlogV4L
+        ? measured_v4l_frontend_plan(frontend_rf_hz(h), h->bias_tee_want, st.reg05).reg05
+        : st.reg05;
     esp_err_t err = ESP_FAIL;
     for (int pass = 0; pass < 3; ++pass) {
-        err = run_record(h, measured_v4_ir_reg_write(0x05, st.reg05), false);
+        err = run_record(h, measured_v4_ir_reg_write(0x05, reg05), false);
         if (err == ESP_OK) {
             err = run_record(h, measured_v4_ir_reg_write(0x07, st.reg07), false);
         }
@@ -4970,6 +4985,8 @@ static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
     if (err != ESP_OK) {
         return err;
     }
+    h->tuner_reg05_low_bits = st.reg05 & 0x1f;
+    h->tuner_reg07 = st.reg07;
     if (applied_tenth != nullptr) {
         *applied_tenth = st.tenth_db;
     }
@@ -5013,8 +5030,22 @@ static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h)
     esp_err_t err = ESP_FAIL;
     const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 3; ++pass) {
-        err = run_band_frontend(h, rf_hz, kMeasuredV4TunerAgcReg05,
-                                kMeasuredV4TunerAgcReg07, kMeasuredV4TunerAgcReg0c);
+        if (h->profile == RtlProfileId::BlogV4) {
+            err = run_band_frontend(h, rf_hz, kMeasuredV4TunerAgcReg05,
+                                    kMeasuredV4TunerAgcReg07, kMeasuredV4TunerAgcReg0c);
+        } else {
+            const uint8_t reg05 = h->profile == RtlProfileId::BlogV4L
+                ? measured_v4l_frontend_plan(rf_hz, h->bias_tee_want, 0x03).reg05
+                : 0x88;
+            const uint8_t reg07 = h->profile == RtlProfileId::BlogV4L ? 0x75 : 0x78;
+            err = run_record(h, measured_v4_ir_reg_write(0x05, reg05), false);
+            if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x07, reg07), false);
+            if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x0c, 0x6b), false);
+            if (err == ESP_OK) {
+                h->tuner_reg05_low_bits = reg05 & 0x1f;
+                h->tuner_reg07 = reg07;
+            }
+        }
         if (err == ESP_OK) {
             return ESP_OK;
         }
@@ -5045,6 +5076,11 @@ static esp_err_t apply_rtl_agc_records(esp_rtl_sdr_handle *h, bool enable)
 /** Apply Bias-T and the current route together (caller owns bulk pause). */
 static esp_err_t apply_bias_records(esp_rtl_sdr_handle *h, bool enable)
 {
+    if (h->profile != RtlProfileId::BlogV4) {
+        const esp_err_t err = run_bias_gpio_records(h, enable);
+        if (err == ESP_OK) h->bias_tee_want = enable;
+        return err;
+    }
     esp_err_t err = ESP_OK;
     const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 2; ++pass) {
@@ -5110,9 +5146,11 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         err = apply_bias_records(h, bias_en);
         if (err == ESP_OK) {
             h->bias_tee_want = bias_en;
-            ESP_LOGI(TAG, "bias-T %s [measured V4, async]", bias_en ? "ON" : "OFF");
+            ESP_LOGI(TAG, "bias-T %s [profile GPIO, async]", bias_en ? "ON" : "OFF");
         } else {
             ESP_LOGW(TAG, "bias-T EP0 failed: %s", esp_rtl_sdr_err_to_name(err));
+            rtl_profile_clear_bias_request(h->bias_tee_want);
+            (void)run_bias_gpio_records(h, false);
         }
     }
 
@@ -5126,7 +5164,7 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         if (aerr == ESP_OK) {
             h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
             h->tuner_auto_applied = true;
-            ESP_LOGI(TAG, "tuner AGC AUTO [measured V4, async]");
+            ESP_LOGI(TAG, "tuner AGC AUTO [profile, async]");
         } else {
             ESP_LOGW(TAG, "tuner AGC AUTO EP0 failed: %s", esp_rtl_sdr_err_to_name(aerr));
             if (err == ESP_OK) {
@@ -5188,7 +5226,7 @@ static esp_err_t apply_profile_gain(esp_rtl_sdr_handle *h, int tenth_db, int *ap
     return apply_gain_records(h, tenth_db, applied_tenth);
 }
 
-static esp_err_t apply_measured_v4_bias(esp_rtl_sdr_handle *h, bool enable)
+static esp_err_t apply_profile_bias(esp_rtl_sdr_handle *h, bool enable)
 {
     if (h->streaming) {
         h->pending_bias_enable = enable;
@@ -5384,14 +5422,17 @@ esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gain
         *out_count = 0;
         return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
-    *out_count = kMeasuredV4GainStepCount;
+    const bool r820 = handle->profile == RtlProfileId::BlogV3 ||
+                      handle->profile == RtlProfileId::BlogV4L;
+    const size_t count = r820 ? kR820T2GainStepCount : kMeasuredV4GainStepCount;
+    *out_count = count;
     if (out_gains_tenth_db == nullptr || max_count == 0) {
         return ESP_OK; /* size query */
     }
-    const size_t n =
-        (max_count < kMeasuredV4GainStepCount) ? max_count : kMeasuredV4GainStepCount;
+    const size_t n = (max_count < count) ? max_count : count;
     for (size_t i = 0; i < n; ++i) {
-        out_gains_tenth_db[i] = kMeasuredV4GainSteps[i].tenth_db;
+        out_gains_tenth_db[i] = r820 ? kR820T2GainSteps[i].tenth_db
+                                       : kMeasuredV4GainSteps[i].tenth_db;
     }
     *out_count = n;
     return ESP_OK;
@@ -5421,7 +5462,13 @@ esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
         handle->bias_tee_want = enable;
     }
 
-    const esp_err_t err = apply_measured_v4_bias(handle, enable);
+    if (enable && handle->profile == RtlProfileId::BlogV3) {
+        ESP_LOGW(TAG, "BlogV3 identity may be a generic R820T2 stick: verify antenna/load safety before enabling bias-T");
+    }
+    const esp_err_t err = apply_profile_bias(handle, enable);
+    if (err != ESP_OK) {
+        (void)run_bias_gpio_records(handle, false);
+    }
 
     HandleLock lk(handle);
     if (!lk.ok()) {
@@ -5429,8 +5476,9 @@ esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable)
     }
     if (err == ESP_OK) {
         set_error_unlocked(handle, ESP_OK);
-        ESP_LOGI(TAG, "bias-T %s [measured V4 SYS sequence]", enable ? "ON" : "OFF");
+        ESP_LOGI(TAG, "bias-T %s [profile GPIO sequence]", enable ? "ON" : "OFF");
     } else {
+        rtl_profile_clear_bias_request(handle->bias_tee_want);
         set_error_unlocked(handle, err);
     }
     return err;
@@ -5440,6 +5488,9 @@ esp_err_t esp_rtl_sdr_set_rtl_agc(esp_rtl_sdr_handle_t handle, bool enable)
 {
     if (!handle_ok(handle)) {
         return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    if ((handle->device_caps & ESP_RTL_SDR_CAP_RTL_AGC) == 0) {
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
     if (check_not_reentrant(handle) != ESP_OK) {
         return ESP_RTL_SDR_ERR_REENTRANT;

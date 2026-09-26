@@ -317,7 +317,7 @@ typedef enum {
     ESP_RTL_SDR_CAP_HOTPLUG = 1u << 2,      /**< disconnect/reconnect events */
     ESP_RTL_SDR_CAP_METRICS = 1u << 3,      /**< get_metrics live */
     ESP_RTL_SDR_CAP_CUSTOM_HZ = 1u << 4,    /**< CUSTOM_HZ preset */
-    ESP_RTL_SDR_CAP_BIAS_TEE = 1u << 5,     /**< measured Blog V4 SYS bias (0.7.5+) */
+    ESP_RTL_SDR_CAP_BIAS_TEE = 1u << 5,     /**< manual bias GPIO control; BlogV3 identity is generic */
     ESP_RTL_SDR_CAP_DIRECT_SAMPLING = 1u << 6, /**< profile supports direct ADC sampling */
     ESP_RTL_SDR_CAP_IQ_ACQUIRE = 1u << 7,   /**< release_iq_block required */
     ESP_RTL_SDR_CAP_FREQ_CORRECTION = 1u << 8, /**< software ppm LO offset */
@@ -1190,12 +1190,12 @@ esp_err_t esp_rtl_sdr_get_rate_passport(esp_rtl_sdr_handle_t handle,
                                         esp_rtl_sdr_rate_passport_t *out_passport);
 
 /* -------------------------------------------------------------------------- */
-/* Phase 3 surface — gain / bias (measured Blog V4 manual + bias-T)           */
+/* Phase 3 surface — gain / bias                                               */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Tuner gain mode. MANUAL = measured ladder (CAP_GAIN). AUTO = measured
- * R828D AGC trio (CAP_GAIN_AUTO, 0.7.8+). Default get() is AUTO until the
+ * board-specific AGC trio (CAP_GAIN_AUTO). Default get() is AUTO until the
  * app forces MANUAL; AUTO EP0 is applied only after the interface is claimed.
  */
 typedef enum {
@@ -1224,8 +1224,9 @@ esp_err_t esp_rtl_sdr_get_tuner_gain_mode(esp_rtl_sdr_handle_t handle,
                                           esp_rtl_sdr_gain_mode_t *out_mode);
 
 /**
- * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). Applies nearest measured
- * Blog V4 step (0.0…49.6 dB ladder). Requires claimed interface (after start).
+ * Manual gain in tenths of dB (e.g. 496 = 49.6 dB). Applies nearest board
+ * ladder step; these PC labels are nominal, not calibrated RF gain.
+ * Requires claimed interface (after start).
  * Streaming: queued on the delivery task (async). ESP_OK = accepted request.
  * Returns ESP_RTL_SDR_ERR_UNSUPPORTED while Blog V3 direct sampling bypasses
  * the tuner.
@@ -1239,15 +1240,18 @@ esp_err_t esp_rtl_sdr_set_tuner_gain(esp_rtl_sdr_handle_t handle, int gain_tenth
 esp_err_t esp_rtl_sdr_get_tuner_gain(esp_rtl_sdr_handle_t handle, int *out_gain_tenth_db);
 
 /**
- * Copy measured manual gains (tenths dB). Size-query: max_count==0 sets *out_count
- * to full ladder length (28 steps for Blog V4 measured table).
+ * Copy nominal manual gains (tenths dB). Size-query: max_count==0 sets
+ * *out_count to full ladder length (V4: 28; V4L/BlogV3: 29).
  */
 esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gains_tenth_db,
                                       size_t max_count, size_t *out_count);
 
 /**
- * Bias-T enable via measured Blog V4 SYS EP0 (lab 2026-08-12).
- * Requires claimed interface (after start). Multimeter DC not yet recorded.
+ * Bias-T manual GPIO control, OFF by default and on stop/new attachment.
+ * BlogV3 can be a generic R820T2 stick: its capability does not prove a bias
+ * circuit on every board. Warn the user before enabling it; use only with a
+ * compatible unpowered accessory. The three tested units measured no-load
+ * DC, not safe loaded current. Requires claimed interface (after start).
  * Streaming: async sideband queue. get_bias_tee() is last requested preference.
  */
 esp_err_t esp_rtl_sdr_set_bias_tee(esp_rtl_sdr_handle_t handle, bool enable);

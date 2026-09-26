@@ -1241,21 +1241,22 @@ Copy last passport. `valid == false` if never probed successfully.
 
 ---
 
-## 16. Gain & bias (measured V4)
+## 16. Gain & bias (board-specific PC controls)
 
-Clean-room tables from lab USBPcap (`private/measured_gain_bias_v4.hpp`). CAP bits on
+Clean-room tables from lab USBPcap (`private/measured_gain_bias_v4.hpp`,
+`private/gain_r820t2.hpp`, and the V4L capture report). CAP bits on
 since **0.7.5** (`MEASURED_2026_08_12`). Needs a claimed interface (`start` succeeded).
 P4 re-soak and multimeter DC are still lab-open — see [`PHASE3_CAPTURE_REPORT.md`](PHASE3_CAPTURE_REPORT.md).
 
 | Function | Behavior |
 |---|---|
 | `set_tuner_gain_mode(MANUAL)` | Restore last ladder step (or 0.0 dB); no-op if already MANUAL; unsupported while V3 direct sampling bypasses the tuner |
-| `set_tuner_gain_mode(AUTO)` | **0.7.8+** measured IR `05=E8 07=78 0C=6B` (`CAP_GAIN_AUTO`) |
+| `set_tuner_gain_mode(AUTO)` | Board-specific `05/07/0c` (`CAP_GAIN_AUTO`): V4 `e8/78/6b`, V4L HF `e3/75/6b`, V4L FM `83/75/6b`, V3c FM `88/78/6b` |
 | `get_tuner_gain_mode` | Last **requested** mode — not register readback |
 | `set_tuner_gain` | Nearest measured step; forces MANUAL; cancels queued AUTO; unsupported while V3 direct sampling bypasses the tuner |
 | `get_tuner_gain` | Last requested/accepted step (0 if never set) — software shadow |
-| `get_tuner_gains` | 28 steps: 0…496 tenths dB (0.0…49.6 dB) |
-| `set_bias_tee` | SYS sequence `3004/3003/3001/3000` (ON: 3001=0x19, OFF: 0x18) |
+| `get_tuner_gains` | V4: 28 nominal steps; V4L/BlogV3: 29 nominal steps including 48.0 dB. These are PC request labels, not calibrated gain. |
+| `set_bias_tee` | Explicit manual ON/OFF, `3001=19/18`; OFF default, on stop and new attachment. BlogV3 identity is generic and must be user-warned before enable. |
 | `get_bias_tee` | Last requested preference |
 | `set/get_rtl_agc` | **0.7.8+** demod `0x19` ON=`0x25` OFF=`0x05` (`CAP_RTL_AGC`); get is shadow |
 

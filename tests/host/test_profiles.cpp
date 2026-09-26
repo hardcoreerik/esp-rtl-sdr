@@ -335,13 +335,26 @@ static void test_capability_matrix(void)
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_RETUNE) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_HF_UPCONVERTER) == 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN) != 0);
-    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN_AUTO) == 0);
-    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_GAIN_AUTO) != 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_BIAS_TEE) != 0);
+    EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_RTL_AGC) != 0);
     EXPECT_TRUE((v3 & ESP_RTL_SDR_CAP_DIRECT_SAMPLING) != 0);
     EXPECT_EQ_U(rtl_profile_default_gain_mode(RtlProfileId::BlogV4),
                 ESP_RTL_SDR_GAIN_MODE_AUTO);
     EXPECT_EQ_U(rtl_profile_default_gain_mode(RtlProfileId::BlogV3),
-                ESP_RTL_SDR_GAIN_MODE_MANUAL);
+                ESP_RTL_SDR_GAIN_MODE_AUTO);
+    const uint32_t v4l = rtl_profile_device_capabilities(RtlProfileId::BlogV4L);
+    EXPECT_TRUE((v4l & ESP_RTL_SDR_CAP_GAIN_AUTO) != 0);
+    EXPECT_TRUE((v4l & ESP_RTL_SDR_CAP_RTL_AGC) != 0);
+    EXPECT_TRUE((v4l & ESP_RTL_SDR_CAP_BIAS_TEE) != 0);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(1280000u, false, 0).reg05, 0xe0);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(1280000u, false, 0x1f).reg05, 0xff);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(96100000u, false, 0).reg05, 0x80);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(96100000u, false, 0x1f).reg05, 0x9f);
+    EXPECT_EQ_U(measured_v4l_frontend_plan(1280000u, true, 3).gpo, 0x19);
+    bool bias_request = true;
+    rtl_profile_clear_bias_request(bias_request);
+    EXPECT_TRUE(!bias_request);
 
     constexpr uint8_t expected_r820t2_stages[][2] = {
         {0x90, 0x60}, {0x91, 0x60}, {0x91, 0x61}, {0x92, 0x61},

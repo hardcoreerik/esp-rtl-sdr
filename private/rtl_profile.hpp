@@ -171,22 +171,22 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
     case RtlProfileId::BlogV4:
         return rtl_profile_library_capabilities() & ~ESP_RTL_SDR_CAP_DIRECT_SAMPLING;
     case RtlProfileId::BlogV3:
-        /* Manual gain: apply_r820t2_gain_records() writes reg05/07 directly
-         * from private/gain_r820t2.hpp. Its discrete stage sequence remains
-         * a hardware candidate, not a calibrated table (see that header and
-         * docs/captures/NOTES.md).
-         * Still no AUTO/RTL_AGC/BIAS_TEE/HF_UPCONVERTER -- unimplemented
-         * for this tuner family, not just unverified. */
+        /* Generic R820T2 identity includes the user-tested V3c, but does not
+         * prove a bias circuit on every stick. Enable only by explicit API. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
-               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_DIRECT_SAMPLING;
+               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO |
+               ESP_RTL_SDR_CAP_RTL_AGC | ESP_RTL_SDR_CAP_BIAS_TEE |
+               ESP_RTL_SDR_CAP_DIRECT_SAMPLING;
     case RtlProfileId::BlogV4L:
         /* R828S at 0x34 with its own measured upconverter route. Never use
          * BlogV3 direct-Q or BlogV4 triplexer handling on this board. Gain
          * values are nominal PC requests, not calibrated analog dB. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
-               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_HF_UPCONVERTER;
+               ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO |
+               ESP_RTL_SDR_CAP_RTL_AGC | ESP_RTL_SDR_CAP_BIAS_TEE |
+               ESP_RTL_SDR_CAP_HF_UPCONVERTER;
     case RtlProfileId::NooelecSmartV5:
         /* Provisional: stream/retune/sync-read/passport; no V4 HF or measured gain/bias. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
@@ -207,6 +207,11 @@ inline esp_rtl_sdr_gain_mode_t rtl_profile_default_gain_mode(RtlProfileId profil
     return (caps & ESP_RTL_SDR_CAP_GAIN) != 0 && (caps & ESP_RTL_SDR_CAP_GAIN_AUTO) == 0
                ? ESP_RTL_SDR_GAIN_MODE_MANUAL
                : ESP_RTL_SDR_GAIN_MODE_AUTO;
+}
+
+inline void rtl_profile_clear_bias_request(bool &want)
+{
+    want = false;
 }
 
 inline bool rtl_profile_uses_v4_hf_routing(RtlProfileId profile)

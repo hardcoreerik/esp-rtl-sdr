@@ -326,8 +326,8 @@ static void test_bandwidth_plan_and_rollback(void)
                                                 96100000u, 0u, &p));
     EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV4L, 1280000u), 4u);
     EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 1280000u), 0u);
-    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 24000000u), 7u);
-    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 96100000u), 7u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 24000000u), 0u);
+    EXPECT_EQ_U(measured_tuner_bandwidth_count(RtlProfileId::BlogV3, 96100000u), 0u);
     int calls = 0;
     const auto prev = MeasuredTunerBandwidthPlan{0, 1814972, 0xc4, 0x8f,
                                                   0x3b, 0xf7, 0x78};

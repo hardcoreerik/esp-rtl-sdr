@@ -26,7 +26,7 @@ constexpr size_t measured_tuner_bandwidth_count(RtlProfileId profile, uint32_t r
 {
     if (profile != RtlProfileId::BlogV4 && profile != RtlProfileId::BlogV4L &&
         profile != RtlProfileId::BlogV3) return 0;
-    if (profile == RtlProfileId::BlogV3 && rf_hz < kR820T2NativeMinHz) return 0;
+    if (profile == RtlProfileId::BlogV3) return 0; // Preserve the captured 3.57 MHz V3c IF.
     return profile != RtlProfileId::BlogV3 && rf_hz <= ESP_RTL_SDR_XTAL_HZ && !hf_direct
         ? sizeof(kMeasuredHfBandwidths) / sizeof(uint32_t)
         : sizeof(kMeasuredNativeBandwidths) / sizeof(uint32_t);

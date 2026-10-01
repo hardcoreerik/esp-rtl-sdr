@@ -1060,7 +1060,7 @@ static esp_err_t run_record(esp_rtl_sdr_handle *h, const RtlControlRecord &rec,
          *
          * Logged at warning level and the error is still returned; this only
          * adds attribution, it does not change control flow. */
-        RTL_LOGE(h,
+        RTL_LOGW(h,
                  "ctrl record rejected: profile=%s req=0x%02x value=0x%04x "
                  "index=0x%04x len=%u data0=0x%02x -> %s%s",
                  rtl_profile_name(h->profile), mapped.request_type,

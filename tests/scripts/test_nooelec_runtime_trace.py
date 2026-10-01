@@ -171,6 +171,12 @@ int main() {
         CHECK(wire[0].length == 1 && wire[0].data[0] == (enabled ? 0x25 : 0x05));
         CHECK(wire[1].value == 0x0120 && wire[1].index == 0x000a && wire[1].request_type == 0xc0 && wire[1].length == 1);
     }
+    // The tuner reinit must not write gain itself: the I2C repeater is only switched back on after
+    // it, and a gain write inside it is STALLed on hardware, so every start after a manual gain failed.
+    // The restore runs separately, once the repeater is on.
+    h = {}; wire.clear(); h.gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL; h.gain_tenth_db = 496;
+    CHECK(run_v3_tuner_reinit(&h) == ESP_OK); gain(0x83, 0x75, 0xf0);
+    wire.clear(); CHECK(run_nooelec_gain_restore(&h) == ESP_OK); gain(0x9f, 0x6e, 0x68);
     // A Q retune can cancel queued MANUAL while the old AUTO-applied flag remains.
     h.gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL; h.gain_tenth_db = 496;
     h.tuner_auto_applied = true;

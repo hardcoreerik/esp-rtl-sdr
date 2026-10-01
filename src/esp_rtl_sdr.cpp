@@ -3140,7 +3140,19 @@ static constexpr uint32_t kEnumCheckMs = 500;
 
 static void maybe_retry_enumeration(esp_rtl_sdr_handle *h)
 {
-    if (h->dev != nullptr || !session_lock()) {
+    if (h->dev != nullptr) {
+        /* A device is open, so the "no device" timer must not keep running. Without this the flag set
+         * during the first moments after boot (nothing enumerated yet) stays set for the whole
+         * session, and the first unplug is power-cycled at once instead of after kEnumRetryFirstMs.
+         * Read without the lock first: the flag is only ever set from this function. */
+        if (s_usb_session.enum_no_dev && session_lock()) {
+            s_usb_session.enum_no_dev = false;
+            s_usb_session.enum_retry_ms = kEnumRetryFirstMs;
+            session_unlock();
+        }
+        return;
+    }
+    if (!session_lock()) {
         return;
     }
     const TickType_t now = xTaskGetTickCount();

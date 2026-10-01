@@ -4,6 +4,16 @@
 
 ### USB unplug and enumeration robustness
 
+Contributed by David Coulson ([@davidcoulson](https://github.com/davidcoulson), PR #48, originally
+from his fork's #26); integrated here with his commits and authorship kept. Hardware-checked on a Tab5 (ESP32-P4)
+with a Nooelec SMArt v5: 10 unplug/replug cycles mid-stream (every one detected, re-probed and restarted,
+no reboot), and a 105 s unplug with the empty-port retry power-cycling the root port at 10, 20 and 40 s
+before the dongle re-enumerated and streamed within 2 s of the replug.
+
+- **Retry timer reset while a device is open.** The "no device" timer is cleared whenever a device is open;
+  without that, the flag from the first moments after boot stayed set and the first unplug was power-cycled
+  at once rather than after 10 s.
+
 - **Unplug mid-stream no longer races the device close.** Bulk transfers that end
   `NO_DEVICE` (or complete after DEV_GONE) are retired instead of resubmitted, so
   they no longer schedule bulk EP recovery against a device being closed.

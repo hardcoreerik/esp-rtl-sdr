@@ -7,8 +7,19 @@ named rates remain for discovery and passport defaults.
 Sample-rate policy is independent of center-frequency policy. `CUSTOM_HZ`
 frequency requests preserve exact Hz; no sample-rate window changed.
 
-Programming: RTL2832U resampler  
-`ratio = (28.8e6 << 22) / sps` (masked `& ~3`), via clean-room Blog V4 EP0 slice.
+Programming: RTL2832U resampler
+
+```text
+ratio_reg = ((28.8e6 << 22) / sps) & 0x0ffffffc
+realized  = ratio_reg | ((ratio_reg & 0x08000000) << 1)
+exact_sps = (28.8e6 << 22) / realized
+```
+
+`ratio_reg` is what demod bytes `0x9f..0xa2` store (bit 28 clear). The demod
+mirrors bit 27 into bit 28, so Hz has to be computed from `realized`. Skipping
+that mirror reports every low-band rate at about 2× (250000 Hz becomes
+562500 Hz). 900000 Hz stores `0x08000000` and realizes as 300000 Hz, so it is
+rejected.
 
 ---
 
@@ -16,9 +27,9 @@ Programming: RTL2832U resampler
 
 | Window | Hz | Notes |
 |---|---|---|
-| Low | **225001** – 300000 | Historical RTL low band; **225000 rejected** (ratio mask + desktop) |
-| High | 900000 – 3200000 | Primary SDR band |
-| Gap | 300001 – 899999 | **Rejected** (unstable ecosystem-wide) |
+| Low | **225001** – 300000 | Historical RTL low band; **225000 rejected** (ratio mask zeroes) |
+| High | **900001** – 3200000 | Primary SDR band. **900000 rejected** (bit 27 mirrors to 300 kHz) |
+| Gap | 300001 – 900000 | **Rejected** |
 | Vendor stable claim | ≤ 2560000 | Blog V4 datasheet “stable” |
 | Vendor max | 3200000 | “with drops” per Blog V4 DS |
 

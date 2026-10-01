@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Low-band sample rates.** `esp_rtl_sdr_quantize_sample_rate()` masked the
+  RTL2832 resampler field with `0x0ffffffc` and converted that field back to
+  Hz without mirroring bit 27 into bit 28. Every request from 225001 Hz to
+  300000 Hz was reported at about 2× (`250000` stored as `562500`), and
+  `start()` programmed the demod from that wrong rate. `900000` Hz is now
+  rejected: its stored field is `0x08000000`, which the same mirror realizes
+  as 300 kHz. Rates from 900001 Hz through 3.2 MHz, including the 960 kS/s
+  and 2.048 MS/s paths, were already exact. Host tests require the low-band
+  rates to round-trip. See #24.
+
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 
 ### Nooelec NESDR SMArt v5 profile

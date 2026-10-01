@@ -202,14 +202,16 @@ const char *esp_rtl_sdr_err_to_name(esp_err_t err);
  * Hardware sample-rate windows (RTL2832U resampler + ecosystem practice).
  * Outside these, is_rate_supported / quantize reject.
  *
- * Low band: **> 225 kHz … 300 kHz** (desktop librtlsdr rejects rate <= 225000;
- * at exactly 225000 the 28-bit ratio field masks to 0 and cannot be programmed).
- * High band: 900 kHz … 3.2 MHz. Rates above 3.2 MHz lost data in
- * board and PC probes; gap 300001–899999 is rejected.
+ * Low band: **> 225 kHz … 300 kHz** (rate <= 225000 is rejected; at exactly
+ * 225000 the 28-bit ratio field masks to 0 and cannot be programmed).
+ * High band: **900001 Hz … 3.2 MHz**. 900000 Hz is rejected: its stored
+ * ratio is exactly bit 27, and the demod mirrors that into bit 28, so the
+ * rate realizes as 300 kHz. Rates above 3.2 MHz lost data in board and PC
+ * probes. The gap 300001–900000 Hz is rejected.
  */
 #define ESP_RTL_SDR_RATE_LOW_MIN_HZ    225001u
 #define ESP_RTL_SDR_RATE_LOW_MAX_HZ    300000u
-#define ESP_RTL_SDR_RATE_HIGH_MIN_HZ   900000u
+#define ESP_RTL_SDR_RATE_HIGH_MIN_HZ   900001u
 #define ESP_RTL_SDR_RATE_HIGH_MAX_HZ   3200000u
 /** Vendor stable IQ bandwidth claim (Blog V4 datasheet). */
 #define ESP_RTL_SDR_RATE_STABLE_MAX_HZ 2560000u

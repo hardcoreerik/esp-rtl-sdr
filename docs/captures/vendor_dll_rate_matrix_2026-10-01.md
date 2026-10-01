@@ -13,7 +13,7 @@ Companion note: `nooelec_v5_band_sweep_2026-10-01.md` (band table). Raw pcapng f
 |---|---|---|---|---|
 | Band sweep (47 freq, asc+desc) | done | done | done | done |
 | 10 kHz band-edge scans | - | - | done (14 `1b` edges, 4 `17` edges, 3 rates) | 2 edges |
-| Rate matrix (20 rates, 3 freq) | earlier sweep covers 250k-3.2M, not the edge cases | **done, 2 identical runs** | **done, 2 identical runs** | **done, 2 identical runs** |
+| Rate matrix (20 rates, 3 freq) | **done, 2 identical runs** | **done, 2 identical runs** | **done, 2 identical runs** | **done, 2 identical runs** |
 
 ## Rate matrix, Blog V4 and V4L (vendor DLL, 96.1 MHz stage)
 
@@ -52,11 +52,13 @@ PLL registers are identical.
 - **Real stream rate:** accepted rates stream at the requested rate (960 kS/s measured 960.3 kS/s, 3.2 MS/s measured 3.21 MS/s).
 - **250k / 256k:** the ratio written is the masked value (`0ccccccc`, `0c200000`), the values the driver's #43 produces.
   The old driver wrote `0c200094` for 256k.
-- **Filter and IF follow the rate on the V4 and V4L only (so far).** The Blog V4 and V4L (same `0b` / IF pairs, `0a` low bit differs) and the
-  earlier Nooelec sweep move the IF filter and IF with the rate. The **Blog V3c does not**: with the same DLL it keeps `0a`/`0b` = `d5`/`6b`
-  and a 3.57 MHz IF at every accepted rate (two identical runs, `blog_v3c_run*.csv`); its ratio writes and rejected rates are the same as the
-  V4's. So it is not one table across R82xx dongles. What the DLL keys on (USB descriptor strings, tuner type, or the sequence the
-  Nooelec campaign ran) is not established; a clean cold-open Nooelec matrix is still needed before calling the Nooelec's behaviour.
+- **Filter and IF follow the rate on the V4 and V4L only.** The Blog V4 and V4L (same `0b` / IF pairs, `0a` low bit differs) move the IF
+  filter and IF with the rate on a cold open. The **Blog V3c and the Nooelec v5 do not**: with the same DLL, each keeps `0a`/`0b` =
+  `d5`/`6b` (V3c) or `d3`/`6b` (Nooelec) and a 3.57 MHz IF at every accepted rate (two identical runs each, `blog_v3c_run*.csv`,
+  `nooelec_v5_run*.csv`); their ratio writes and rejected rates match the V4's. So it is not one table across R82xx dongles.
+  The earlier Nooelec campaign (`nooelec-v5-20260930`, rate stages in one open session) showed per-rate filter/IF values for the
+  Nooelec. That sequence changed rates one after another on a single open handle, so a hot rate change on the R820T2 boards may
+  behave differently from a cold start; this was not tested. A driver start at a rate is a cold start.
 - **Write order inside `set_sample_rate`:** tuner `0a`, `0b`, then demod IF (`0x19..0x1b`), then the PLL is re-programmed for the
   new IF, then the resampler ratio (`0x9f..0xa2`). A driver adopting this must keep the order.
 - **The band registers key on LO = RF + the IF in use** (V4 `1b` edge moves from 48.38 MHz at 2.048 MS/s to 48.20 MHz at
@@ -84,4 +86,4 @@ Gotchas: run tshark from PowerShell (Git Bash mangles `\.\USBPcap2`); `usb.setup
 ## Not shown
 
 Effect on reception for any setting; behaviour beyond what the DLL accepts (the chip may take other ratios, untested);
-the Nooelec rate matrix.
+a hot (same-handle) rate change on the V3c and Nooelec.

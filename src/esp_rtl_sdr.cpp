@@ -1367,6 +1367,15 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
              h != nullptr ? static_cast<int>(h->freq_correction_ppm) : 0, hf ? 1 : 0, r16_setup,
               r16_active, r20, r21, r22, static_cast<unsigned>(if_offset_hz));
+    /* R820T2 RF mux / tracking filter follow the LO actually programmed (#25). */
+    const R820T2BandRow *band = nullptr;
+    if (rtl_profile_uses_r820t2_band_select(profile)) {
+        const uint32_t lo_hz = rtl_r820t2_lo_hz(tune_hz, if_offset_hz);
+        band = &rtl_r820t2_band_for_lo_hz(lo_hz);
+        ESP_LOGI(TAG, "r820t2 band lo=%u Hz row=%u MHz open_d=%02x mux=%02x tf_c=%02x",
+                 static_cast<unsigned>(lo_hz), static_cast<unsigned>(band->mhz),
+                 band->open_d, band->rf_mux_ploy, band->tf_c);
+    }
     uint32_t rec_us[std::size(kRtlFinalTuneTemplate)] = {0};
     int skipped = 0;
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
@@ -1376,6 +1385,9 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
             rec_us[i] = 0;
             skipped++;
             continue;
+        }
+        if (band != nullptr) {
+            rtl_r820t2_patch_band_record(*band, rec);
         }
         if (profile == RtlProfileId::NooelecSmartV5 && i == 6) {
             /* Older V4 template writes manual 0c=68 on every tune. Preserve

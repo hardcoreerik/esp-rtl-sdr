@@ -176,6 +176,24 @@ int main() {
     wire.clear(); CHECK(run_profile_tune(&h, 1600000, 99100000) == ESP_OK); q_route();
     wire.clear(); CHECK(run_profile_tune(&h, 99100000, 1600000) == ESP_OK);
     gain(0x9f, 0x6e, 0x68); CHECK(!h.tuner_auto_applied);
+    // #25: RF mux / tracking filter follow the band on cold, hot, Q-exit and bandwidth tunes.
+    const auto band = [](int r17, int r1a, int r1b) {
+        CHECK(last_tuner(0x17) == r17); CHECK(last_tuner(0x1a) == r1a); CHECK(last_tuner(0x1b) == r1b);
+    };
+    h = {}; wire.clear(); CHECK(run_v3_tuner_reinit(&h) == ESP_OK);
+    CHECK(run_profile_tune(&h, 433920000, 0) == ESP_OK); band(0x20, 0x69, 0x00);
+    CHECK(run_profile_tune(&h, 915000000, 433920000) == ESP_OK); band(0x20, 0x68, 0x00);
+    CHECK(run_profile_tune(&h, 99100000, 915000000) == ESP_OK); band(0x20, 0x2a, 0x34);
+    CHECK(run_profile_tune(&h, 30000000, 99100000) == ESP_OK); band(0x28, 0x2a, 0xdf);
+    wire.clear(); CHECK(run_profile_tune(&h, 1600000, 30000000) == ESP_OK); q_route();
+    wire.clear(); CHECK(run_profile_tune(&h, 433920000, 1600000) == ESP_OK); band(0x20, 0x69, 0x00);
+    // Keyed on the programmed LO: 307 MHz is the 310 row at 3.57 MHz IF, 280 at 1.815 MHz.
+    CHECK(run_profile_tune(&h, 307000000, 433920000) == ESP_OK); band(0x20, 0x69, 0x00);
+    {
+        MeasuredTunerBandwidthPlan plan{}; CHECK(measured_tuner_bandwidth_plan(h.profile, 307000000, 0, &plan));
+        CHECK(plan.if_hz == 1814972u);
+        CHECK(run_bandwidth_program(&h, 307000000, 307000000, plan) == ESP_OK); band(0x20, 0x2a, 0x00);
+    }
     std::printf("RESULT nooelec_runtime_trace passed=%u failed=0\n", checks);
 }
 '''

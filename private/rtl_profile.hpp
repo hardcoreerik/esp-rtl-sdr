@@ -385,3 +385,66 @@ inline uint32_t rtl_profile_demod_if_restore_hz(RtlProfileId profile)
     return profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5
         ? kBlogV3DemodIfHz : 0u;
 }
+
+/** R820T2 boards whose RF mux / tracking filter must follow the tuned band (#25). */
+inline bool rtl_profile_uses_r820t2_band_select(RtlProfileId profile)
+{
+    /* V4L is excluded: its R828S has its own measured 17/1a/1b route. */
+    return profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5;
+}
+
+/**
+ * R820T2 RF front-end band select: librtlsdr's R820T freq_ranges[] (tuner_r82xx.c).
+ * kRtlFinalTuneTemplate was captured on FM, so without this every R820T2 tune leaves
+ * the RF mux and tracking filter on the 90-110 MHz row (17=20, 1a=2a, 1b=34) and the
+ * ADC sees no RF at e.g. 433.92 MHz (hardcoreerik/esp-rtl-sdr#25).
+ * open_d is r17 bit 3, rf_mux_ploy is r1a mask 0xc3, tf_c is r1b.
+ */
+struct R820T2BandRow {
+    uint16_t mhz; /* row applies from this LO frequency up to the next row */
+    uint8_t open_d;
+    uint8_t rf_mux_ploy;
+    uint8_t tf_c;
+};
+constexpr R820T2BandRow kR820T2Bands[] = {
+    {0, 0x08, 0x02, 0xdf},   {50, 0x08, 0x02, 0xbe},  {55, 0x08, 0x02, 0x8b},
+    {60, 0x08, 0x02, 0x7b},  {65, 0x08, 0x02, 0x69},  {70, 0x08, 0x02, 0x58},
+    {75, 0x00, 0x02, 0x44},  {80, 0x00, 0x02, 0x44},  {90, 0x00, 0x02, 0x34},
+    {100, 0x00, 0x02, 0x34}, {110, 0x00, 0x02, 0x24}, {120, 0x00, 0x02, 0x24},
+    {140, 0x00, 0x02, 0x14}, {180, 0x00, 0x02, 0x13}, {220, 0x00, 0x02, 0x13},
+    {250, 0x00, 0x02, 0x11}, {280, 0x00, 0x02, 0x00}, {310, 0x00, 0x41, 0x00},
+    {450, 0x00, 0x41, 0x00}, {588, 0x00, 0x40, 0x00}, {650, 0x00, 0x40, 0x00},
+};
+
+/** LO the R820T2 PLL is programmed to: (ppm-corrected) tuner frequency + PLL IF. */
+inline uint32_t rtl_r820t2_lo_hz(uint32_t tuner_hz, double if_offset_hz)
+{
+    return tuner_hz + static_cast<uint32_t>(if_offset_hz + 0.5);
+}
+
+/** Band row for an LO frequency. Like librtlsdr's r82xx_set_mux(), keyed on LO, not RF. */
+inline const R820T2BandRow &rtl_r820t2_band_for_lo_hz(uint32_t lo_hz)
+{
+    const uint32_t mhz = lo_hz / 1000000u;
+    const R820T2BandRow *row = &kR820T2Bands[0];
+    for (const R820T2BandRow &r : kR820T2Bands) {
+        if (mhz >= r.mhz) {
+            row = &r;
+        }
+    }
+    return *row;
+}
+
+/** Apply a band row to one tune-template tuner write (17/1a/1b); other records unchanged. */
+inline void rtl_r820t2_patch_band_record(const R820T2BandRow &band, RtlControlRecord &rec)
+{
+    if (rec.request_type != 0x40 || rec.index != 0x0610 || rec.length != 2) {
+        return;
+    }
+    switch (rec.data[0]) {
+    case 0x17: rec.data[1] = static_cast<uint8_t>((rec.data[1] & ~0x08) | band.open_d); break;
+    case 0x1a: rec.data[1] = static_cast<uint8_t>((rec.data[1] & ~0xc3) | band.rf_mux_ploy); break;
+    case 0x1b: rec.data[1] = band.tf_c; break;
+    default: break;
+    }
+}

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **R820T2 RF mux and tracking filter follow the tuned band (Blog V3, Nooelec SMArt v5).**
+  The shared tune template was captured on FM and always wrote `17=20 1a=2a 1b=34`,
+  the 90-110 MHz row, so these sticks could stream at e.g. 433.92 MHz without seeing
+  RF ([#25](https://github.com/hardcoreerik/esp-rtl-sdr/issues/25)). Each native tune
+  now patches 17/1a/1b from librtlsdr's R820T `freq_ranges[]`, keyed on the LO the PLL
+  is programmed to (tuner + PLL IF), including cold start, leaving Q sampling and
+  bandwidth changes. V4 and V4L are unchanged.
+
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 
 ### Nooelec NESDR SMArt v5 profile

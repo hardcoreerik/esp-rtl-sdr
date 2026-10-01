@@ -846,8 +846,85 @@ static void test_nooelec_captured_programming(void)
     }
 }
 
+/* Final 17/1a/1b of the tune template after the R820T2 band patch. */
+static void r820t2_patched_tune_tail(uint32_t lo_hz, uint8_t out[3])
+{
+    const R820T2BandRow &band = rtl_r820t2_band_for_lo_hz(lo_hz);
+    for (const RtlControlRecord &tpl : kRtlFinalTuneTemplate) {
+        RtlControlRecord rec = tpl;
+        rtl_r820t2_patch_band_record(band, rec);
+        if (rec.request_type == 0x40 && rec.length == 2) {
+            if (rec.data[0] == 0x17) out[0] = rec.data[1];
+            if (rec.data[0] == 0x1a) out[1] = rec.data[1];
+            if (rec.data[0] == 0x1b) out[2] = rec.data[1];
+        }
+        /* only band bits change; the PLL/other records are untouched */
+        if (rec.request_type != 0x40 || rec.length != 2 ||
+            (rec.data[0] != 0x17 && rec.data[0] != 0x1a && rec.data[0] != 0x1b)) {
+            EXPECT_TRUE(std::memcmp(&rec.data, &tpl.data, sizeof(rec.data)) == 0);
+        }
+    }
+}
+
+/* hardcoreerik/esp-rtl-sdr#25: the R820T2 front end must follow the tuned band */
+static void test_r820t2_band_select(void)
+{
+    EXPECT_TRUE(rtl_profile_uses_r820t2_band_select(RtlProfileId::BlogV3));
+    EXPECT_TRUE(rtl_profile_uses_r820t2_band_select(RtlProfileId::NooelecSmartV5));
+    EXPECT_TRUE(!rtl_profile_uses_r820t2_band_select(RtlProfileId::BlogV4));
+    EXPECT_TRUE(!rtl_profile_uses_r820t2_band_select(RtlProfileId::BlogV4L));
+    EXPECT_TRUE(!rtl_profile_uses_r820t2_band_select(RtlProfileId::Unknown));
+
+    /* table is sorted, or the lookup picks the wrong row */
+    for (size_t i = 1; i < std::size(kR820T2Bands); ++i) {
+        EXPECT_TRUE(kR820T2Bands[i].mhz > kR820T2Bands[i - 1].mhz);
+    }
+    /* row boundaries: exactly on a row start selects that row */
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(310000000u).mhz, 310u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(309999999u).mhz, 280u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(1700000000u).mhz, 650u);
+    /* below 75 MHz the open-drain input is on */
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(30000000u).open_d, 0x08u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(75000000u).open_d, 0x00u);
+
+    /* keyed on the LO (tuner + PLL IF), as librtlsdr's r82xx_set_mux() is */
+    const double if_hz = rtl_profile_pll_if_offset_hz(RtlProfileId::NooelecSmartV5);
+    EXPECT_EQ_U(rtl_r820t2_lo_hz(307000000u, if_hz), 310570000u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(rtl_r820t2_lo_hz(307000000u, if_hz)).mhz, 310u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(rtl_r820t2_lo_hz(307000000u, 1814972.0)).mhz, 280u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(rtl_r820t2_lo_hz(433920000u, if_hz)).mhz, 310u);
+    EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(rtl_r820t2_lo_hz(915000000u, if_hz)).mhz, 650u);
+
+    /* Values the tune leaves in 17/1a/1b. 433.92 and 915 MHz match what the
+     * fork wrote on a Nooelec SMArt v5 that then decoded at those frequencies. */
+    uint8_t tail[3] = {};
+    r820t2_patched_tune_tail(rtl_r820t2_lo_hz(433920000u, if_hz), tail);
+    EXPECT_EQ_U(tail[0], 0x20u);
+    EXPECT_EQ_U(tail[1], 0x69u);
+    EXPECT_EQ_U(tail[2], 0x00u);
+    r820t2_patched_tune_tail(rtl_r820t2_lo_hz(915000000u, if_hz), tail);
+    EXPECT_EQ_U(tail[0], 0x20u);
+    EXPECT_EQ_U(tail[1], 0x68u);
+    EXPECT_EQ_U(tail[2], 0x00u);
+    /* FM is where the template was captured: unchanged */
+    r820t2_patched_tune_tail(rtl_r820t2_lo_hz(99100000u, if_hz), tail);
+    EXPECT_EQ_U(tail[0], 0x20u);
+    EXPECT_EQ_U(tail[1], 0x2au);
+    EXPECT_EQ_U(tail[2], 0x34u);
+    r820t2_patched_tune_tail(rtl_r820t2_lo_hz(30000000u, if_hz), tail);
+    EXPECT_EQ_U(tail[0], 0x28u);
+    EXPECT_EQ_U(tail[1], 0x2au);
+    EXPECT_EQ_U(tail[2], 0xdfu);
+    /* the mid-tune PLL write (1a=22) keeps its autotune bits, gets the mux */
+    RtlControlRecord pll1a = kRtlFinalTuneTemplate[8];
+    EXPECT_EQ_U(pll1a.data[0], 0x1au);
+    rtl_r820t2_patch_band_record(rtl_r820t2_band_for_lo_hz(437490000u), pll1a);
+    EXPECT_EQ_U(pll1a.data[1], 0x61u);
+}
+
 int main(void)
 {
+    test_r820t2_band_select();
     test_detection_matrix();
     test_unknown_reject_and_v3_probe();
     test_tuner_isolation();

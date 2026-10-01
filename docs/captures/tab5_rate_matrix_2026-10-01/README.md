@@ -1,4 +1,4 @@
-# Tab5 sample-rate / band A/B runs, Blog V4, 2026-10-01
+# Tab5 sample-rate / band A/B runs, Blog V4 and V4L, 2026-10-01
 
 Tab5 (ESP32-P4) with a Blog V4 and the ADS-B dipole in the east window, the same antenna as the PC captures. One-second pre-DSP IQ per
 cell, scored by `rtl-gate/band_snr.py`. All runs use the same OrcSDR build apart from the driver pin (OrcSDR `main` at #149 plus one
@@ -30,6 +30,18 @@ they are only good for stream health and pass/fail. All other runs use one fixed
 Reading: the V4 band change helps where the old route's `1b` was most mismatched (it wrote `34`, the 96 MHz setting, at 230 MHz and now writes
 `13`), and does nothing measurable elsewhere. One site, one antenna, one dongle.
 
+## Blog V4L (same method; `blog_v4l-*.json`)
+
+- **250 kS/s:** fails on A (`NO_IQ`, stream never starts), works on B. Same result as the V4 (#43).
+- **Rate sweep (250k, 960k, 2.048M, 2.4M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.048M):** A 9 of 11 cells (the two missing are 250 kS/s), B 11 of 11. Otherwise
+  similar numbers on both.
+- **VHF, interleaved A/B/A/B, 3 captures each:** at **230 MHz** peak over noise is 16.4 to 17.1 dB on B and 15.7 to 16.2 dB on A (under 1 dB), while the
+  noise floor is about 3.5 dB higher on B (-72 vs -76 dBFS): the whole level at 230 MHz rises and the signal-to-noise ratio is about the same.
+  At 118.9, 162.55 and 178 MHz no reliable difference.
+
+Reading: on the V4L the band change is neutral for signal-to-noise on this site and antenna (no regression, no measured benefit); on the V4 it gave about
++3 dB at 230 MHz. The two boards do not respond the same way to the same `1b` change.
+
 ## Not shown
 
-V4L, V3c and Nooelec on the Tab5; the per-rate filter and IF change (column C); a second site or antenna; any claim relative to the vendor DLL.
+V3c and Nooelec on the Tab5; the per-rate filter and IF change (column C); a second site or antenna; any claim relative to the vendor DLL.

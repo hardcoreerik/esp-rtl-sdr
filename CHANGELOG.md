@@ -3,6 +3,11 @@
 ## Unreleased
 
 - **R820T2 RF mux and tracking filter follow the tuned band (Blog V3, Nooelec SMArt v5).**
+  Found and fixed by David Coulson ([@davidcoulson](https://github.com/davidcoulson), issue #25, PR #45); integrated here
+  with his commit and authorship kept. Checked on a Tab5 (ESP32-P4) with a Nooelec SMArt v5 and a dipole, same gain and
+  antenna before and after: noise floor at 453.9 / 915 / 1090 MHz rose about 20 dB (from about -76 to about -55 dBFS, the
+  front end had been blocking those bands), the 453.9 MHz band went from 17 to 72 strong signals and from 21 to 43 dB
+  signal over noise, and FM and VHF (96 to 162 MHz) were unchanged within 1 dB.
   The shared tune template was captured on FM and always wrote `17=20 1a=2a 1b=34`,
   the 90-110 MHz row, so these sticks could stream at e.g. 433.92 MHz without seeing
   RF ([#25](https://github.com/hardcoreerik/esp-rtl-sdr/issues/25)). Each native tune

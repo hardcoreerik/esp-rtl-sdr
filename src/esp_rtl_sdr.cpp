@@ -41,6 +41,7 @@
 #include "gain_r820t2.hpp"
 #include "reentrancy.hpp"
 #include "rtl_multi.hpp"
+#include "rtl_usb_checks.hpp"
 
 static const char *TAG = "esp_rtl_sdr";
 
@@ -221,6 +222,11 @@ struct UsbSession {
     uint32_t new_dev_events = 0;
     uint32_t gone_events = 0;
     uint32_t claim_conflicts = 0;
+    /* Failed-enumeration retry (maybe_retry_enumeration), under lock. */
+    bool enum_no_dev = false;
+    TickType_t enum_no_dev_since = 0;
+    TickType_t enum_checked_at = 0;
+    uint32_t enum_retry_ms = 0;
 };
 
 static UsbSession s_usb_session;
@@ -322,7 +328,9 @@ struct esp_rtl_sdr_handle {
     usb_device_handle_t dev = nullptr;
     bool iface_claimed = false;
     QueueHandle_t probe_q = nullptr;
-    bool device_gone = false;
+    /** Set by DEV_GONE; stays set until the client task has closed h->dev, so
+     *  other tasks can check it before touching the handle. */
+    volatile bool device_gone = false;
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
@@ -336,6 +344,7 @@ struct esp_rtl_sdr_handle {
     usb_transfer_t *ctrl_xfer = nullptr;
     esp_err_t ctrl_status = ESP_OK;
     bool ctrl_stall = false;
+    uint16_t ctrl_actual = 0; /* data-stage bytes received by the last control transfer */
     /** ctrl_xfer submitted and its callback not yet run. usb_host_device_close()
      *  asserts (usbh num_ctrl_xfers_inflight == 0) while this is true. */
     std::atomic<bool> ctrl_inflight{false};
@@ -720,6 +729,7 @@ static void ctrl_cb(usb_transfer_t *xfer)
     }
     h->ctrl_status = (xfer->status == USB_TRANSFER_STATUS_COMPLETED) ? ESP_OK : ESP_FAIL;
     h->ctrl_stall = (xfer->status == USB_TRANSFER_STATUS_STALL);
+    h->ctrl_actual = rtl_ctrl_data_stage_bytes(xfer->actual_num_bytes);
     h->ctrl_inflight.store(false, std::memory_order_release);
     xSemaphoreGive(h->ctrl_sem);
 }
@@ -898,6 +908,16 @@ static esp_err_t ctrl_transfer_locked(esp_rtl_sdr_handle *h, usb_device_handle_t
         /* A timed-out transfer has not completed yet; ctrl_xfer cannot be reused. */
         return ESP_RTL_SDR_ERR_TIMEOUT;
     }
+    /* wLength must fit the control buffer (the OUT memcpy below would overrun it), and
+     * RTL2832U I2C passthrough reads over 16 bytes STALL EP0, which repeated can take the
+     * stream down. Refuse both up front. */
+    if (!rtl_ctrl_request_ok(bm, wIndex, wLength, kCtrlXferBytes)) {
+        RTL_LOGE(h, "ctrl request refused: bm=0x%02x wIndex=0x%04x wLength=%u (buffer %u)",
+                 static_cast<unsigned>(bm), static_cast<unsigned>(wIndex),
+                 static_cast<unsigned>(wLength),
+                 static_cast<unsigned>(kCtrlXferBytes - sizeof(usb_setup_packet_t)));
+        return ESP_ERR_INVALID_ARG;
+    }
     esp_err_t final_err = ESP_FAIL;
     for (int attempt = 0; attempt < 3; ++attempt) {
         usb_transfer_t *x = h->ctrl_xfer;
@@ -919,6 +939,7 @@ static esp_err_t ctrl_transfer_locked(esp_rtl_sdr_handle *h, usb_device_handle_t
 
         h->ctrl_status = ESP_FAIL;
         h->ctrl_stall = false;
+        h->ctrl_actual = 0;
         xSemaphoreTake(h->ctrl_sem, 0);
 
         h->ctrl_inflight.store(true, std::memory_order_release);
@@ -949,9 +970,19 @@ static esp_err_t ctrl_transfer_locked(esp_rtl_sdr_handle *h, usb_device_handle_t
         if (h->ctrl_status == ESP_OK) {
             if ((bm & USB_BM_REQUEST_TYPE_DIR_IN) != 0 && response != nullptr &&
                 response_length > 0) {
-                const uint16_t copy_length =
-                    (response_length < wLength) ? response_length : wLength;
-                std::memcpy(response, x->data_buffer + sizeof(usb_setup_packet_t), copy_length);
+                const uint16_t want = (response_length < wLength) ? response_length : wLength;
+                /* Copy only what the device actually sent: a short read must not hand
+                 * back stale bytes from the previous transfer. */
+                const uint16_t got = (h->ctrl_actual < want) ? h->ctrl_actual : want;
+                std::memcpy(response, x->data_buffer + sizeof(usb_setup_packet_t), got);
+                if (got < want) {
+                    std::memset(response + got, 0, want - got);
+                    RTL_LOGW(h, "ctrl IN short read: %u of %u bytes (wValue=0x%04x wIndex=0x%04x)",
+                             static_cast<unsigned>(got), static_cast<unsigned>(want),
+                             static_cast<unsigned>(wValue), static_cast<unsigned>(wIndex));
+                    final_err = ESP_RTL_SDR_ERR_USB;
+                    break;
+                }
             }
             final_err = ESP_OK;
             break;
@@ -994,9 +1025,10 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
         return ESP_RTL_SDR_ERR_USB;
     }
     /* Read h->dev under ctrl_mutex: a disconnect closes it under the same lock,
-     * so a transfer can never be submitted to a device that was just closed. */
+     * so a transfer can never be submitted to a device that was just closed.
+     * device_gone covers the gap between that close and h->dev = nullptr. */
     xSemaphoreTake(h->ctrl_mutex, portMAX_DELAY);
-    usb_device_handle_t dev = h->dev;
+    usb_device_handle_t dev = h->device_gone ? nullptr : h->dev;
     const esp_err_t err =
         dev == nullptr ? ESP_RTL_SDR_ERR_USB
                        : ctrl_transfer_locked(h, dev, bm, bRequest, wValue, wIndex, data,
@@ -1710,6 +1742,16 @@ static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
 /* Defined below; bulk_cb's read-only fast path fills the ring directly. */
 static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t bytes);
 
+/* Resubmit only while streaming and not draining for stop/retune. A transfer
+ * that ended because the device was unplugged is retired instead: resubmitting
+ * it fails, which schedules bulk EP recovery on the delivery task, and that
+ * races the client task closing the device. */
+static bool bulk_may_resubmit(const esp_rtl_sdr_handle *h, const usb_transfer_t *xfer)
+{
+    return h->streaming && !h->pause_resubmit && !h->device_gone &&
+           xfer->status != USB_TRANSFER_STATUS_NO_DEVICE;
+}
+
 static void bulk_cb(usb_transfer_t *xfer)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(xfer->context);
@@ -1758,7 +1800,7 @@ static void bulk_cb(usb_transfer_t *xfer)
             if (n != static_cast<size_t>(h->bulk_len)) {
                 h->metrics.short_transfers++;
             }
-            if (h->streaming && !h->pause_resubmit) {
+            if (bulk_may_resubmit(h, xfer)) {
                 const esp_err_t rs = usb_host_transfer_submit(xfer);
                 if (rs != ESP_OK) {
                     RTL_LOGW(h, "bulk resubmit failed: %s; scheduling EP recovery",
@@ -1822,7 +1864,7 @@ static void bulk_cb(usb_transfer_t *xfer)
                 h->metrics.bytes_total += slot->bytes;
                 h->metrics.blocks_total++;
                 (void)xQueueSend(h->free_q, &slot, 0);
-                if (h->streaming && !h->pause_resubmit) {
+                if (bulk_may_resubmit(h, xfer)) {
                     esp_err_t rs = usb_host_transfer_submit(xfer);
                     if (rs != ESP_OK) {
                         RTL_LOGW(h, "bulk resubmit failed: %s; scheduling EP recovery",
@@ -1889,8 +1931,7 @@ static void bulk_cb(usb_transfer_t *xfer)
         RTL_LOGW(h, "bulk status=%d bytes=%d", xfer->status, xfer->actual_num_bytes);
     }
 
-    /* Resubmit only while streaming and not draining for stop/retune. */
-    if (h->streaming && !h->pause_resubmit) {
+    if (bulk_may_resubmit(h, xfer)) {
         esp_err_t ret = usb_host_transfer_submit(xfer);
         if (ret != ESP_OK) {
             /* A bulk transfer error halts the endpoint, and every later
@@ -1978,7 +2019,7 @@ static void bulk_resume(esp_rtl_sdr_handle *h)
         return;
     }
     h->pause_resubmit = false;
-    if (!h->streaming || h->bulk == nullptr) {
+    if (!h->streaming || h->bulk == nullptr || h->dev == nullptr || h->device_gone) {
         return;
     }
     h->live_urbs = 0;
@@ -2015,11 +2056,23 @@ static void bulk_recover_stall(esp_rtl_sdr_handle *h)
     if (h == nullptr || h->bulk == nullptr) {
         return;
     }
+    if (h->device_gone || h->dev == nullptr) {
+        /* Unplugged: the client task retires the stream and closes the device. */
+        h->ep_stall_recover = false;
+        return;
+    }
+    /* Take the shared EP0 window so a disconnect cannot close h->dev under the
+     * halt/flush/clear and resubmit below. Busy: ep_stall_recover stays set and
+     * the next delivery pass retries. */
+    if (h->ep0_sideband_busy.exchange(true)) {
+        return;
+    }
     h->ep_stall_recover = false;
     if (h->ep_recoveries - h->ep_recoveries_at_data >= kEpRecoverAttempts) {
         RTL_LOGE(h, "bulk EP recovery failed %u times with no data; stopping",
                  static_cast<unsigned>(kEpRecoverAttempts));
         h->streaming = false;
+        h->ep0_sideband_busy = false;
         return;
     }
     h->ep_recoveries++;
@@ -2031,6 +2084,7 @@ static void bulk_recover_stall(esp_rtl_sdr_handle *h)
         usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
     }
     bulk_resume(h);
+    h->ep0_sideband_busy = false;
     RTL_LOGW(h, "bulk EP recovered (attempt %u, live_urbs=%u)",
              static_cast<unsigned>(h->ep_recoveries),
              static_cast<unsigned>(h->live_urbs));
@@ -2724,6 +2778,25 @@ static RtlProfileId identify_profile(esp_rtl_sdr_handle *h, usb_device_handle_t 
     return profile;
 }
 
+/**
+ * Refuse a device whose descriptors don't have the shape this driver drives:
+ * interface 0 with a bulk IN endpoint 0x81 and a sane max packet size.
+ * VID/PID and strings alone are spoofable, and everything after the interface
+ * claim assumes this layout.
+ */
+static bool rtl_device_layout_ok(usb_device_handle_t dev, const usb_device_desc_t *dd)
+{
+    if (dd == nullptr || dd->bNumConfigurations == 0 || dd->bMaxPacketSize0 < 8) {
+        return false;
+    }
+    const usb_config_desc_t *cfg = nullptr;
+    if (usb_host_get_active_config_descriptor(dev, &cfg) != ESP_OK || cfg == nullptr) {
+        return false;
+    }
+    return rtl_config_desc_has_bulk_in(reinterpret_cast<const uint8_t *>(cfg),
+                                       cfg->wTotalLength, ESP_RTL_SDR_BULK_EP_IN);
+}
+
 /** Probe address; if accepted profile, fill candidate and close unless keep_open. */
 static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate *out,
                             bool keep_open)
@@ -2787,7 +2860,12 @@ static bool probe_candidate(esp_rtl_sdr_handle *h, uint8_t addr, DeviceCandidate
     }
     esp_rtl_sdr_device_info_t di{};
     const RtlProfileId profile = identify_profile(h, dev, dd, &info, &di);
-    if (profile == RtlProfileId::Unknown) {
+    const bool layout_ok = profile != RtlProfileId::Unknown && rtl_device_layout_ok(dev, dd);
+    if (profile != RtlProfileId::Unknown && !layout_ok) {
+        RTL_LOGW(h, "addr %u matches %s but has no bulk IN 0x81 on interface 0; ignoring",
+                 static_cast<unsigned>(addr), rtl_profile_name(profile));
+    }
+    if (!layout_ok) {
         close_device_safely(h, dev);
         if (keep_open) {
             if (session_lock()) {
@@ -3045,22 +3123,151 @@ static void host_lib_task_fn(void *arg)
     vTaskDelete(nullptr);
 }
 
+/**
+ * A dongle whose enumeration fails (seen on ESP32-P4 resets with the dongle
+ * attached: "ENUM: CHECK_SHORT_DEV_DESC FAILED") is never reported to clients,
+ * so nothing retries until it is physically replugged. When this driver
+ * installed the host library and no device on the bus has finished
+ * enumeration for a while, power-cycle the root port so the hub state machine
+ * enumerates again. Backs off so an empty port is only blipped once a minute.
+ *
+ * Session-wide: whichever handle's client task gets here first does the check,
+ * at most every kEnumCheckMs, so several handles never cycle the port twice.
+ */
+static constexpr uint32_t kEnumRetryFirstMs = 10000;
+static constexpr uint32_t kEnumRetryMaxMs = 60000;
+static constexpr uint32_t kEnumCheckMs = 500;
+
+static void maybe_retry_enumeration(esp_rtl_sdr_handle *h)
+{
+    if (h->dev != nullptr || !session_lock()) {
+        return;
+    }
+    const TickType_t now = xTaskGetTickCount();
+    if (s_usb_session.external_host || !s_usb_session.host_installed ||
+        s_usb_session.bringing_up ||
+        (now - s_usb_session.enum_checked_at) < pdMS_TO_TICKS(kEnumCheckMs)) {
+        session_unlock();
+        return;
+    }
+    s_usb_session.enum_checked_at = now;
+    /* Count only fully enumerated devices: a device whose enumeration failed
+     * stays in the host library's device list (and in
+     * usb_host_lib_info().num_devices) at address 0 until it is unplugged,
+     * which is exactly the case this retry exists for. */
+    uint8_t addrs[ESP_RTL_SDR_MAX_DEVICES * 4];
+    int num_addressed = 0;
+    const esp_err_t fill = usb_host_device_addr_list_fill(sizeof(addrs), addrs, &num_addressed);
+    if (s_usb_session.enum_retry_ms == 0) {
+        s_usb_session.enum_retry_ms = kEnumRetryFirstMs;
+    }
+    if (fill != ESP_OK || num_addressed > 0) {
+        s_usb_session.enum_no_dev = false;
+        s_usb_session.enum_retry_ms = kEnumRetryFirstMs;
+        session_unlock();
+        return;
+    }
+    if (!s_usb_session.enum_no_dev) {
+        s_usb_session.enum_no_dev = true;
+        s_usb_session.enum_no_dev_since = now;
+        session_unlock();
+        return;
+    }
+    const uint32_t wait_ms = s_usb_session.enum_retry_ms;
+    if ((now - s_usb_session.enum_no_dev_since) < pdMS_TO_TICKS(wait_ms)) {
+        session_unlock();
+        return;
+    }
+    s_usb_session.enum_no_dev_since = now;
+    s_usb_session.enum_retry_ms = (wait_ms * 2 > kEnumRetryMaxMs) ? kEnumRetryMaxMs : wait_ms * 2;
+    session_unlock();
+
+    RTL_LOGW(h, "usb no enumerated device for %u ms: power-cycling the root port",
+             static_cast<unsigned>(wait_ms));
+    /* Re-enumeration is the same risky window install() guards; NEW_DEV or
+     * the settle timer disarms it again. */
+    usb_fault_guard_disarm();
+    usb_fault_guard_arm();
+    if (usb_host_lib_set_root_port_power(false) == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+        (void)usb_host_lib_set_root_port_power(true);
+    }
+    if (session_lock()) {
+        s_usb_session.enum_no_dev_since = xTaskGetTickCount();
+        session_unlock();
+    }
+}
+
+/**
+ * Before a disconnected device is released and closed: take the shared EP0
+ * window (a retune, sideband write, stop or bulk EP recovery on another task
+ * uses h->dev between its own checks) and wait for the bulk URBs to retire
+ * (they complete NO_DEVICE and are not resubmitted; interface release and
+ * device close refuse pending transfers). Those transfers complete through
+ * this task, so keep pumping client events meanwhile.
+ * @return true if this task now owns ep0_sideband_busy.
+ */
+static bool quiesce_gone_device(esp_rtl_sdr_handle *h)
+{
+    const uint32_t limit_ms = 2000 + h->cfg.control_timeout_ms;
+    bool window = false;
+    for (uint32_t waited = 0; waited < limit_ms; waited += 5) {
+        if (!window) {
+            window = !h->ep0_sideband_busy.exchange(true);
+        }
+        if (window && h->live_urbs == 0) {
+            return true;
+        }
+        usb_host_client_handle_events(h->client, 0);
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    if (!window) {
+        RTL_LOGW(h, "usb disconnected while an EP0 window stayed open");
+    }
+    if (h->live_urbs > 0 && h->dev != nullptr) {
+        /* Still owned by the host stack: force them back, then keep pumping
+         * completions for as long as it takes. Releasing the interface under a
+         * live transfer, or letting the next start reuse the pool, corrupts the
+         * HCD's state; a stalled client task is the lesser evil, and it says so. */
+        RTL_LOGW(h, "usb disconnected with %u bulk URBs still pending; flushing",
+                 static_cast<unsigned>(h->live_urbs));
+        usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+        for (uint32_t waited = 0; h->live_urbs > 0 && h->tasks_run; waited += 5) {
+            usb_host_client_handle_events(h->client, 0);
+            vTaskDelay(pdMS_TO_TICKS(5));
+            if (waited != 0 && waited % 2000 == 0) {
+                RTL_LOGW(h, "still waiting for %u bulk URBs to retire",
+                         static_cast<unsigned>(h->live_urbs));
+            }
+        }
+    }
+    return window;
+}
+
 static void client_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
     while (h->tasks_run) {
         usb_host_client_handle_events(h->client, pdMS_TO_TICKS(20));
         retry_deferred_closes(h);
+        maybe_retry_enumeration(h);
         if (h->device_gone) {
-            h->device_gone = false;
             RTL_LOGW(h, "usb disconnected profile=%s addr=%u (other handles unaffected)",
                      rtl_profile_name(h->profile), static_cast<unsigned>(h->open_addr));
             h->streaming = false;
+            const bool window = quiesce_gone_device(h);
             close_opened_device(h);
+            /* Only now: other tasks check device_gone until h->dev is closed. */
+            h->device_gone = false;
             clear_profile_runtime_state(h);
             h->info = {};
             h->info.present = false;
             h->state = ESP_RTL_SDR_STATE_IDLE;
+            if (window) {
+                h->ep0_sideband_busy = false;
+            }
             const uint8_t rescan = 0;
             (void)xQueueSend(h->probe_q, &rescan, 0);
             esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
@@ -3114,6 +3321,8 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
         s_usb_session.new_dev_events = 0;
         s_usb_session.gone_events = 0;
         s_usb_session.claim_conflicts = 0;
+        s_usb_session.enum_no_dev = false;
+        s_usb_session.enum_retry_ms = 0;
         if (!s_usb_session.external_host) {
             s_usb_session.bringing_up = true;
         }

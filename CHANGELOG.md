@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### USB unplug and enumeration robustness
+
+- **Unplug mid-stream no longer races the device close.** Bulk transfers that end
+  `NO_DEVICE` (or complete after DEV_GONE) are retired instead of resubmitted, so
+  they no longer schedule bulk EP recovery against a device being closed.
+  `bulk_resume()` and `bulk_recover_stall()` refuse a gone device, and EP recovery
+  now takes the shared EP0 window. The DEV_GONE handler takes that window and waits
+  for the bulk URBs to retire (pumping client events) before releasing the interface
+  and closing the device; URBs still live after the wait are halted/flushed and
+  waited for. `device_gone` stays set until the device is closed, and `ctrl_submit()`
+  refuses to use a device marked gone.
+- **Retry a failed enumeration.** When this driver installed the host library and no
+  device has finished enumeration for 10 s (backing off to 60 s), power-cycle the
+  root port once, session-wide. Covers `ENUM: CHECK_SHORT_DEV_DESC FAILED` at power-on,
+  which otherwise needed a physical replug. The fault guard is armed around it.
+- **Control-transfer bounds.** Refuse `wLength` larger than the control buffer and
+  RTL2832U I2C passthrough reads over 16 bytes; on IN transfers copy only the bytes
+  actually received and report a short read as an error instead of returning stale
+  buffer contents.
+- **Device layout check.** A device that matches a profile by VID/PID/strings is
+  refused unless interface 0 has a bulk IN endpoint 0x81 with an 8–512 byte packet
+  size. Host tests: `tests/host/test_usb_checks.cpp`.
+
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 
 ### Nooelec NESDR SMArt v5 profile

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Nooelec SMArt v5: every start after a manual gain failed on ESP32-P4.** v0.9.2 re-applied the
+  explicitly applied gain (or tuner AUTO) inside the tuner reinit, before the I2C repeater was
+  switched back on, so the device STALLed the write and `esp_rtl_sdr_start` returned `ESP_FAIL`
+  (a burst of EP0 STALLs, state `IDLE`) until a reboot. The first start after power-up worked
+  because the gain mode was still AUTO. The restore now runs once the repeater is on, in the start
+  path and on the Q-to-native return. Found on a Tab5 with a Nooelec dongle (issue #42): v0.9.1
+  restarted fine, v0.9.2 did not, and with this change repeated stop/start and retunes in MANUAL
+  gain stream normally. The host trace test now checks that the reinit writes no gain.
+
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 
 ### Nooelec NESDR SMArt v5 profile

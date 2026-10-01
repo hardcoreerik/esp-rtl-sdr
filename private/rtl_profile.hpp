@@ -394,7 +394,8 @@ inline bool rtl_profile_uses_r820t2_band_select(RtlProfileId profile)
 }
 
 /**
- * R820T2 RF front-end band select: librtlsdr's R820T freq_ranges[] (tuner_r82xx.c).
+ * R820T2 RF front-end band select. Every row is reproduced by our own black-box capture of a
+ * Nooelec SMArt v5 (docs/captures/nooelec_v5_band_sweep_2026-10-01.md): both sides of each boundary.
  * kRtlFinalTuneTemplate was captured on FM, so without this every R820T2 tune leaves
  * the RF mux and tracking filter on the 90-110 MHz row (17=20, 1a=2a, 1b=34) and the
  * ADC sees no RF at e.g. 433.92 MHz (hardcoreerik/esp-rtl-sdr#25).
@@ -422,7 +423,7 @@ inline uint32_t rtl_r820t2_lo_hz(uint32_t tuner_hz, double if_offset_hz)
     return tuner_hz + static_cast<uint32_t>(if_offset_hz + 0.5);
 }
 
-/** Band row for an LO frequency. Like librtlsdr's r82xx_set_mux(), keyed on LO, not RF. */
+/** Band row for an LO frequency. The captured sweep shows the rows switch on LO (tuner + PLL IF), not RF. */
 inline const R820T2BandRow &rtl_r820t2_band_for_lo_hz(uint32_t lo_hz)
 {
     const uint32_t mhz = lo_hz / 1000000u;

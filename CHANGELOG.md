@@ -11,9 +11,11 @@
   The shared tune template was captured on FM and always wrote `17=20 1a=2a 1b=34`,
   the 90-110 MHz row, so these sticks could stream at e.g. 433.92 MHz without seeing
   RF ([#25](https://github.com/hardcoreerik/esp-rtl-sdr/issues/25)). Each native tune
-  now patches 17/1a/1b from librtlsdr's R820T `freq_ranges[]`, keyed on the LO the PLL
+  now patches 17/1a/1b from a 21-row band table, keyed on the LO the PLL
   is programmed to (tuner + PLL IF), including cold start, leaving Q sampling and
-  bandwidth changes. V4 and V4L are unchanged.
+  bandwidth changes. V4 and V4L are unchanged. Every table row was confirmed against our own PC capture of a
+  Nooelec SMArt v5 (47 frequencies, both sides of every band boundary, ascending and descending), see
+  `docs/captures/nooelec_v5_band_sweep_2026-10-01.md`.
 
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 

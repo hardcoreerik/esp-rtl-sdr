@@ -887,7 +887,7 @@ static void test_r820t2_band_select(void)
     EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(30000000u).open_d, 0x08u);
     EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(75000000u).open_d, 0x00u);
 
-    /* keyed on the LO (tuner + PLL IF), as librtlsdr's r82xx_set_mux() is */
+    /* keyed on the LO (tuner + PLL IF) (confirmed by the captured sweep) */
     const double if_hz = rtl_profile_pll_if_offset_hz(RtlProfileId::NooelecSmartV5);
     EXPECT_EQ_U(rtl_r820t2_lo_hz(307000000u, if_hz), 310570000u);
     EXPECT_EQ_U(rtl_r820t2_band_for_lo_hz(rtl_r820t2_lo_hz(307000000u, if_hz)).mhz, 310u);
@@ -922,9 +922,78 @@ static void test_r820t2_band_select(void)
     EXPECT_EQ_U(pll1a.data[1], 0x61u);
 }
 
+/* Our own black-box capture of a Nooelec SMArt v5 (docs/captures/nooelec_v5_band_sweep_2026-10-01.md):
+ * the vendor DLL tuned 47 frequencies on both sides of every table boundary and the 17/1a/1b values it
+ * left in the tuner are listed here. The table must reproduce every one. */
+static void test_r820t2_band_table_matches_capture(void)
+{
+    struct Point {
+        uint32_t rf_hz;
+        uint8_t r17, r1a, r1b;
+    };
+    static const Point kCaptured[] = {
+        {26430000u, 0x28, 0x2a, 0xdf},
+        {40000000u, 0x28, 0x2a, 0xdf},
+        {46130000u, 0x28, 0x2a, 0xdf},
+        {46730000u, 0x28, 0x2a, 0xbe},
+        {51130000u, 0x28, 0x2a, 0xbe},
+        {51730000u, 0x28, 0x2a, 0x8b},
+        {56130000u, 0x28, 0x2a, 0x8b},
+        {56730000u, 0x28, 0x2a, 0x7b},
+        {61130000u, 0x28, 0x2a, 0x7b},
+        {61730000u, 0x28, 0x2a, 0x69},
+        {66130000u, 0x28, 0x2a, 0x69},
+        {66730000u, 0x28, 0x2a, 0x58},
+        {71130000u, 0x28, 0x2a, 0x58},
+        {71730000u, 0x20, 0x2a, 0x44},
+        {76130000u, 0x20, 0x2a, 0x44},
+        {76730000u, 0x20, 0x2a, 0x44},
+        {86130000u, 0x20, 0x2a, 0x44},
+        {86730000u, 0x20, 0x2a, 0x34},
+        {96130000u, 0x20, 0x2a, 0x34},
+        {96730000u, 0x20, 0x2a, 0x34},
+        {106130000u, 0x20, 0x2a, 0x34},
+        {106730000u, 0x20, 0x2a, 0x24},
+        {116130000u, 0x20, 0x2a, 0x24},
+        {116730000u, 0x20, 0x2a, 0x24},
+        {136130000u, 0x20, 0x2a, 0x24},
+        {136730000u, 0x20, 0x2a, 0x14},
+        {176130000u, 0x20, 0x2a, 0x14},
+        {176730000u, 0x20, 0x2a, 0x13},
+        {216130000u, 0x20, 0x2a, 0x13},
+        {216730000u, 0x20, 0x2a, 0x13},
+        {246130000u, 0x20, 0x2a, 0x13},
+        {246730000u, 0x20, 0x2a, 0x11},
+        {276130000u, 0x20, 0x2a, 0x11},
+        {276730000u, 0x20, 0x2a, 0x00},
+        {306130000u, 0x20, 0x2a, 0x00},
+        {306730000u, 0x20, 0x69, 0x00},
+        {433920000u, 0x20, 0x69, 0x00},
+        {446130000u, 0x20, 0x69, 0x00},
+        {446730000u, 0x20, 0x69, 0x00},
+        {584130000u, 0x20, 0x69, 0x00},
+        {584730000u, 0x20, 0x68, 0x00},
+        {646130000u, 0x20, 0x68, 0x00},
+        {646730000u, 0x20, 0x68, 0x00},
+        {915000000u, 0x20, 0x68, 0x00},
+        {1000000000u, 0x20, 0x68, 0x00},
+        {1500000000u, 0x20, 0x68, 0x00},
+        {1700000000u, 0x20, 0x68, 0x00},
+    };
+    const double if_hz = rtl_profile_pll_if_offset_hz(RtlProfileId::NooelecSmartV5);
+    for (const Point &pt : kCaptured) {
+        uint8_t tail[3] = {};
+        r820t2_patched_tune_tail(rtl_r820t2_lo_hz(pt.rf_hz, if_hz), tail);
+        EXPECT_EQ_U(tail[0], pt.r17);
+        EXPECT_EQ_U(tail[1], pt.r1a);
+        EXPECT_EQ_U(tail[2], pt.r1b);
+    }
+}
+
 int main(void)
 {
     test_r820t2_band_select();
+    test_r820t2_band_table_matches_capture();
     test_detection_matrix();
     test_unknown_reject_and_v3_probe();
     test_tuner_isolation();

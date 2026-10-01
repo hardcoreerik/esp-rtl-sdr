@@ -1060,7 +1060,7 @@ static esp_err_t run_record(esp_rtl_sdr_handle *h, const RtlControlRecord &rec,
          *
          * Logged at warning level and the error is still returned; this only
          * adds attribution, it does not change control flow. */
-        RTL_LOGW(h,
+        RTL_LOGE(h,
                  "ctrl record rejected: profile=%s req=0x%02x value=0x%04x "
                  "index=0x%04x len=%u data0=0x%02x -> %s%s",
                  rtl_profile_name(h->profile), mapped.request_type,
@@ -1289,14 +1289,20 @@ static esp_err_t run_v3_tuner_reinit(esp_rtl_sdr_handle *h)
             return err;
         }
     }
-    if (h->profile == RtlProfileId::NooelecSmartV5) {
-        /* Reinit resets 05/07 to 83/75. Restore an explicitly applied gain
-         * mode before native IQ resumes, rather than reporting a stale gain. */
-        if (h->gain_mode == ESP_RTL_SDR_GAIN_MODE_MANUAL) {
-            return apply_r820t2_gain_records(h, h->gain_tenth_db, &h->gain_tenth_db);
-        }
-        if (h->tuner_auto_applied) return apply_tuner_agc_auto_records(h);
+    return ESP_OK;
+}
+
+/* Reinit resets 05/07 to 83/75. Restore an explicitly applied gain mode before native IQ resumes,
+ * rather than reporting a stale gain. This must run only once the I2C repeater has been switched
+ * back on (kBlogV3TunerRepeaterOn after the reinit and demod IF restore): written inside the reinit
+ * itself it is STALLed, which made every start after a manual gain fail on the Nooelec. */
+static esp_err_t run_nooelec_gain_restore(esp_rtl_sdr_handle *h)
+{
+    if (h->profile != RtlProfileId::NooelecSmartV5) return ESP_OK;
+    if (h->gain_mode == ESP_RTL_SDR_GAIN_MODE_MANUAL) {
+        return apply_r820t2_gain_records(h, h->gain_tenth_db, &h->gain_tenth_db);
     }
+    if (h->tuner_auto_applied) return apply_tuner_agc_auto_records(h);
     return ESP_OK;
 }
 
@@ -1461,6 +1467,10 @@ static esp_err_t run_profile_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
         if (err != ESP_OK) {
             return err;
         }
+        err = run_nooelec_gain_restore(h);
+        if (err != ESP_OK) {
+            return err;
+        }
         err = run_tune(h, frequency_hz, tuner_if_hz);
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "%s RF mode DIRECT_SAMPLING_Q -> NORMAL_TUNER",
@@ -1600,14 +1610,17 @@ static esp_err_t run_bandwidth_program(esp_rtl_sdr_handle *h, uint32_t rf_hz,
                                        uint32_t previous_rf_hz,
                                        const MeasuredTunerBandwidthPlan &plan)
 {
+    bool left_direct = false;
     if (previous_rf_hz != 0 &&
         rtl_profile_uses_v3_direct_sampling(h->profile, previous_rf_hz)) {
         const esp_err_t leave = run_v3_leave_direct(h);
         if (leave != ESP_OK) return leave;
         previous_rf_hz = 0; /* already left Q-branch before filter writes */
+        left_direct = true;
     }
     esp_err_t err = run_records(h, kBlogV3TunerRepeaterOn,
                                  std::size(kBlogV3TunerRepeaterOn));
+    if (err == ESP_OK && left_direct) err = run_nooelec_gain_restore(h);
     if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x0a, plan.reg0a), false);
     if (err == ESP_OK) err = run_record(h, measured_v4_ir_reg_write(0x0b, plan.reg0b), false);
     if (err == ESP_OK) err = run_profile_tune(h, rf_hz, previous_rf_hz, plan.if_hz);
@@ -3931,6 +3944,10 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (cold_tuner_reinit) {
             ret = run_records(handle, kBlogV3TunerRepeaterOn,
                               std::size(kBlogV3TunerRepeaterOn));
+            if (ret != ESP_OK) {
+                break;
+            }
+            ret = run_nooelec_gain_restore(handle);
             if (ret != ESP_OK) {
                 break;
             }

@@ -3198,6 +3198,32 @@ static void maybe_retry_enumeration(esp_rtl_sdr_handle *h)
     }
 }
 
+/* Pump client events (bulk completions are delivered on this task) until the
+ * bulk URBs have retired or timeout_ms has elapsed. */
+static void pump_until_urbs_retired(esp_rtl_sdr_handle *h, uint32_t timeout_ms)
+{
+    const TickType_t started = xTaskGetTickCount();
+    while (h->live_urbs > 0 && h->tasks_run &&
+           (xTaskGetTickCount() - started) < pdMS_TO_TICKS(timeout_ms)) {
+        usb_host_client_handle_events(h->client, 0);
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+}
+
+static void force_bulk_ep_back(esp_rtl_sdr_handle *h)
+{
+    usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+    usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+    usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
+}
+
+/* After halt/flush/clear: how long to keep pumping for the forced-back URBs,
+ * and after the final flush. Same 2 s as the first wait; a flushed transfer
+ * normally completes on the next event pass, so this is only reached when
+ * the HCD has lost one. */
+static constexpr uint32_t kGoneFlushWaitMs = 2000;
+static constexpr uint32_t kGoneFinalFlushWaitMs = 100;
+
 /**
  * Before a disconnected device is released and closed: take the shared EP0
  * window (a retune, sideband write, stop or bulk EP recovery on another task
@@ -3205,6 +3231,10 @@ static void maybe_retry_enumeration(esp_rtl_sdr_handle *h)
  * (they complete NO_DEVICE and are not resubmitted; interface release and
  * device close refuse pending transfers). Those transfers complete through
  * this task, so keep pumping client events meanwhile.
+ *
+ * Every wait is bounded, so a URB that never completes cannot hang the client
+ * task (and with it hotplug for this handle). Worst case is about
+ * 2 s + control_timeout_ms + kGoneFlushWaitMs + kGoneFinalFlushWaitMs.
  * @return true if this task now owns ep0_sideband_busy.
  */
 static bool quiesce_gone_device(esp_rtl_sdr_handle *h)
@@ -3225,23 +3255,27 @@ static bool quiesce_gone_device(esp_rtl_sdr_handle *h)
         RTL_LOGW(h, "usb disconnected while an EP0 window stayed open");
     }
     if (h->live_urbs > 0 && h->dev != nullptr) {
-        /* Still owned by the host stack: force them back, then keep pumping
-         * completions for as long as it takes. Releasing the interface under a
-         * live transfer, or letting the next start reuse the pool, corrupts the
-         * HCD's state; a stalled client task is the lesser evil, and it says so. */
+        /* Still owned by the host stack: force them back and keep pumping. */
         RTL_LOGW(h, "usb disconnected with %u bulk URBs still pending; flushing",
                  static_cast<unsigned>(h->live_urbs));
-        usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        usb_host_endpoint_clear(h->dev, ESP_RTL_SDR_BULK_EP_IN);
-        for (uint32_t waited = 0; h->live_urbs > 0 && h->tasks_run; waited += 5) {
-            usb_host_client_handle_events(h->client, 0);
-            vTaskDelay(pdMS_TO_TICKS(5));
-            if (waited != 0 && waited % 2000 == 0) {
-                RTL_LOGW(h, "still waiting for %u bulk URBs to retire",
-                         static_cast<unsigned>(h->live_urbs));
-            }
-        }
+        force_bulk_ep_back(h);
+        pump_until_urbs_retired(h, kGoneFlushWaitMs);
+    }
+    if (h->live_urbs > 0 && h->dev != nullptr) {
+        force_bulk_ep_back(h);
+        pump_until_urbs_retired(h, kGoneFinalFlushWaitMs);
+    }
+    if (h->live_urbs > 0) {
+        /* Give up and close anyway. The URBs still in flight are leaked, not
+         * freed: free_bulk_pool() and alloc_bulk_pool() both refuse while
+         * live_urbs > 0, so the pool stays allocated (and a later start fails
+         * with INVALID_STATE) instead of the HCD writing into freed memory.
+         * A late completion still lands in bulk_cb, which only decrements
+         * live_urbs now that streaming is false. Interface release and device
+         * close may be refused with transfers pending; close_device_safely()
+         * then parks the handle on the deferred-close list. */
+        RTL_LOGW(h, "usb disconnected: %u bulk URBs never retired; closing anyway, leaking them",
+                 static_cast<unsigned>(h->live_urbs));
     }
     return window;
 }

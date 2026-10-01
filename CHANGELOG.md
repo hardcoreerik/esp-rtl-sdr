@@ -10,8 +10,10 @@
   `bulk_resume()` and `bulk_recover_stall()` refuse a gone device, and EP recovery
   now takes the shared EP0 window. The DEV_GONE handler takes that window and waits
   for the bulk URBs to retire (pumping client events) before releasing the interface
-  and closing the device; URBs still live after the wait are halted/flushed and
-  waited for. `device_gone` stays set until the device is closed, and `ctrl_submit()`
+  and closing the device. URBs still live after that are halted/flushed and waited
+  for up to 2 s more, then flushed once more; any that still never complete are
+  logged and leaked (the pool is not freed) rather than hang the client task.
+  `device_gone` stays set until the device is closed, and `ctrl_submit()`
   refuses to use a device marked gone.
 - **Retry a failed enumeration.** When this driver installed the host library and no
   device has finished enumeration for 10 s (backing off to 60 s), power-cycle the

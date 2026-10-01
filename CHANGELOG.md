@@ -12,7 +12,8 @@
   rejected: its stored field is `0x08000000`, which the same mirror realizes
   as 300 kHz. Rates from 900001 Hz through 3.2 MHz, including the 960 kS/s
   and 2.048 MS/s paths, were already exact. Host tests require the low-band
-  rates to round-trip. See #24.
+  rates to round-trip. Found and diagnosed by David Coulson ([@davidcoulson](https://github.com/davidcoulson)) in #24,
+  including the correction that the stored field must keep the 28-bit mask and only the Hz calculation applies the mirror.
 
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 

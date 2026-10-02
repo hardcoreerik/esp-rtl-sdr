@@ -1,4 +1,4 @@
-# Tab5 sample-rate / band A/B runs, Blog V4, V4L and V3c, 2026-10-01
+# Tab5 sample-rate / band A/B runs, Blog V4, V4L, V3c and Nooelec v5, 2026-10-01
 
 Tab5 (ESP32-P4) with a Blog V4 and the ADS-B dipole in the east window, the same antenna as the PC captures. One-second pre-DSP IQ per
 cell, scored by `rtl-gate/band_snr.py`. All runs use the same OrcSDR build apart from the driver pin (OrcSDR `main` at #149 plus one
@@ -58,6 +58,27 @@ Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.0
   it recovered only at 2.048 MS/s. The 960 kS/s cells on A are therefore `NO_IQ` for that reason, not a rate fault. A failed start leaving the app idle until the
   next successful one is an OrcSDR-side robustness note.
 
+## Nooelec NESDR SMArt v5 (`nooelec_*.json`, profile `nooelec_smart_v5_r820t2`)
+
+- **The published 0.9.2 cannot hold a manual gain on the Nooelec.** In the fixed-gain sweeps A's stream went idle as soon as the test gain was applied (1 of 28 captures
+  worked) and stayed idle until the Tab5 was reset; B ran all 27 fixed-gain cells. This is the "restart after manual gain" fault fixed by #44, reproduced on the
+  Tab5. A therefore has no fixed-gain data for the Nooelec (`nooelec_nooelec-rates-A.json` is mostly `NO_IQ`); the A/B comparison below uses the tuner AGC on both.
+- **AGC vs AGC, 960 kS/s, 3 captures each (`nooelec_nooelec-rep-A-agc.json` vs `nooelec_nooelec-rep-B-agc.json`):** at **453.925 MHz** peak over noise goes from
+  16 to 18 dB to 46.4 to 46.8 dB (+29 dB), strong bins 14 to 16 to 49 to 66, noise floor -80 to -69 dBFS. At 915 MHz 4.3 to 9 to 17 dB, at 1090 MHz 2.0 to 7.5 to 7.9 dB, at
+  433.92 MHz about 1 to 4 to 8 dB. At 230 MHz the peak over noise is the same (23 vs 24 dB) with the floor 5.5 dB higher on B (more level, not more signal-to-noise);
+  118.9 MHz no real change. No clipping on either.
+- B at a fixed 19.7 dB (`nooelec_nooelec-rep-B1.json`) agrees: 42 to 43 dB at 453.925 MHz.
+- This matches the earlier hardware check on the same dongle in PR #49 (453.9 MHz 21 to 43 dB, 17 to 72 strong signals).
+
+## Summary across the four boards (A = published 0.9.2, B = release candidate)
+
+| Board | 250 kS/s | Band change effect | Other |
+|---|---|---|---|
+| V4 | fixed (A fails) | +3 to 6 dB peak over noise at 230 MHz; nothing elsewhere | |
+| V4L | fixed (A fails) | level +3.5 dB at 230 MHz, signal-to-noise unchanged | |
+| V3c | fixed (A fails; leaves the app idle for one more request) | 453.925 MHz 1 dB to 40 to 45 dB; 433 / 915 / 1090 MHz come alive | |
+| Nooelec | not measured | 453.925 MHz 17 dB to 46 dB; 915 / 1090 / 433 MHz up 5 to 15 dB | A cannot hold a manual gain (#44) |
+
 ## Not shown
 
-the Nooelec on the Tab5; the per-rate filter and IF change (column C); a second site or antenna; any claim relative to the vendor DLL.
+the Nooelec 250 kS/s case (A cannot hold the test gain) and a Nooelec rate sweep on A; the per-rate filter and IF change (column C); a second site or antenna; any claim relative to the vendor DLL.

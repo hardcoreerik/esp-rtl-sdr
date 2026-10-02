@@ -78,4 +78,42 @@ inline void patch_record(const Band &band, RtlControlRecord &rec)
     }
 }
 
+/* ----------------------------------------------------------------------------------------------- */
+/* Blog V4 (R828D) and V4L (R828S) above the 28.8 MHz upconverter                                   */
+/* ----------------------------------------------------------------------------------------------- */
+
+/* Our 2026-10-01 vendor-DLL captures (47 tunes up and down on each, plus 10 kHz scans of every edge on the V4) show both
+ * boards stepping register 1b through the same rows as the table above, keyed on the LO. The V4 also toggles register 17
+ * bit 3 at fixed RF points that do not move with the sample rate; the V4L does not. At and below 28.8 MHz the measured
+ * upconverter route applies and is left alone. */
+constexpr uint32_t kUpconverterTopHz = 28800000u;
+
+constexpr bool v4l_uses_band_select(RtlProfileId profile, uint32_t rf_hz)
+{
+    return profile == RtlProfileId::BlogV4L && rf_hz > kUpconverterTopHz;
+}
+
+struct V4Regs {
+    uint8_t r17, r1a, r1b;
+};
+
+/* RF (Hz) where register 17 bit 3 flips on the V4. Open-drain is set below the first edge, then alternates; the 112 and
+ * 242 MHz edges are exclusive (the register still has the earlier value at exactly 112.000 and 242.000 MHz). */
+constexpr uint32_t kV4OpenDrainFlipsHz[] = {85000000u, 112000001u, 172000000u, 242000001u};
+
+/** Final 17/1a/1b of a V4 tune above 28.8 MHz; false at or below it (the HF route keeps its own values). */
+inline bool v4_regs(uint32_t rf_hz, uint32_t lo, V4Regs *out)
+{
+    if (out == nullptr || rf_hz <= kUpconverterTopHz) return false;
+    bool open_drain = true;
+    for (const uint32_t flip : kV4OpenDrainFlipsHz) {
+        if (rf_hz >= flip) open_drain = !open_drain;
+    }
+    const Band &band = band_for_lo_hz(lo);
+    out->r17 = static_cast<uint8_t>(0x20 | (open_drain ? kR17Mask : 0));
+    out->r1a = static_cast<uint8_t>((0x2a & ~kR1aMask) | band.r1a_mux);
+    out->r1b = band.r1b_filter;
+    return true;
+}
+
 }  // namespace r820t2

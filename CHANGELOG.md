@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **Blog V4 and V4L follow the captured RF mux / tracking-filter bands above 28.8 MHz ([#51](https://github.com/hardcoreerik/esp-rtl-sdr/issues/51)).**
+  Our 2026-10-01 vendor-DLL captures (47 tunes up and down on each board, plus 10 kHz scans of every edge) show both boards stepping register 1b
+  through the same rows as the R820T2 table, keyed on the LO the PLL uses. The V4 route wrote only `00` or `34` (the V4L `34`), so e.g. 116-306 MHz ran
+  with the 96 MHz filter. The V4 also toggles register 17 bit 3 at 85, 112, 172 and 242 MHz (RF-keyed, independent of sample rate); the V4L does not.
+  HF (28.8 MHz and below) is unchanged, and FM and ADS-B get the registers they always did. On a Tab5 the V4 gains about 3-6 dB peak over noise at
+  230 MHz; the V4L is neutral for signal-to-noise (its level rises about 3.5 dB there); nothing else moved and nothing regressed
+  (`docs/captures/tab5_rate_matrix_2026-10-01/`). One site, one antenna, one unit of each dongle.
+
 - **R820T2 RF mux and tracking filter now follow the tuned band (Blog V3, Nooelec SMArt v5).** The tune sequence the driver replays was captured on FM,
   so every tune left registers 17, 1a and 1b on the 90-110 MHz setting and the front end was effectively deaf away from FM: the stream ran but heard
   nothing ([#25](https://github.com/hardcoreerik/esp-rtl-sdr/issues/25)). The issue was found and reported by David Coulson

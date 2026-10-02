@@ -1,11 +1,12 @@
 import json,subprocess,csv,sys,collections
 PCAP,EVF,BUS,ADDR,OUT=sys.argv[1:6]
 ev=json.load(open(EVF))
-out=subprocess.run([r'C:\Program Files\Wireshark\tshark.exe','-r',PCAP,'-Y',f'usb.bus_id=={BUS} && usb.device_address=={ADDR} && usb.bmRequestType==0x40 && usb.setup.wIndex==0x0610 && usb.setup.wLength==2','-T','fields','-e','frame.time_epoch','-e','usb.setup.wValue','-e','usb.data_fragment'],capture_output=True,text=True).stdout
+out=subprocess.run([r'C:\Program Files\Wireshark\tshark.exe','-r',PCAP,'-Y',f'usb.bus_id=={BUS} && usb.device_address=={ADDR} && usb.bmRequestType==0x40 && usb.setup.wIndex==0x0610 && usb.setup.wLength==2','-T','fields','-e','frame.time_epoch','-e','usb.setup.wValue','-e','usb.data_fragment'],capture_output=True,text=True,check=True).stdout
 W=[]
 for ln in out.splitlines():
     t,wv,h=ln.split('\t');h=h.strip()
     if len(h)==4 and wv not in ('0x00c6','0x00c8'):W.append((float(t),h[:2],h[2:],wv))
+if not W: sys.exit('no tuner I2C writes for bus %s address %s in %s: wrong USBPcap interface or an empty capture' % (BUS,ADDR,PCAP))
 TV=collections.Counter(w[3] for w in W).most_common(1)[0][0];print('tuner i2c wValue',TV)
 W=[w[:3] for w in W if w[3]==TV]
 tunes=[e for e in ev if e['stage'].startswith('tune_')]

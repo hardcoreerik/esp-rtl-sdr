@@ -88,7 +88,20 @@ Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.0
   The driver side of that run is clean: bulk resubmit errors, `usb disconnected`, re-probe, and a root-port power cycle after 10 s with nothing attached, as designed.
 - **B plus the OrcSDR speaker fix (all speaker end/begin under one mutex; no restart without a receiver): passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures,
   0 reboots, 0 leaked URBs. One clean run is not proof for a race; the fix addresses the decoded cause. OrcSDR PR: `claude/fix-speaker-disconnect-race`.
-- Still to do: the same cycles on the V4L and V3c (and the Nooelec again) with the fixed app.
+- Still to do: the same cycles on the V4L, V3c and Nooelec with the fixed app.
+
+## Column C: per-rate filter and IF on the V4 (`blog_v4-C2-rate-plan-g197.json`, `blog_v4-repC-*.json`)
+
+C is the driver branch `feat/v4-v4l-rate-filter-if` (3787e10): B plus the vendor DLL's per-rate IF filter, IF and demod IF for the V4 and V4L. Tested as "C2" = C plus the OrcSDR speaker fix, against
+"B2" = B plus the same speaker fix, so the app is identical.
+
+- **Sweep, one capture per cell (250k, 960k, 1.8M, 2.048M, 2.4M, 3.2M at 96.1 / 433.92 MHz, fixed 19.7 dB gain):** 12 of 12 cells returned IQ, zero overruns and drops, effective rates within 0.2% of
+  requested, 250 kS/s starts. Differences from B are a few dB in both directions. At 2.4 MS/s, where C changes nothing, the same cell still moves by +2.7 dB noise and +2.3 dB peak over noise,
+  so single-capture variation is about +/-3 dB at 96.1 MHz.
+- **Replication at 960 kS/s, interleaved C2, B2, C2, B2, three captures per cell, 96.1 / 118.9 / 162.55 / 433.92 MHz:** peak over noise C2 minus B2 is +1.0, -0.2, +0.5 dB and the noise floor
+  -1.1, +0.1, -0.1 dB (433.92 MHz is dominated by a burst in one B2 run and is not usable). All 48 cells returned IQ, zero overruns and drops, identical stream health.
+- **Reading:** C reproduces the vendor DLL's register behaviour on the V4 (parity) but shows no measurable change in reception at 960 kS/s on this site and antenna, even at FM with hundreds of strong bins.
+  Rates other than 960 kS/s were checked only with the single-capture sweep. Not tested on the V4L. No benefit has been demonstrated.
 
 ## Not shown
 

@@ -88,7 +88,10 @@ Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.0
   The driver side of that run is clean: bulk resubmit errors, `usb disconnected`, re-probe, and a root-port power cycle after 10 s with nothing attached, as designed.
 - **B plus the OrcSDR speaker fix (all speaker end/begin under one mutex; no restart without a receiver): passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures,
   0 reboots, 0 leaked URBs. One clean run is not proof for a race; the fix addresses the decoded cause. OrcSDR PR: `claude/fix-speaker-disconnect-race`.
-- Still to do: the same cycles on the V4L, V3c and Nooelec with the fixed app.
+- **Blog V4L, B plus the speaker fix: passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures, 0 reboots, 0 leaked URBs (`hotplug/v4l-hotplug-B2-speakerfix/`). The same run's gain stage failed on two console timeouts:
+  a driver log line was interleaved into the middle of the `RTL_DRIVER_STATUS` reply, so the harness's pattern match timed out (the known two-writers-one-console problem; the Tab5 sweep script quiets the console to avoid it,
+  the regression script's gain stage does not). It does not affect the unplug result.
+- Still to do: the same cycles on the V3c and Nooelec with the fixed app.
 
 ## Column C: per-rate filter and IF on the V4 (`blog_v4-C2-rate-plan-g197.json`, `blog_v4-repC-*.json`)
 

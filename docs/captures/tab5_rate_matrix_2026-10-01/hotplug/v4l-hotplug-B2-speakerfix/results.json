@@ -1,0 +1,39 @@
+{
+  "label": "v4l-hotplug-B2-speakerfix",
+  "level": "Quick",
+  "started": "2026-10-01T21:25:51",
+  "antenna": "ADS-B dipole east window",
+  "stages": [
+    {
+      "name": "preflight",
+      "status": "PASS",
+      "detail": "blog_v4l_r828s, driver 0.9.2 (pin 3787e1015d), state STREAMING, gain=True",
+      "data": null
+    },
+    {
+      "name": "stress",
+      "status": "PASS",
+      "detail": "18 band switches over 2 rounds; problems: none",
+      "data": []
+    },
+    {
+      "name": "gain",
+      "status": "FAIL",
+      "detail": "IQ RMS at 0/25.4/49.6 dB: 1.9",
+      "data": {
+        "0": 1.934574
+      }
+    },
+    {
+      "name": "hotplug",
+      "status": "PASS",
+      "detail": "asked 5: disconnects=6 probes=6 restarts=6 start failures=0 reboots=0 leaked URBs=0",
+      "data": null
+    }
+  ],
+  "dongle": "blog_v4l_r828s",
+  "driver_version": "0.9.2",
+  "driver_pin": "3787e1015d136f28f68be8c1411e1fac2b4e00d6",
+  "orcsdr": "claude/tab5-abc-C2@5f788a1",
+  "finished": "2026-10-01T21:31:45"
+}

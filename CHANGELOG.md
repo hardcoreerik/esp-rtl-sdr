@@ -16,6 +16,60 @@
   bandwidth changes. V4 and V4L are unchanged. Every table row was confirmed against our own PC capture of a
   Nooelec SMArt v5 (47 frequencies, both sides of every band boundary, ascending and descending), see
   `docs/captures/nooelec_v5_band_sweep_2026-10-01.md`.
+### USB unplug and enumeration robustness
+
+Contributed by David Coulson ([@davidcoulson](https://github.com/davidcoulson), PR #48, originally
+from his fork's #26); integrated here with his commits and authorship kept. Hardware-checked on a Tab5 (ESP32-P4)
+with a Nooelec SMArt v5: 10 unplug/replug cycles mid-stream (every one detected, re-probed and restarted,
+no reboot), and a 105 s unplug with the empty-port retry power-cycling the root port at 10, 20 and 40 s
+before the dongle re-enumerated and streamed within 2 s of the replug.
+
+- **Retry timer reset while a device is open.** The "no device" timer is cleared whenever a device is open;
+  without that, the flag from the first moments after boot stayed set and the first unplug was power-cycled
+  at once rather than after 10 s.
+
+- **Unplug mid-stream no longer races the device close.** Bulk transfers that end
+  `NO_DEVICE` (or complete after DEV_GONE) are retired instead of resubmitted, so
+  they no longer schedule bulk EP recovery against a device being closed.
+  `bulk_resume()` and `bulk_recover_stall()` refuse a gone device, and EP recovery
+  now takes the shared EP0 window. The DEV_GONE handler takes that window and waits
+  for the bulk URBs to retire (pumping client events) before releasing the interface
+  and closing the device. URBs still live after that are halted/flushed and waited
+  for up to 2 s more, then flushed once more; any that still never complete are
+  logged and leaked (the pool is not freed) rather than hang the client task.
+  `device_gone` stays set until the device is closed, and `ctrl_submit()`
+  refuses to use a device marked gone.
+- **Retry a failed enumeration.** When this driver installed the host library and no
+  device has finished enumeration for 10 s (backing off to 60 s), power-cycle the
+  root port once, session-wide. Covers `ENUM: CHECK_SHORT_DEV_DESC FAILED` at power-on,
+  which otherwise needed a physical replug. The fault guard is armed around it.
+- **Control-transfer bounds.** Refuse `wLength` larger than the control buffer and
+  RTL2832U I2C passthrough reads over 16 bytes; on IN transfers copy only the bytes
+  actually received and report a short read as an error instead of returning stale
+  buffer contents.
+- **Device layout check.** A device that matches a profile by VID/PID/strings is
+  refused unless interface 0 has a bulk IN endpoint 0x81 with an 8–512 byte packet
+  size. Host tests: `tests/host/test_usb_checks.cpp`.
+### Fixed
+
+- **Nooelec SMArt v5: every start after a manual gain failed on ESP32-P4.** v0.9.2 re-applied the
+  explicitly applied gain (or tuner AUTO) inside the tuner reinit, before the I2C repeater was
+  switched back on, so the device STALLed the write and `esp_rtl_sdr_start` returned `ESP_FAIL`
+  (a burst of EP0 STALLs, state `IDLE`) until a reboot. The first start after power-up worked
+  because the gain mode was still AUTO. The restore now runs once the repeater is on, in the start
+  path and on the Q-to-native return. Found on a Tab5 with a Nooelec dongle (issue #42): v0.9.1
+  restarted fine, v0.9.2 did not, and with this change repeated stop/start and retunes in MANUAL
+  gain stream normally. The host trace test now checks that the reinit writes no gain.
+- **Low-band sample rates.** `esp_rtl_sdr_quantize_sample_rate()` masked the
+  RTL2832 resampler field with `0x0ffffffc` and converted that field back to
+  Hz without mirroring bit 27 into bit 28. Every request from 225001 Hz to
+  300000 Hz was reported at about 2× (`250000` stored as `562500`), and
+  `start()` programmed the demod from that wrong rate. `900000` Hz is now
+  rejected: its stored field is `0x08000000`, which the same mirror realizes
+  as 300 kHz. Rates from 900001 Hz through 3.2 MHz, including the 960 kS/s
+  and 2.048 MS/s paths, were already exact. Host tests require the low-band
+  rates to round-trip. Found and diagnosed by David Coulson ([@davidcoulson](https://github.com/davidcoulson)) in #24,
+  including the correction that the stored field must keep the 28-bit mask and only the Hz calculation applies the mirror.
 
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 

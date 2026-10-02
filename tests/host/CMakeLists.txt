@@ -21,6 +21,10 @@ add_executable(esp_rtl_sdr_multi_tests
     ${CMAKE_CURRENT_SOURCE_DIR}/../../src/esp_rtl_sdr_multi.cpp
 )
 
+add_executable(esp_rtl_sdr_usb_check_tests
+    test_usb_checks.cpp
+)
+
 target_include_directories(esp_rtl_sdr_host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/stubs
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
@@ -40,17 +44,24 @@ target_include_directories(esp_rtl_sdr_multi_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../private
 )
 
+target_include_directories(esp_rtl_sdr_usb_check_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../private
+)
+
 if(MSVC)
   target_compile_options(esp_rtl_sdr_host_tests PRIVATE /W4)
   target_compile_options(esp_rtl_sdr_profile_tests PRIVATE /W4)
   target_compile_options(esp_rtl_sdr_multi_tests PRIVATE /W4)
+  target_compile_options(esp_rtl_sdr_usb_check_tests PRIVATE /W4)
 else()
   target_compile_options(esp_rtl_sdr_host_tests PRIVATE -Wall -Wextra)
   target_compile_options(esp_rtl_sdr_profile_tests PRIVATE -Wall -Wextra)
   target_compile_options(esp_rtl_sdr_multi_tests PRIVATE -Wall -Wextra)
+  target_compile_options(esp_rtl_sdr_usb_check_tests PRIVATE -Wall -Wextra)
 endif()
 
 enable_testing()
 add_test(NAME policy COMMAND esp_rtl_sdr_host_tests)
 add_test(NAME profiles COMMAND esp_rtl_sdr_profile_tests)
 add_test(NAME multi_device COMMAND esp_rtl_sdr_multi_tests)
+add_test(NAME usb_checks COMMAND esp_rtl_sdr_usb_check_tests)

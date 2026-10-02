@@ -13,7 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 FUNCTIONS = """apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
 map_tuner_record_for_profile run_record run_records run_profile_demod_if_restore
-run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_v3_leave_direct
+run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_nooelec_gain_restore run_v3_leave_direct
 run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
 apply_tuner_agc_auto_records apply_rtl_agc_records run_bandwidth_program""".split()
 
@@ -52,6 +52,7 @@ HARNESS = r'''
 #define ESP_LOGW(...) ((void)0)
 #define ESP_LOGE(...) ((void)0)
 #define RTL_LOGW(...) ((void)0)
+#define RTL_LOGE(...) ((void)0)
 #define RTL_LOGD(...) ((void)0)
 #define pdMS_TO_TICKS(x) (x)
 static unsigned checks = 0;
@@ -170,6 +171,12 @@ int main() {
         CHECK(wire[0].length == 1 && wire[0].data[0] == (enabled ? 0x25 : 0x05));
         CHECK(wire[1].value == 0x0120 && wire[1].index == 0x000a && wire[1].request_type == 0xc0 && wire[1].length == 1);
     }
+    // The tuner reinit must not write gain itself: the I2C repeater is only switched back on after
+    // it, and a gain write inside it is STALLed on hardware, so every start after a manual gain failed.
+    // The restore runs separately, once the repeater is on.
+    h = {}; wire.clear(); h.gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL; h.gain_tenth_db = 496;
+    CHECK(run_v3_tuner_reinit(&h) == ESP_OK); gain(0x83, 0x75, 0xf0);
+    wire.clear(); CHECK(run_nooelec_gain_restore(&h) == ESP_OK); gain(0x9f, 0x6e, 0x68);
     // A Q retune can cancel queued MANUAL while the old AUTO-applied flag remains.
     h.gain_mode = ESP_RTL_SDR_GAIN_MODE_MANUAL; h.gain_tenth_db = 496;
     h.tuner_auto_applied = true;

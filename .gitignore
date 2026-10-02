@@ -18,3 +18,6 @@ managed_components/
 *.bak
 *.bak_*
 *.orig
+
+__pycache__/
+*.pyc

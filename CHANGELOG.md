@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **R820T2 RF mux and tracking filter now follow the tuned band (Blog V3, Nooelec SMArt v5).** The tune sequence the driver replays was captured on FM,
+  so every tune left registers 17, 1a and 1b on the 90-110 MHz setting and the front end was effectively deaf away from FM: the stream ran but heard
+  nothing ([#25](https://github.com/hardcoreerik/esp-rtl-sdr/issues/25)). The issue was found and reported by David Coulson
+  ([@davidcoulson](https://github.com/davidcoulson)), whose PR #45 pointed at the cause and informed our investigation; the implementation is ours, built
+  from our own black-box PC captures of the vendor DLL (47 tunes up and down on a Nooelec SMArt v5 and a Blog V3c, both sides of every boundary), which
+  give a 15-row band table keyed on the LO the PLL is programmed to (`private/r820t2_band.hpp`). Checked on a Tab5 (ESP32-P4) with a Nooelec SMArt v5
+  and a dipole, same gain and antenna before and after: 453.925 MHz went from about 17 to about 46 dB peak over noise (14-16 to 49-66 strong bins),
+  915 and 1090 MHz up 5-15 dB; on a Blog V3c 453.925 MHz went from about 1 dB to 40-45 dB. Blog V4 and V4L are unchanged by this entry.
+
 - **Unplugging a dongle mid-stream, a dongle that fails to enumerate, and oversized or short control transfers are now handled.**
   The problem was reported by David Coulson ([@davidcoulson](https://github.com/davidcoulson), PR #48, from his fork's #26): a dongle unplugged
   mid-stream, or one that failed to enumerate after a reset, left the driver and the USB host stack in a bad state until a reboot. His report and PR

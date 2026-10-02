@@ -39,6 +39,7 @@
 #include "measured_v4l_frontend.hpp"
 #include "measured_tuner_bandwidth.hpp"
 #include "gain_r820t2.hpp"
+#include "r820t2_band.hpp"
 #include "rtl_usb_guard.hpp"
 #include "reentrancy.hpp"
 #include "resampler_ratio.hpp"
@@ -1399,6 +1400,11 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(tune_hz),
              h != nullptr ? static_cast<int>(h->freq_correction_ppm) : 0, hf ? 1 : 0, r16_setup,
               r16_active, r20, r21, r22, static_cast<unsigned>(if_offset_hz));
+    /* The R820T2 RF mux and tracking filter follow the LO actually programmed (issue #25). */
+    const r820t2::Band *band = nullptr;
+    if (r820t2::profile_uses_band_select(profile)) {
+        band = &r820t2::band_for_lo_hz(r820t2::lo_hz(tune_hz, if_offset_hz));
+    }
     uint32_t rec_us[std::size(kRtlFinalTuneTemplate)] = {0};
     int skipped = 0;
     for (size_t i = 0; i < std::size(kRtlFinalTuneTemplate); ++i) {
@@ -1408,6 +1414,9 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
             rec_us[i] = 0;
             skipped++;
             continue;
+        }
+        if (band != nullptr) {
+            r820t2::patch_record(*band, rec);
         }
         if (profile == RtlProfileId::NooelecSmartV5 && i == 6) {
             /* Older V4 template writes manual 0c=68 on every tune. Preserve

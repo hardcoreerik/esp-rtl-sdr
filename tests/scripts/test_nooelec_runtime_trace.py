@@ -41,6 +41,7 @@ HARNESS = r'''
 #include <iterator>
 #include <vector>
 #include "rtl_profile.hpp"
+#include "r820t2_band.hpp"
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
 #include "measured_gain_bias_v4.hpp"
@@ -183,6 +184,27 @@ int main() {
     wire.clear(); CHECK(run_profile_tune(&h, 1600000, 99100000) == ESP_OK); q_route();
     wire.clear(); CHECK(run_profile_tune(&h, 99100000, 1600000) == ESP_OK);
     gain(0x9f, 0x6e, 0x68); CHECK(!h.tuner_auto_applied);
+    // R820T2 band select: the final 17/1a/1b of a native tune follow the LO (RF + 3.57 MHz), matching the registers
+    // our own PC captures show the vendor DLL leaving behind (2026-10-01 band sweep, Nooelec SMArt v5).
+    struct BandCase { uint32_t rf; int r17, r1a, r1b; };
+    static const BandCase kBandCases[] = {
+        {46130000, 0x28, 0x2a, 0xdf},   {46730000, 0x28, 0x2a, 0xbe},   {71730000, 0x20, 0x2a, 0x44},
+        {96130000, 0x20, 0x2a, 0x34},   {306730000, 0x20, 0x69, 0x00},  {433920000, 0x20, 0x69, 0x00},
+        {584730000, 0x20, 0x68, 0x00},  {915000000, 0x20, 0x68, 0x00},  {1090000000, 0x20, 0x68, 0x00},
+    };
+    for (const auto &c : kBandCases) {
+        h = {}; wire.clear();
+        CHECK(run_profile_tune(&h, c.rf, 0) == ESP_OK);
+        CHECK(last_tuner(0x17) == c.r17); CHECK(last_tuner(0x1a) == c.r1a); CHECK(last_tuner(0x1b) == c.r1b);
+    }
+    // The mid-tune PLL write to 1a (0x22) keeps its autotune bit and only takes the mux bits: 0x22 at 433.92 MHz becomes 0x61.
+    h = {}; wire.clear();
+    CHECK(run_profile_tune(&h, 433920000, 0) == ESP_OK);
+    bool pll_1a_seen = false;
+    for (const auto &r : wire)
+        if (r.request_type == 0x40 && r.index == 0x0610 && r.length == 2 && r.data[0] == 0x1a && r.data[1] == 0x61)
+            pll_1a_seen = true;
+    CHECK(pll_1a_seen);
     std::printf("RESULT nooelec_runtime_trace passed=%u failed=0\n", checks);
 }
 '''

@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- **Unplugging a dongle mid-stream, a dongle that fails to enumerate, and oversized or short control transfers are now handled.**
+  The problem was reported by David Coulson ([@davidcoulson](https://github.com/davidcoulson), PR #48, from his fork's #26): a dongle unplugged
+  mid-stream, or one that failed to enumerate after a reset, left the driver and the USB host stack in a bad state until a reboot. His report and PR
+  informed the investigation; this implementation was written independently from our own requirements and hardware tests, not taken from his code.
+  On DEV_GONE the driver now claims the shared EP0 window, waits a bounded time for the bulk URBs to retire (flushing the endpoint twice, then leaking
+  them rather than freeing them under the host controller), and only then closes the device; control transfers refuse a device that is gone, refuse
+  requests that do not fit the buffer or read more than 16 bytes from the I2C passthrough, and treat a short read as an error. A failed enumeration is
+  retried by power-cycling the root port with back-off (10, 20, 40, then 60 s) when no enumerated device is on the bus, and a device that does not
+  expose the bulk IN endpoint is rejected at probe. New host tests: `tests/host/test_usb_guard.cpp`. Hardware (ESP32-P4): 10 unplug/replug cycles
+  mid-stream and a 105 s unplug with the root port cycled on a Nooelec SMArt v5; hubs are untested.
+
 - **Nooelec SMArt v5: every start after a manual gain failed on ESP32-P4.** v0.9.2 re-applied the
   explicitly applied gain (or tuner AUTO) inside the tuner reinit, before the I2C repeater was
   switched back on, so the device STALLed the write and `esp_rtl_sdr_start` returned `ESP_FAIL`

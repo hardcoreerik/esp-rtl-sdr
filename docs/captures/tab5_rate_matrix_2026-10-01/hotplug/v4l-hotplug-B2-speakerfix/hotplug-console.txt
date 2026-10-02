@@ -1,0 +1,245 @@
+[    0.0] #PORT_OPEN
+[   30.6] E (503879) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   30.6] W (503880) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   30.6] W (503880) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   30.6] E (503880) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   30.6] W (503880) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   30.6] W (503880) esp_rtl_sdr: [RTL0] bulk status=7 bytes=0
+[   30.6] W (503880) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4l_r828s addr=2 (other handles unaffected)
+[   30.6] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   30.6] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   30.6] I (503881) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   30.6] RTL_STOP_REQUESTED
+[   30.6] E (503893) i2s_common: i2s_del_channel(1091): the channel can't be deleted unless it is disabled
+[   30.6] RTL_STOP_RESULT ESP_OK
+[   30.6] RTL_STOP bytes=205488128
+[   30.6] RTL_SPEAKER_IDLE reason=no_receiver
+[   40.6] W (513901) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   43.4] I (516500) esp_rtl_sdr: [RTL0] usb new_device addr=3 queued=1
+[   43.4] I (516500) esp_rtl_sdr: [RTL0] usb probe_begin addr=3
+[   43.4] I (516501) esp_rtl_sdr: [RTL0] USB device opened addr=3 path=root serial=00000001 hs=1
+[   43.4] I (516501) esp_rtl_sdr: [RTL0] tuner=blog_v4l_r828s caps=0x001fff3f
+[   43.4] RTL_SDR_PROBE_OK profile=4 profile_name="blog_v4l_r828s" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   43.4] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   43.4] I (516513) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   43.4] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   43.4] I (516513) esp_rtl_sdr: blog_v4l_r828s: R828S on the shared R820T2 stream path (I2C 0x34 remap); measured HF upconverter route
+[   43.4] I (516514) esp_rtl_sdr: init begin profile=blog_v4l_r828s records=515
+[   43.4] E (516730) USBH: Dev 3 EP 0 STALL
+[   43.4] E (516732) USBH: Dev 3 EP 0 STALL
+[   43.4] E (516735) USBH: Dev 3 EP 0 STALL
+[   43.4] E (516737) USBH: Dev 3 EP 0 STALL
+[   44.3] I (517581) esp_rtl_sdr: init complete profile=blog_v4l_r828s skipped_v4_board=12
+[   44.3] I (517636) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   44.6] I (517781) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[   44.6] I (517782) esp_rtl_sdr: r820t2 band lo=97914972 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[   44.6] I (517835) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   44.6] I (517835) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   44.6] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   44.6] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   44.6] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   44.6] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   44.6] W (517864) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 2, live_urbs=3)
+[   57.4] E (530644) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   57.4] W (530645) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   57.4] W (530645) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   57.4] E (530645) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   57.4] W (530645) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   57.4] W (530646) esp_rtl_sdr: [RTL0] bulk status=7 bytes=0
+[   57.4] W (530646) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4l_r828s addr=3 (other handles unaffected)
+[   57.4] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   57.4] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   57.4] I (530646) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   57.4] RTL_SPEAKER_IDLE reason=no_receiver
+[   57.4] RTL_STOP_REQUESTED
+[   57.4] RTL_STOP_RESULT ESP_OK
+[   57.4] RTL_STOP bytes=61374464
+[   67.4] W (540667) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   70.8] I (544132) esp_rtl_sdr: [RTL0] usb new_device addr=4 queued=1
+[   70.8] I (544132) esp_rtl_sdr: [RTL0] usb probe_begin addr=4
+[   70.8] I (544133) esp_rtl_sdr: [RTL0] USB device opened addr=4 path=root serial=00000001 hs=1
+[   70.8] I (544133) esp_rtl_sdr: [RTL0] tuner=blog_v4l_r828s caps=0x001fff3f
+[   70.8] RTL_SDR_PROBE_OK profile=4 profile_name="blog_v4l_r828s" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   70.8] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   70.8] I (544135) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   70.8] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   70.8] I (544135) esp_rtl_sdr: blog_v4l_r828s: R828S on the shared R820T2 stream path (I2C 0x34 remap); measured HF upconverter route
+[   70.8] I (544136) esp_rtl_sdr: init begin profile=blog_v4l_r828s records=515
+[   71.1] E (544352) USBH: Dev 4 EP 0 STALL
+[   71.1] E (544354) USBH: Dev 4 EP 0 STALL
+[   71.1] E (544357) USBH: Dev 4 EP 0 STALL
+[   71.1] E (544359) USBH: Dev 4 EP 0 STALL
+[   72.1] I (545203) esp_rtl_sdr: init complete profile=blog_v4l_r828s skipped_v4_board=12
+[   72.1] I (545258) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   72.1] I (545404) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[   72.1] I (545404) esp_rtl_sdr: r820t2 band lo=97914972 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[   72.4] I (545458) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   72.4] I (545458) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   72.4] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   72.4] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   72.4] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   72.4] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   72.4] W (545485) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 3, live_urbs=3)
+[   81.5] W (554513) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   81.5] E (554513) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   81.5] W (554513) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   81.5] E (554513) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   81.5] W (554513) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   81.5] E (554514) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   81.5] W (554514) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   81.5] W (554514) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4l_r828s addr=4 (other handles unaffected)
+[   81.5] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   81.5] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   81.5] I (554515) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   81.5] RTL_STOP_REQUESTED
+[   81.5] RTL_STOP_RESULT ESP_OK
+[   81.5] RTL_STOP bytes=43352064
+[   81.5] RTL_SPEAKER_IDLE reason=no_receiver
+[   91.1] I (564252) esp_rtl_sdr: [RTL0] usb new_device addr=5 queued=1
+[   91.1] I (564252) esp_rtl_sdr: [RTL0] usb probe_begin addr=5
+[   91.1] I (564253) esp_rtl_sdr: [RTL0] USB device opened addr=5 path=root serial=00000001 hs=1
+[   91.1] I (564253) esp_rtl_sdr: [RTL0] tuner=blog_v4l_r828s caps=0x001fff3f
+[   91.1] RTL_SDR_PROBE_OK profile=4 profile_name="blog_v4l_r828s" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   91.1] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   91.1] I(564269) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   91.1] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   91.1] I (564269) esp_rtl_sdr: blog_v4l_r828s: R828S on the shared R820T2 stream path (I2C 0x34 remap); measured HF upconverter route
+[   91.1] I (564270) esp_rtl_sdr: init begin profile=blog_v4l_r828s records=515
+[   91.4] E (564486) USBH: Dev 5 EP 0 STALL
+[   91.4] E (564488) USBH: Dev 5 EP 0 STALL
+[   91.4] E (564491) USBH: Dev 5 EP 0 STALL
+[   91.4] E (564493) USBH: Dev 5 EP 0 STALL
+[   92.0] I (565337) esp_rtl_sdr: init complete profile=blog_v4l_r828s skipped_v4_board=12
+[   92.3] I (565392) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   92.3] I (565538) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[   92.3] I (565538) esp_rtl_sdr: r820t2 band lo=97914972 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[   92.3] I (565592) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   92.3] I (565592) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   92.3] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   92.3] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   92.3] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   92.3] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   92.3] W (565619) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 4, live_urbs=3)
+[  103.9] W (577215) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  103.9] E (577216) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  103.9] W (577216) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  103.9] E (577216) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  103.9] W (577216) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  103.9] E (577216) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  103.9] W (577217) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  103.9] W (577217) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4l_r828s addr=5 (other handles unaffected)
+[  103.9] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  103.9] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[  103.9] I (577217) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  103.9] RTL_STOP_REQUESTED
+[  103.9] RTL_STOP_RESULT ESP_OK
+[  103.9] RTL_STOP bytes=55672832
+[  104.2] RTL_SPEAKER_IDLE reason=no_receiver
+[  114.2] W (587238) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  115.7] I (589025) esp_rtl_sdr: [RTL0] usb new_device addr=6 queued=1
+[  115.7] I (589025) esp_rtl_sdr: [RTL0] usb probe_begin addr=6
+[  115.7] I (589026) esp_rtl_sdr: [RTL0] USB device opened addr=6 path=root serial=00000001 hs=1
+[  115.7] I (589026) esp_rtl_sdr: [RTL0] tuner=blog_v4l_r828s caps=0x001fff3f
+[  115.7] RTL_SDR_PROBE_OK profile=4 profile_name="blog_v4l_r828s" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  115.7] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[  115.7] I (589030) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[  115.7] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[  115.7] I (589030) esp_rtl_sdr: blog_v4l_r828s: R828S on the shared R820T2 stream path (I2C 0x34 remap); measured HF upconverter route
+[  115.7] I (589031) esp_rtl_sdr: init begin profile=blog_v4l_r828s records=515
+[  116.0] E (589247) USBH: Dev 6 EP 0 STALL
+[  116.0] E (589249) USBH: Dev 6 EP 0 STALL
+[  116.0] E (589252) USBH: Dev 6 EP 0 STALL
+[  116.0] E (589254) USBH: Dev 6 EP 0 STALL
+[  117.0] I (590099) esp_rtl_sdr: init complete profile=blog_v4l_r828s skipped_v4_board=12
+[  117.0] I (590154) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  117.0] I (590299) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[  117.0] I (590300) esp_rtl_sdr: r820t2 band lo=97914972 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[  117.3] I (590353) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[  117.3] I (590353) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[  117.3] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[  117.3] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  117.3] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  117.3] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  117.3] W (590382) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 5, live_urbs=3)
+[  130.7] W (603986) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  130.7] E (603986) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  130.7] W (603986) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  130.7] E (603986) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  130.7] W (603986) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  130.7] E (603987) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  130.7] W (603987) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  130.7] W (603987) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4l_r828s addr=6 (other handles unaffected)
+[  130.7] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  130.7] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[  130.7] I (603988) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  130.7] RTL_STOP_REQUESTED
+[  130.7] RTL_STOP_RESULT ESP_OK
+[  130.7] RTL_STOP bytes=65306624
+[  130.7] RTL_SPEAKER_IDLE reason=no_receiver
+[  140.7] W (614008) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  144.1] I (617228) esp_rtl_sdr: [RTL0] usb new_device addr=7 queued=1
+[  144.1] I (617228) esp_rtl_sdr: [RTL0] usb probe_begin addr=7
+[  144.1] I (617229) esp_rtl_sdr: [RTL0] USB device opened addr=7 path=root serial=00000001 hs=1
+[  144.1] I (617229) esp_rtl_sdr: [RTL0] tuner=blog_v4l_r828s caps=0x001fff3f
+[  144.1] RTL_SDR_PROBE_OK profile=4 profile_name="blog_v4l_r828s" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  144.1] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[  144.1] I (617247) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[  144.1] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[  144.1] I (617248) esp_rtl_sdr: blog_v4l_r828s: R828S on the shared R820T2 stream path (I2C 0x34 remap); measured HF upconverter route
+[  144.1] I (617248) esp_rtl_sdr: init begin profile=blog_v4l_r828s records=515
+[  144.1] E (617464) USBH: Dev 7 EP 0 STALL
+[  144.1] E (617466) USBH: Dev 7 EP 0 STALL
+[  144.1] E (617469) USBH: Dev 7 EP 0 STALL
+[  144.1] E (617471) USBH: Dev 7 EP 0 STALL
+[  145.1] I (618315) esp_rtl_sdr: init complete profile=blog_v4l_r828s skipped_v4_board=12
+[  145.1] I (618370) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  145.4] I (618516) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[  145.4] I (618516) esp_rtl_sdr: r820t2 band lo=97914972 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[  145.4] I (618570) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[  145.4] I (618570) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[  145.4] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[  145.4] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  145.4] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  145.4] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  145.4] W (618597) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 6, live_urbs=3)
+[  158.5] E (631815) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  158.5] W (631815) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  158.5] W (631815) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  158.5] E (631816) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  158.5] W (631816) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  158.5] W (631816) esp_rtl_sdr: [RTL0] bulk status=7 bytes=0
+[  158.5] W (631816) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4l_r828s addr=7 (other handles unaffected)
+[  158.5] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  158.5] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[  158.5] I (631817) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  158.5] RTL_STOP_REQUESTED
+[  158.5] RTL_STOP_RESULT ESP_OK
+[  158.5] RTL_STOP bytes=63471616
+[  158.5] RTL_SPEAKER_IDLE reason=no_receiver
+[  168.8] W (641837) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  172.5] I (645827) esp_rtl_sdr: [RTL0] usb new_device addr=8 queued=1
+[  172.5] I (645827) esp_rtl_sdr: [RTL0] usb probe_begin addr=8
+[  172.5] I (645828) esp_rtl_sdr: [RTL0] USB device opened addr=8 path=root serial=00000001 hs=1
+[  172.5] I (645828) esp_rtl_sdr: [RTL0] tuner=blog_v4l_r828s caps=0x001fff3f
+[  172.5] RTL_SDR_PROBE_OK profile=4 profile_name="blog_v4l_r828s" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  172.5] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[  172.5] I (645834) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[  172.5] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[  172.5] I (645834) esp_rtl_sdr: blog_v4l_r828s: R828S on the shared R820T2 stream path (I2C 0x34 remap); measured HF upconverter route
+[  172.5] I (645835) esp_rtl_sdr: init begin profile=blog_v4l_r828s records=515
+[  172.8] E (646051) USBH: Dev 8 EP 0 STALL
+[  172.8] E (646053) USBH: Dev 8 EP 0 STALL
+[  172.8] E (646056) USBH: Dev 8 EP 0 STALL
+[  172.8] E (646058) USBH: Dev 8 EP 0 STALL
+[  173.8] I (646902) esp_rtl_sdr: init complete profile=blog_v4l_r828s skipped_v4_board=12
+[  173.8] I (646957) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  173.8] I (647103) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[  173.8] I (647103) esp_rtl_sdr: r820t2 band lo=97914972 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[  174.1] I (647157) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[  174.1] I (647157) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[  174.1] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[  174.1] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  174.1] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  174.1] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  174.1] W (647184) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 7, live_urbs=3)
+[  205.3] #DONE

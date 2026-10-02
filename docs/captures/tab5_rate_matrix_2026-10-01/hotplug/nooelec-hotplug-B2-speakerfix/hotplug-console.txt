@@ -1,0 +1,240 @@
+[    0.0] #PORT_OPEN
+[   12.5] W (1309785) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   12.5] E (1309785) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   12.5] W (1309785) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   12.5] E (1309786) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   12.5] W (1309786) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   12.5] E (1309786) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   12.5] W (1309786) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   12.5] W (1309786) esp_rtl_sdr: [RTL0] usb disconnected profile=nooelec_smart_v5_r820t2 addr=16 (other handles unaffected)
+[   12.5] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   12.5] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   12.5] I (1309787) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   12.5] RTL_STOP_REQUESTED
+[   12.5] RTL_STOP_RESULT ESP_OK
+[   12.5] RTL_STOP bytes=93061120
+[   12.5] RTL_SPEAKER_IDLE reason=no_receiver
+[   22.5] W (1319807) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   24.1] I (1321415) esp_rtl_sdr: [RTL0] usb new_device addr=17 queued=1
+[   24.1] I (1321415) esp_rtl_sdr: [RTL0] usb probe_begin addr=17
+[   24.1] I (1321416) esp_rtl_sdr: [RTL0] USB device opened addr=17 path=root serial=36309640 hs=1
+[   24.1] I (1321416) esp_rtl_sdr: [RTL0] tuner=nooelec_smart_v5_r820t2 caps=0x001dff5f
+[   24.1] RTL_SDR_PROBE_OK profile=3 profile_name="nooelec_smart_v5_r820t2" provisional=1 device_caps=0x001dff5f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   24.1] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   24.1] W (1321432) esp_rtl_sdr: nooelec_smart_v5_r820t2: PC-captured 2026-09-30 (I2C 0x34, direct Q); ESP32-P4 acceptance pending
+[   24.1] I (1321432) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+[   24.4] E (1321648) USBH: Dev 17 EP 0 STALL
+[   24.4] E (1321651) USBH: Dev 17 EP 0 STALL
+[   24.4] E (1321654) USBH: Dev 17 EP 0 STALL
+[   24.4] E (1321656) USBH: Dev 17 EP 0 STALL
+[   25.3] I (1322500) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+[   25.3] I (1322550) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   25.3] I (1322691) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+[   25.3] I (1322702) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+[   25.3] I (1322702) esp_rtl_sdr: r820t2 band lo=99670000 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[   25.6] I (1322734) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   25.6] I (1322734) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   25.6] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   25.6] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   25.6] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   25.6] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   25.6] W (1322761) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 16, live_urbs=3)
+[   38.7] W (1336004) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   38.7] E (1336004) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   38.7] W (1336004) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   38.7] E (1336004) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   38.7] W (1336004) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   38.7] E (1336005) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   38.7] W (1336005) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   38.7] W (1336005) esp_rtl_sdr: [RTL0] usb disconnected profile=nooelec_smart_v5_r820t2 addr=17 (other handles unaffected)
+[   38.7] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   38.7] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   38.7]  (1336006) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   38.7] RTL_SPEAKER_IDLE reason=no_receiver
+[   38.7] RTL_STOP_REQUESTED
+[   38.7] RTL_STOP_RESULT ESP_OK
+[   38.7] RTL_STOP bytes=63569920
+[   48.3] I (1345592) esp_rtl_sdr: [RTL0] usb new_device addr=18 queued=1
+[   48.3] I (1345592) esp_rtl_sdr: [RTL0] usb probe_begin addr=18
+[   48.3] I (1345593) esp_rtl_sdr: [RTL0] USB device opened addr=18 path=root serial=36309640 hs=1
+[   48.3] I (1345593) esp_rtl_sdr: [RTL0] tuner=nooelec_smart_v5_r820t2 caps=0x001dff5f
+[   48.3] RTL_SDR_PROBE_OK profile=3 profile_name="nooelec_smart_v5_r820t2" provisional=1 device_caps=0x001dff5f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   48.3] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   48.3] W (1345604) esp_rtl_sdr: nooelec_smart_v5_r820t2: PC-captured 2026-09-30 (I2C 0x34, direct Q); ESP32-P4 acceptance pending
+[   48.3] I (1345604) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+[   48.6] E (1345820) USBH: Dev 18 EP 0 STALL
+[   48.6] E (1345823) USBH: Dev 18 EP 0 STALL
+[   48.6] E (1345826) USBH: Dev 18 EP 0 STALL
+[   48.6] E (1345828) USBH: Dev 18 EP 0 STALL
+[   49.3] I (1346672) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+[   49.6] I (1346722) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   49.6] I (1346863) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+[   49.6] I (1346874) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+[   49.6] I (1346874) esp_rtl_sdr: r820t2 band lo=99670000 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[   49.6] I (1346906) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   49.6] I (1346906) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   49.6] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   49.6] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   49.6] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   49.6] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   49.6] W (1346933) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 17, live_urbs=3)
+[   63.0] W (1360335) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   63.0] E (1360335) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   63.0] W (1360335) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   63.0] E (1360336) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   63.0] W (1360336) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   63.0] E (1360336) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   63.0] W (1360336) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   63.0] W (1360336) esp_rtl_sdr: [RTL0] usb disconnected profile=nooelec_smart_v5_r820t2 addr=18 (other handles unaffected)
+[   63.0] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   63.0] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   63.0] I (1360337) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   63.0] RTL_STOP_REQUESTED
+[   63.0] RTL_STOP_RESULT ESP_OK
+[   63.0] RTL_STOP bytes=64323584
+[   63.0] RTL_SPEAKER_IDLE reason=no_receiver
+[   73.0] W (1370357) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   75.5] I (1372876) esp_rtl_sdr: [RTL0] usb new_device addr=19 queued=1
+[   75.5] I (1372877) esp_rtl_sdr: [RTL0] usb probe_begin addr=19
+[   75.5] I (1372877) esp_rtl_sdr: [RTL0] USB device opened addr=19 path=root serial=36309640 hs=1
+[   75.5] I (1372877) esp_rtl_sdr: [RTL0] tuner=nooelec_smart_v5_r820t2 caps=0x001dff5f
+[   75.5] RTL_SDR_PROBE_OK profile=3 profile_name="nooelec_smart_v5_r820t2" provisional=1 device_caps=0x001dff5f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   75.5] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   75.5] W (1372886) esp_rtl_sdr: nooelec_smart_v5_r820t2: PC-captured 2026-09-30 (I2C 0x34, direct Q); ESP32-P4 acceptance pending
+[   75.5] I (1372886) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+[   75.8] E (1373102) USBH: Dev 19 EP 0 STALL
+[   75.8] E (1373105) USBH: Dev 19 EP 0 STALL
+[   75.8] E (1373108) USBH: Dev 19 EP 0 STALL
+[   75.8] E (1373110) USBH: Dev 19 EP 0 STALL
+[   76.7] I (1373954) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+[   76.7] I (1374004) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   76.7] I (1374146) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+[   76.7] I (1374156) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+[   76.7] I (1374156) esp_rtl_sdr: r820t2 band lo=99670000 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[   77.0] I (1374188) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   77.0] I (1374188) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   77.0] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   77.0] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   77.0] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   77.0] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   77.0] W (1374215) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 18, live_urbs=3)
+[   85.8] W (1383147) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   85.8] E (1383148) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   85.8] W (1383148) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   85.8] E (1383148) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   85.8] W (1383148) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   85.8] E (1383148) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   85.8] W (1383148) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   85.8] W (1383149) esp_rtl_sdr: [RTL0] usb disconnected profile=nooelec_smart_v5_r820t2 addr=19 (other handles unaffected)
+[   85.8] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   85.8] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   85.8] I (1383149) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   85.8] RTL_SPEAKER_IDLE reason=no_receiver
+[   85.8] RTL_STOP_REQUESTED
+[   85.8] RTL_STOP_RESULT ESP_OK
+[   85.8] RTL_STOP bytes=42893312
+[   95.5] I (1392899) esp_rtl_sdr: [RTL0] usb new_device addr=20 queued=1
+[   95.5] I (1392899) esp_rtl_sdr: [RTL0] usb probe_begin addr=20
+[   95.5] I (1392900) esp_rtl_sdr: [RTL0] USB device opened addr=20 path=root serial=36309640 hs=1
+[   95.5] I (1392900) esp_rtl_sdr: [RTL0] tuner=nooelec_smart_v5_r820t2 caps=0x001dff5f
+[   95.5] RTL_SDR_PROBE_OK profile=3 profile_name="nooelec_smart_v5_r820t2" provisional=1 device_caps=0x001dff5f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   95.5] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   95.5] W (1392903) esp_rtl_sdr: nooelec_smart_v5_r820t2: PC-captured 2026-09-30 (I2C 0x34, direct Q); ESP32-P4 acceptance pending
+[   95.5] I (1392904) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+[   95.8] E (1393119) USBH: Dev 20 EP 0 STALL
+[   95.8] E (1393122) USBH: Dev 20 EP 0 STALL
+[   95.8] E (1393125) USBH: Dev 20 EP 0 STALL
+[   95.8] E (1393127) USBH: Dev 20 EP 0 STALL
+[   96.7] I (1393971) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+[   96.7] I (1394021) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   96.7] I (1394163) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+[   97.0] I (1394173) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+[   97.0] I (1394174) esp_rtl_sdr: r820t2 band lo=99670000 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[   97.0] I (1394205) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   97.0] I (1394205) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   97.0] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   97.0] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   97.0] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   97.0] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   97.0] W (1394234) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 19, live_urbs=3)
+[  109.5] W (1406883) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  109.5] E (1406883) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  109.5] W (1406883) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  109.5] E (1406884) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  109.5] W (1406884) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  109.5] E (1406884) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  109.5] W (1406884) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  109.5] W (1406885) esp_rtl_sdr: [RTL0] usb disconnected profile=nooelec_smart_v5_r820t2 addr=20 (other handles unaffected)
+[  109.5] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  109.5] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[  109.5] I (1406885) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  109.5] RTL_STOP_REQUESTED
+[  109.5] RTL_STOP_RESULT ESP_OK
+[  109.5] RTL_STOP bytes=60719104
+[  109.5] RTL_SPEAKER_IDLE reason=no_receiver
+[  119.5] W (1416905) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  121.7] I (1419071) esp_rtl_sdr: [RTL0] usb new_device addr=21 queued=1
+[  121.7] I (1419071) esp_rtl_sdr: [RTL0] usb probe_begin addr=21
+[  121.7] I (1419072) esp_rtl_sdr: [RTL0] USB device opened addr=21 path=root serial=36309640 hs=1
+[  121.7] I (1419072) esp_rtl_sdr: [RTL0] tuner=nooelec_smart_v5_r820t2 caps=0x001dff5f
+[  121.7] RTL_SDR_PROBE_OK profile=3 profile_name="nooelec_smart_v5_r820t2" provisional=1 device_caps=0x001dff5f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  121.7] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[  121.7] W (1419090) esp_rtl_sdr: nooelec_smart_v5_r820t2: PC-captured 2026-09-30 (I2C 0x34, direct Q); ESP32-P4 acceptance pending
+[  121.7] I (1419090) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+[  122.0] E (1419306) USBH: Dev 21 EP 0 STALL
+[  122.0] E (1419309) USBH: Dev 21 EP 0 STALL
+[  122.0] E (1419312) USBH: Dev 21 EP 0 STALL
+[  122.0] E (1419314) USBH: Dev 21 EP 0 STALL
+[  122.9] I (1420158) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+[  122.9] I (1420208) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  122.9] I (1420349) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+[  122.9] I (1420360) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+[  122.9] I (1420360) esp_rtl_sdr: r820t2 band lo=99670000 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[  122.9] I (1420391) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[  122.9] I (1420392) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[  122.9] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[  122.9] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  122.9] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  123.3] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  123.3] W (1420419) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 20, live_urbs=3)
+[  134.5] W (1431901) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  134.5] E (1431901) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  134.5] W (1431901) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  134.5] E (1431901) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  134.5] W (1431901) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  134.5] E (1431902) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  134.5] W (1431902) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  134.5] W (1431902) esp_rtl_sdr: [RTL0] usb disconnected profile=nooelec_smart_v5_r820t2 addr=21 (other handles unaffected)
+[  134.5] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  134.5] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[  134.5] I (1431903) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  134.5] RTL_STOP_REQUESTED
+[  134.5] RTL_STOP_RESULT ESP_OK
+[  134.5] RTL_STOP bytes=55115776
+[  134.8] RTL_SPEAKER_IDLE reason=no_receiver
+[  144.8] W (1441923) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  146.3] I (1443550) esp_rtl_sdr: [RTL0] usb new_device addr=22 queued=1
+[  146.3] I (1443550) esp_rtl_sdr: [RTL0] usb probe_begin addr=22
+[  146.3] I (1443551) esp_rtl_sdr: [RTL0] USB device opened addr=22 path=root serial=36309640 hs=1
+[  146.3] I (1443551) esp_rtl_sdr: [RTL0] tuner=nooelec_smart_v5_r820t2 caps=0x001dff5f
+[  146.3] RTL_SDR_PROBE_OK profile=3 profile_name="nooelec_smart_v5_r820t2" provisional=1 device_caps=0x001dff5f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  146.3] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[  146.3] W (1443561) esp_rtl_sdr: nooelec_smart_v5_r820t2: PC-captured 2026-09-30 (I2C 0x34, direct Q); ESP32-P4 acceptance pending
+[  146.3] I (1443561) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+[  146.3] E (1443777) USBH: Dev 22 EP 0 STALL
+[  146.3] E (1443780) USBH: Dev 22 EP 0 STALL
+[  146.6] E (1443783) USBH: Dev 22 EP 0 STALL
+[  146.6] E (1443785) USBH: Dev 22 EP 0 STALL
+[  147.3] I (1444629) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+[  147.3] I (1444679) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  147.6] I (1444820) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+[  147.6] I (1444831) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+[  147.6] I (1444831) esp_rtl_sdr: r820t2 band lo=99670000 Hz row=90 MHz open_d=00 mux=02 tf_c=34
+[  147.6] I (1444863) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[  147.6] I (1444863) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[  147.6] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[  147.6] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  147.6] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  147.6] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  147.6] W (1444890) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 21, live_urbs=3)
+[  205.3] #DONE

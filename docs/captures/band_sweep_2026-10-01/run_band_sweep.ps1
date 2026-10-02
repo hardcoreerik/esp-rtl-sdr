@@ -15,6 +15,8 @@ if(-not $found){ throw 'no tuner traffic on any USBPcap interface' }
 "interface USBPcap$($found.n) bus $($found.ba[0]) addr $($found.ba[1])"
 # 2. real capture
 $p=Start-Process $ts -ArgumentList '-i',"\\.\USBPcap$($found.n)",'-w',"$out\bandsweep.pcapng" -PassThru -WindowStyle Hidden
-Start-Sleep 3; python "$lab\band_sweep_stimulus.py" $out *> "$out\stim.log"; Start-Sleep 2; Stop-Process $p.Id; Start-Sleep 1
+Start-Sleep 3; python "$lab\band_sweep_stimulus.py" $out *> "$out\stim.log"; $stimExit=$LASTEXITCODE; Start-Sleep 2; Stop-Process $p.Id; Start-Sleep 1
+if($stimExit -ne 0){ throw "stimulus failed with exit code $stimExit (see $out\stim.log)" }
 python "$lab\extract_bands_any.py" "$out\bandsweep.pcapng" "$out\events.json" $found.ba[0] $found.ba[1] "$out\band_registers.csv"
+if($LASTEXITCODE -ne 0){ throw "extraction failed with exit code $LASTEXITCODE" }
 Get-FileHash "$out\bandsweep.pcapng","$out\events.json","$out\band_registers.csv" | % { "$($_.Hash) $(Split-Path $_.Path -Leaf)" }

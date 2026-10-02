@@ -15,6 +15,7 @@
 #include "esp_rtl_sdr.h"
 #include "measured_gain_bias_v4.hpp"
 #include "reentrancy.hpp"
+#include "resampler_ratio.hpp"
 #include "smoke_soak_scope.h"
 
 static int g_failed = 0;
@@ -312,7 +313,7 @@ static void test_rate_windows(void)
 
     uint32_t exact = 0;
     EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(2048000, &exact));
-    EXPECT_TRUE(exact > 0);
+    EXPECT_EQ_U(exact, 2048000u);
     EXPECT_TRUE(esp_rtl_sdr_is_rate_supported(exact));
 
     /* Idempotent: quantize(exact) stays exact (or very close re-quantizable) */
@@ -324,6 +325,49 @@ static void test_rate_windows(void)
     uint32_t again = 0;
     EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(2048000, &again));
     EXPECT_EQ_U(again, exact);
+
+    /* Low band must round-trip. Dividing the masked 28-bit field without
+     * mirroring bit 27 into bit 28 reported 250000 Hz as 562500 Hz (#24). */
+    const uint32_t low_exact_rates[] = {
+        225001u, 240000u, 250000u, 256000u, 262144u, 288000u, 300000u,
+    };
+    for (uint32_t req : low_exact_rates) {
+        uint32_t got = 0;
+        EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(req, &got));
+        EXPECT_EQ_U(got, req);
+        uint32_t again_low = 0;
+        EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(got, &again_low));
+        EXPECT_EQ_U(again_low, req);
+        const uint32_t reg = resampler_ratio_register(got);
+        const uint32_t realized = resampler_realized_ratio(reg);
+        const uint32_t from_reg = static_cast<uint32_t>(
+            (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / realized);
+        EXPECT_EQ_U(from_reg, req);
+        EXPECT_TRUE((reg & 0x10000000u) == 0u);
+        EXPECT_EQ_U(resampler_ratio_register(req), reg);
+    }
+    EXPECT_EQ_U(resampler_ratio_register(250000u), 0x0cccccccu);
+    EXPECT_EQ_U(resampler_realized_ratio(0x0cccccccu), 0x1cccccccu);
+
+    /* 900000 Hz stores the same field as 300000 Hz once bit 27 is mirrored. */
+    EXPECT_EQ_U(resampler_ratio_register(900000u), 0x08000000u);
+    EXPECT_EQ_U(resampler_realized_ratio(0x08000000u), 0x18000000u);
+    EXPECT_TRUE(!esp_rtl_sdr_is_rate_supported(900000u));
+    EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(900000u, &exact));
+    uint32_t high_edge = 0;
+    EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(900001u, &high_edge));
+    EXPECT_EQ_U(high_edge, 900001u);
+
+    const uint32_t high_exact_rates[] = {
+        960000u, 1024000u, 2048000u, 2400000u, 2560000u, 3200000u,
+    };
+    for (uint32_t req : high_exact_rates) {
+        uint32_t got = 0;
+        EXPECT_TRUE(esp_rtl_sdr_quantize_sample_rate(req, &got));
+        EXPECT_EQ_U(got, req);
+        const uint32_t reg = resampler_ratio_register(got);
+        EXPECT_EQ_U(resampler_realized_ratio(reg), reg);
+    }
 
     EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(500000, &exact));
     EXPECT_TRUE(!esp_rtl_sdr_quantize_sample_rate(2048000, nullptr));

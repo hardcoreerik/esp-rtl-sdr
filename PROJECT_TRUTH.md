@@ -72,7 +72,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 PC capture includes long IQ runs, while ESP32-P4 streaming/soak remains pending; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional** |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
-| Continuous sample rates (hardware windows) | **Implemented** | 225–300k ∪ 900k–3.2M + quantize → exact |
+| Continuous sample rates (hardware windows) | **Implemented** | 225001–300000 ∪ 900001–3.2M. quantize mirrors resampler bit 27 into bit 28 before reporting Hz (low band was ~2×; #24) |
 | Recommended rate list | **Implemented** | `get_supported_rates` |
 | Rate passport (`probe_rates`) | **Implemented** | On-device soak; needs P4+dongle run |
 | Host unit tests (policy + profiles) | **Implemented** | `tests/host` — both registered suites run through CTest; CI on push |

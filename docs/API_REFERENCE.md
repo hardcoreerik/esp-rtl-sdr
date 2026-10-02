@@ -220,8 +220,8 @@ for (size_t n = 0; n < iq->bytes / 2; n++) {
 | Window | Range |
 |---|---|
 | Low band | **225001 … 300000** Hz |
-| Gap (rejected) | 300001 … 899999 Hz |
-| High band | **900000 … 3200000** Hz |
+| Gap (rejected) | 300001 … 900000 Hz |
+| High band | **900001 … 3200000** Hz |
 
 Any in-window rate is quantized to an exact RTL2832 ratio (`quantize_sample_rate`). Named macros (`RATE_960K`, `RATE_2048K`, …) are conveniences — not the only legal values. Details: [`RATES.md`](RATES.md).
 
@@ -361,7 +361,7 @@ if ((esp_rtl_sdr_get_capabilities() & need) != need) {
 |---|---|
 | `ESP_RTL_SDR_RATE_LOW_MIN_HZ` | 225001 |
 | `ESP_RTL_SDR_RATE_LOW_MAX_HZ` | 300000 |
-| `ESP_RTL_SDR_RATE_HIGH_MIN_HZ` | 900000 |
+| `ESP_RTL_SDR_RATE_HIGH_MIN_HZ` | 900001 |
 | `ESP_RTL_SDR_RATE_HIGH_MAX_HZ` | 3200000 |
 | `ESP_RTL_SDR_RATE_STABLE_MAX_HZ` | 2560000 |
 | `ESP_RTL_SDR_XTAL_HZ` | 28800000 |

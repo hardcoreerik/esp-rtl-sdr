@@ -4,6 +4,7 @@
  */
 
 #include "esp_rtl_sdr.h"
+#include "resampler_ratio.hpp"
 #include "rtl_profile.hpp"
 
 #include <cstddef>
@@ -131,20 +132,26 @@ bool esp_rtl_sdr_quantize_sample_rate(uint32_t requested_sps, uint32_t *out_exac
     if (!rate_in_hardware_window(requested_sps)) {
         return false;
     }
-    /* 28-bit resampler field (low 2 bits clear) — same mask family as ecosystem drivers. */
-    uint32_t ratio =
-        static_cast<uint32_t>((static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / requested_sps);
-    ratio &= 0x0ffffffcu;
+    /* 28-bit stored field, low 2 bits clear. Bit 27 is mirrored into bit 28
+     * on the realized rate — see resampler_realized_ratio(). */
+    const uint32_t ratio = resampler_ratio_register(requested_sps);
     if (ratio == 0) {
-        /* e.g. request 225000 → raw ratio 0x20000000 → mask zeroes the field */
+        /* 225000 → raw 0x20000000, which the 28-bit mask clears. */
         return false;
     }
+    const uint32_t realized = resampler_realized_ratio(ratio);
     const uint32_t exact = static_cast<uint32_t>(
-        (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / ratio);
-    if (exact == 0) {
+        (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / realized);
+    if (exact == 0 || !rate_in_hardware_window(exact)) {
         return false;
     }
-    /* Exact programmed rate may differ from request (integer ratio); still accepted. */
+    /* The mirror must not move the result into the other window.
+     * 900000 Hz stores 0x08000000 and realizes as 300000 Hz. */
+    const bool requested_low = requested_sps <= ESP_RTL_SDR_RATE_LOW_MAX_HZ;
+    const bool exact_low = exact <= ESP_RTL_SDR_RATE_LOW_MAX_HZ;
+    if (requested_low != exact_low) {
+        return false;
+    }
     *out_exact_sps = exact;
     return true;
 }

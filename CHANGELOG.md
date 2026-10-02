@@ -12,6 +12,16 @@
   path and on the Q-to-native return. Found on a Tab5 with a Nooelec dongle (issue #42): v0.9.1
   restarted fine, v0.9.2 did not, and with this change repeated stop/start and retunes in MANUAL
   gain stream normally. The host trace test now checks that the reinit writes no gain.
+- **Low-band sample rates.** `esp_rtl_sdr_quantize_sample_rate()` masked the
+  RTL2832 resampler field with `0x0ffffffc` and converted that field back to
+  Hz without mirroring bit 27 into bit 28. Every request from 225001 Hz to
+  300000 Hz was reported at about 2× (`250000` stored as `562500`), and
+  `start()` programmed the demod from that wrong rate. `900000` Hz is now
+  rejected: its stored field is `0x08000000`, which the same mirror realizes
+  as 300 kHz. Rates from 900001 Hz through 3.2 MHz, including the 960 kS/s
+  and 2.048 MS/s paths, were already exact. Host tests require the low-band
+  rates to round-trip. Found and diagnosed by David Coulson ([@davidcoulson](https://github.com/davidcoulson)) in #24,
+  including the correction that the stored field must keep the 28-bit mask and only the Hz calculation applies the mirror.
 
 ## 0.9.2 (2026-09-30) — capture-derived Nooelec SMArt v5 profile
 

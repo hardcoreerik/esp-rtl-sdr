@@ -1,0 +1,41 @@
+{
+  "label": "v4-hotplug-B2-speakerfix",
+  "level": "Quick",
+  "started": "2026-10-01T20:40:05",
+  "antenna": "ADS-B dipole east window",
+  "stages": [
+    {
+      "name": "preflight",
+      "status": "PASS",
+      "detail": "blog_v4_r828d, driver 0.9.2 (pin b91c4f0c67), state STREAMING, gain=True",
+      "data": null
+    },
+    {
+      "name": "stress",
+      "status": "PASS",
+      "detail": "18 band switches over 2 rounds; problems: none",
+      "data": []
+    },
+    {
+      "name": "gain",
+      "status": "PASS",
+      "detail": "IQ RMS at 0/25.4/49.6 dB: 3.2 / 78.8 / 89.7",
+      "data": {
+        "496": 89.697897,
+        "254": 78.830643,
+        "0": 3.188534
+      }
+    },
+    {
+      "name": "hotplug",
+      "status": "PASS",
+      "detail": "asked 5: disconnects=6 probes=6 restarts=6 start failures=0 reboots=0 leaked URBs=0",
+      "data": null
+    }
+  ],
+  "dongle": "blog_v4_r828d",
+  "driver_version": "0.9.2",
+  "driver_pin": "b91c4f0c6784dd5ea9181d561e31af859b37b52e",
+  "orcsdr": "claude/tab5-abc-B2@eba15b2",
+  "finished": "2026-10-01T20:47:03"
+}

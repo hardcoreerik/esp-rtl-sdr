@@ -1,0 +1,662 @@
+[    0.0] #PORT_OPEN
+[   10.6] W (5893265) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   10.6] E (5893265) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   10.6] W (5893266) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   10.6] E (5893266) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   10.6] W (5893266) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   10.6] E (5893266) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   10.6] W (5893266) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   10.6] W (5893267) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=2 (other handles unaffected)
+[   10.6] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   10.6] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   10.6] I (5893267) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   10.6] RTL_SPEAKER_IDLE reason=no_receiver
+[   10.6] RTL_STOP_REQUESTED
+[   10.6] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   10.6] RTL_STOP_RESULT ESP_OK
+[   10.6] RTL_STOP bytes=70549504
+[   10.6] RTL_SPEAKER_IDLE reason=no_receiver
+[   20.6] W (5903287) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   21.5] I (5903971) esp_rtl_sdr: [RTL0] usb new_device addr=3 queued=1
+[   21.5] I (5903971) esp_rtl_sdr: [RTL0] usb probe_begin addr=3
+[   21.5] I (5903972) esp_rtl_sdr: [RTL0] USB device opened addr=3 path=root serial=00000001 hs=1
+[   21.5] I (5903972) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[   21.5] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   21.5] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   21.5] I (5903991) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   21.5] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   21.5] I (5903992) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   21.5] E (5904207) USBH: Dev 3 EP 0 STALL
+[   21.5] E (5904210) USBH: Dev 3 EP 0 STALL
+[   21.5] E (5904213) USBH: Dev 3 EP 0 STALL
+[   21.5] E (5904215) USBH: Dev 3 EP 0 STALL
+[   21.5] E (5904218) USBH: Dev 3 EP 0 STALL
+[   21.5] E (5904220) USBH: Dev 3 EP 0 STALL
+[   22.5] I (5905080) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[   22.5] I (5905135) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   22.5] I (5905149) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[   22.8] I (5905209) esp_rtl_sdr: front-end route rf=96100000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[   22.8] I (5905209) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   22.8] I (5905209) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   22.8] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   22.8] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   22.8] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   22.8] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   22.8] W (5905230) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 2, live_urbs=3)
+[   34.9] W (5917405) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   34.9] E (5917405) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   34.9] W (5917405) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   34.9] E (5917405) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   34.9] W (5917405) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   34.9] E (5917406) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   34.9] W (5917406) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   34.9] W (5917406) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=3 (other handles unaffected)
+[   34.9] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   34.9] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   34.9] (5917407) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   34.9] RTL_STOP_REQUESTED
+[   34.9] RTL_STOP_RESULT ESP_OK
+[   34.9] RTL_STOP bytes=58425344
+[   34.9] RTL_SPEAKER_IDLE reason=no_receiver
+[   44.9] W (5927427) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   46.2] I (5928656) esp_rtl_sdr: [RTL0] usb new_device addr=4 queued=1
+[   46.2] I (5928656) esp_rtl_sdr: [RTL0] usb probe_begin addr=4
+[   46.2] I (5928657) esp_rtl_sdr: [RTL0] USB device opened addr=4 path=root serial=00000001 hs=1
+[   46.2] I (5928657) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[   46.2] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   46.2] RTL_HOTPLUG_RESUME band=FM frequency_hz=96100000 queued=1
+[   46.2] I (5928668) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   46.2] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   46.2] I (5928669) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   46.5] E (5928884) USBH: Dev 4 EP 0 STALL
+[   46.5] E (5928887) USBH: Dev 4 EP 0 STALL
+[   46.5] E (5928890) USBH: Dev 4 EP 0 STALL
+[   46.5] E (5928892) USBH: Dev 4 EP 0 STALL
+[   46.5] E (5928895) USBH: Dev 4 EP 0 STALL
+[   46.5] E (5928897) USBH: Dev 4 EP 0 STALL
+[   47.1] I (5929757) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[   47.4] I (5929812) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   47.4] I (5929826) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[   47.4] I (5929886) esp_rtl_sdr: front-end route rf=96100000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[   47.4] I (5929887) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   47.4] I (5929887) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   47.4] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   47.4] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   47.4] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   47.4] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   47.4] W (5929914) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 3, live_urbs=3)
+[   59.6] E (5942244) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   59.6] W (5942245) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   59.6] W (5942245) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   59.6] E (5942245) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   59.6] W (5942245) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   59.6] W (5942245) esp_rtl_sdr: [RTL0] bulk status=7 bytes=0
+[   59.6] W (5942246) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=4 (other handles unaffected)
+[   59.6] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   59.6] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[   59.6] I (5942246) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   59.6] RTL_SPEAKER_DMA len=256 count=2 largest=57344
+[   59.6] 
+[   59.6] assert failed: tlsf_free tlsf.c:630 (!block_is_free(block) && "block already marked as free")
+[   59.6] Core  1 register dump:
+[   59.6] MEPC    : 0x4ff0d60c  RA      : 0x4ff0d18c  SP      : 0x4881d3d0  GP      : 0x4ff1a300
+[   59.6] TP      : 0x4881d790  T0      : 0x726c6120  T1      : 0x28656572  T2      : 0x79646165
+[   59.6] S0/FP   : 0x00000001  S1      : 0x0000006a  A0      : 0x4881d418  A1      : 0x4ff42199
+[   59.6] A2      : 0x00000001  A3      : 0x4ff61000  A4      : 0x00000001  A5      : 0x4ff61000
+[   59.6] A6      : 0x00000010  A7      : 0x665f7369  S2      : 0x4881d418  S3      : 0x4881d43d
+[   59.6] S4      : 0x4ff42198  S5      : 0x4881d418  S6      : 0x4ff37498  S7      : 0x4881d6e0
+[   59.6] S8      : 0x621c6589  S9      : 0x00000001  S10     : 0x4ff61158  S11     : 0x621c64c7
+[   59.6] T3      : 0x636f6c62  T4      : 0x2620296b  T5      : 0x62222026  T6      : 0x6b636f6c
+[   59.6] MSTATUS : 0x00011880  MTVEC   : 0x4ff00003  MCAUSE  : 0x00000002  MTVAL   : 0x00000000
+[   59.6] MHARTID : 0x00000001
+[   59.6] 
+[   59.6] Stack memory:
+[   59.6] 4881d3d0: 0x00000001 0x00000000 0x4838555c 0x4ff16f58 0x00303336 0x4ff0f172 0x00000000 0x00000000
+[   59.6] 4881d3f0: 0x48000000 0x4ff42c2c 0x4838555c 0x4ff42c10 0x481b29e7 0x4ff42c3c 0x4881d3e0 0x4ff42c40
+[   59.6] 4881d410: 0x4ff424c8 0x4ff42198 0x65737361 0x66207472 0x656c6961 0x74203a64 0x5f66736c 0x65657266
+[   59.6] 4881d430: 0x736c7420 0x3a632e66 0x20303336 0x6c622128 0x5f6b636f 0x665f7369 0x28656572 0x636f6c62
+[   59.6] 4881d450: 0x2620296b 0x62222026 0x6b636f6c 0x726c6120 0x79646165 0x72616d20 0x2064656b 0x66207361
+[   59.6] 4881d470: 0x22656572 0x00000029 0x4ff3ed44 0x4ff0dc62 0x00000000 0x4ff3ed90 0x4ff3ed44 0x4ff0e19e
+[   59.6] 4881d490: 0x0000001e 0x35323d6e 0x6f632036 0x00000000 0x00000000 0x00000001 0x00000000 0x0000000d
+[   59.6] 4881d4b0: 0x005aa70f 0x00000004 0x00000001 0x00000001 0x00000000 0x4ff5e508 0x500c5000 0x480d662a
+[   59.6] 4881d4d0: 0x0001ffff 0x4ff5e508 0x4881d56c 0x00000219 0x4ff37498 0x4ff5e000 0x4ff376a8 0x00000002
+[   59.6] 4881d4f0: 0x4ff2b0a0 0x4ff376b0 0x4ff376b0 0x4ff154bc 0x4ff37498 0x4ff5e000 0x500c6000 0x00000002
+[   59.6] 4881d510: 0x4ff2b0a0 0x4ff376b0 0x4ff2ad20 0x4ff14fde 0x500e6000 0x481afd4c 0x481afa04 0x481287f8
+[   59.6] 4881d530: 0x00000000 0x00000001 0x00000001 0x4ff5e3e4 0x4ff5e3e4 0x00000001 0x4ff5df54 0x480c53fe
+[   59.6] 4881d550: 0x00000000 0x00000000 0x00000002 0x00000100 0x00000001 0x00000000 0x00000080 0x31817605
+[   59.6] 4881d570: 0x00000000 0x00000001 0x00000000 0x00000001 0x00001c09 0x00000004 0x00000001 0x4ff5e294
+[   59.6] 4881d590: 0x4ff5e294 0x00000001 0x4ff5df54 0x480c336c 0x4ff374e4 0x00000000 0x4ff37498 0x4ff5e294
+[   59.6] 4881d5b0: 0x4ff5e294 0x00000001 0x4ff5df54 0x4ff5e294 0x00000001 0x00000001 0x4ff5df54 0x480c55ba
+[   59.6] 4881d5d0: 0x00000001 0x00018b27 0x00023004 0x00016278 0x00017e93 0x000001b0 0x00000080 0x4ff61000
+[   59.6] 4881d5f0: 0x4ff5dbfc 0x00000080 0x005aa706 0x480162fa 0x00000000 0x0000001a 0x0000001b 0x0000001e
+[   59.6] 4881d610: 0x0000001d 0x0000bb80 0x00000001 0x00000004 0x00000100 0x00000002 0x00000106 0x00000000
+[   59.6] 4881d630: 0x4ff56bfe 0x00000053 0x4ff61000 0x4ff51000 0x000007ff 0x00000148 0x4ff5dbfc 0x48017a34
+[   59.6] 4881d650: 0x4ff62000 0x4ff56b58 0x00000148 0x48099d38 0x4ff56b58 0x621c647f 0x4ff61000 0x4ff61000
+[   59.6] 4881d670: 0x4ff61000 0x00000148 0x4ff61000 0x48018be2 0x621c6587 0x621c647f 0x4ff61000 0x4ff61000
+[   59.6] 4881d690: 0x4ff61000 0x00000000 0x005aa700 0x4802da50 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5
+[   59.6] 4881d6b0: 0x4ff6150c 0x4ff6146c 0x4ff46eb8 0x4ff46ea8 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5
+[   59.6] 4881d6d0: 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5 0x7f7f7f80 0x48802bbc 0x00008000 0x00056d6c
+[   59.6] 4881d6f0: 0x00000000 0x45abe000 0x00249f00 0x4ff0dc00 0x00000000 0x00000000 0x00000000 0x00000000
+[   59.6] 4881d710: 0x2e2ec33e 0x4b3b8000 0x3f800000 0x272ec33e 0x00000000 0x00000000 0x00000000 0x00000000
+[   59.6] 4881d730: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+[   59.6] 4881d750: 0x00000000 0x00000000 0x00000000 0x4ff0ebdc 0x00000000 0x00000000 0x00000000 0x00000000
+[   59.6] 4881d770: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5
+[   59.6] 4881d790: 0x00000000 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5 0x00000001 0x4881b7c8 0x4881b84c 0x4881b7c8
+[   59.9] 4881d7b0: 0x00000000 0x00000000 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5 0xa5a5a5a5 0x00008000 0x48421494
+[   59.9] 
+[   59.9] 
+[   59.9] 
+[   59.9] ELF file SHA256: 0fbf3b20a
+[   59.9] 
+[   59.9] I (11896) esp_core_dump_flash: Save core dump to flash...
+[   59.9] I (11896) esp_core_dump_common: Backing up stack @ 0x4881d290 and use core dump stack @ 0x4ff46720
+[   59.9] I (11896) esp_core_dump_flash: Erase flash 36864 bytes @ 0x410000
+[   59.9] I (215) esp_core_dump_flash: Write end offset 0x8a60, check sum length 32
+[   59.9] I (215) esp_core_dump_common: Core dump used 1288 bytes on stack. 2892 bytes left free.
+[   59.9] I (215) esp_core_dump_common: Restoring stack @ 0x4881d290
+[   59.9] I (216) esp_core_dump_flash: Core dump has been saved to flash.
+[   59.9] Rebooting...
+[   59.9] ESP-ROM:esp32p4-eco2-20240710
+[   59.9] Build:Jul 10 2024
+[   59.9] rst:0xc (SW_CPU_RESET),boot:0x20c (SPI_FAST_FLASH_BOOT)
+[   59.9] Core0 Saved PC:0x4ff05680
+[   59.9] Core1 Saved PC:0x4ff0d744
+[   59.9] SPI mode:DIO, clock div:1
+[   59.9] load:0x4ff33ce0,len:0x17b8
+[   59.9] load:0x4ff29ed0,len:0xfb0
+[   59.9] load:0x4ff2cbd0,len:0x361c
+[   59.9] entry 0x4ff29eda
+[   59.9] I (20) boot: ESP-IDF v5.5.4-dirty 2nd stage bootloader
+[   59.9] I (21) boot: compile time Sep 29 2026 18:50:00
+[   59.9] I (21) boot: Multicore bootloader
+[   59.9] I (22) boot: chip revision: v1.3
+[   59.9] I (22) boot: efuse block revision: v0.3
+[   59.9] I (23) qio_mode: Enabling default flash chip QIO
+[   59.9] I (23) boot.esp32p4: SPI Speed      : 80MHz
+[   59.9] I (23) boot.esp32p4: SPI Mode       : QIO
+[   59.9] I (24) boot.esp32p4: SPI Flash Size : 16MB
+[   59.9] I (24) boot: Enabling RNG early entropy source...
+[   59.9] I (24) boot: Partition Table:
+[   59.9] I (24) boot: ## Label            Usage          Type ST Offset   Length
+[   59.9] I (25) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+[   59.9] I (26) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+[   59.9] I (26) boot:  2 factory          factory app      00 00 00010000 00400000
+[   59.9] I (27) boot:  3 coredump         Unknown data     01 03 00410000 00040000
+[   59.9] I (28) boot: End of partition table
+[   59.9] I (29) esp_image: segment 0: paddr=00010020 vaddr=481b0020 size=1d57dch (1923036) map
+[   60.2] I (244) esp_image: segment 1: paddr=001e5804 vaddr=30100000 size=00068h (   104) load
+[   60.2] I (246) esp_image: segment 2: paddr=001e5874 vaddr=4ff00000 size=0a7a4h ( 42916) load
+[   60.2] I (253) esp_image: segment 3: paddr=001f0020 vaddr=48000020 size=1a0de0h (1707488) map
+[   60.5] I (445) esp_image: segment 4: paddr=00390e08 vaddr=4ff0a7a4 size=0f2e8h ( 62184) load
+[   60.5] I (455) esp_image: segment 5: paddr=003a00f8 vaddr=4ff19b00 size=11220h ( 70176) load
+[   60.5] I (465) esp_image: segment 6: paddr=003b1320 vaddr=4ff40000 size=04148h ( 16712) load
+[   60.5] I (469) esp_image: segment 7: paddr=003b5470 vaddr=50108080 size=0000ch (    12) load
+[   60.5] I (470) esp_image: segment 8: paddr=003b5484 vaddr=501080a0 size=00020h (    32) load
+[   60.5] I (480) boot: Loaded app from partition at offset 0x10000
+[   60.5] I (480) boot: Disabling RNG early entropy source...
+[   60.5] I (484) hex_psram: vendor id    : 0x0d (AP)
+[   60.5] I (484) hex_psram: Latency      : 0x01 (Fixed)
+[   60.5] I (485) hex_psram: DriveStr.    : 0x00 (25 Ohm)
+[   60.5] I (485) hex_psram: dev id       : 0x03 (generation 4)
+[   60.5] I (485) hex_psram: density      : 0x07 (256 Mbit)
+[   60.5] I (486) hex_psram: good-die     : 0x06 (Pass)
+[   60.5] I (486) hex_psram: SRF          : 0x02 (Slow Refresh)
+[   60.5] I (486) hex_psram: BurstType    : 0x00 ( Wrap)
+[   60.5] I (487) hex_psram: BurstLen     : 0x03 (2048 Byte)
+[   60.5] I (487) hex_psram: BitMode      : 0x01 (X16 Mode)
+[   60.5] I (488) hex_psram: Readlatency  : 0x04 (14 cycles@Fixed)
+[   60.5] I (488) hex_psram: DriveStrength: 0x00 (1/1)
+[   60.5] I (488) MSPI Timing: Enter psram timing tuning
+[   60.5] I esp_psram: Found 32MB PSRAM device
+[   60.5] I esp_psram: Speed: 200MHz
+[   60.8] I (749) mmu_psram: .rodata xip on psram
+[   60.8] I (832) mmu_psram: .text xip on psram
+[   60.8] I (833) hex_psram: psram CS IO is dedicated
+[   60.8] I (833) cpu_start: Multicore app
+[   61.1] I (1244) esp_psram: SPI SRAM memory test OK
+[   61.1] I (1259) cpu_start: Pro cpu start user code
+[   61.1] I (1259) cpu_start: cpu freq: 360000000 Hz
+[   61.1] I (1260) app_init: Application information:
+[   61.1] I (1260) app_init: Project name:     orcsdr_tab5
+[   61.1] I (1260) app_init: App version:      v0.3.0-beta.1
+[   61.1] I (1260) app_init: Compile time:     Oct  1 2026 15:44:43
+[   61.1] I (1260) app_init: ELF file SHA256:  0fbf3b20a...
+[   61.1] I (1260) app_init: ESP-IDF:          v5.5.4-dirty
+[   61.1] I (1261) efuse_init: Min chip rev:     v0.1
+[   61.1] I (1261) efuse_init: Max chip rev:     v1.99
+[   61.1] I (1261) efuse_init: Chip rev:         v1.3
+[   61.1] I (1261) heap_init: Initializing. RAM available for dynamic allocation:
+[   61.1] I (1262) heap_init: At 4FF2AD20 len 000102A0 (64 KiB): RETENT_RAM
+[   61.1] I (1262) heap_init: At 4FF3AFC0 len 00004BF0 (18 KiB): RAM
+[   61.1] I (1262) heap_init: At 4FF61FD0 len 0001E030 (120 KiB): RAM
+[   61.1] I (1262) heap_init: At 501080C0 len 00007F40 (31 KiB): RTCRAM
+[   61.1] I (1263) heap_init: At 30100068 len 00001F98 (7 KiB): TCM
+[   61.1] I (1263) esp_psram: Adding pool of 28538K of PSRAM memory to heap allocator
+[   61.1] I (1263) esp_psram: Adding pool of 60K of PSRAM memory gap generated due to end address alignment of irom to the heap allocator
+[   61.1] I (1264) esp_psram: Adding pool of 42K of PSRAM memory gap generated due to end address alignment of drom to the heap allocator
+[   61.1] I (1264) spi_flash: detected chip: generic
+[   61.1] I (1264) spi_flash: flash io: qio
+[   61.1] I (1265) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+[   61.1] I (1265) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+[   61.1] I (1266) esp_core_dump_flash: Init core dump to flash
+[   61.1] I (1266) esp_core_dump_flash: Found partition 'coredump' @ 410000 262144 bytes
+[   61.1] I (1285) esp_core_dump_flash: Core dump data checksum is correct
+[   61.1] I (1286) esp_core_dump_flash: Found core dump 35424 bytes in flash @ 0x410000
+[   61.1] I (1286) main_task: Started on CPU0
+[   61.1] I (1287) esp_psram: Reserving pool of 40K of internal memory for DMA/internal allocations
+[   61.1] I (1287) main_task: Calling app_main()
+[   61.1] RTL_RESET_NORMALIZE original_reason=4 restarting_cleanly
+[   61.4] ESP-ROM:esp32p4-eco2-20240710
+[   61.4] Build:Jul 10 2024
+[   61.4] rst:0x9 (HP_SYS_LP_WDT_RESET),boot:0x20c (SPI_FAST_FLASH_BOOT)
+[   61.4] Core0 Saved PC:0x48041a04
+[   61.4] Core1 Saved PC:0x4ff05670
+[   61.4] SPI mode:DIO, clock div:1
+[   61.4] load:0x4ff33ce0,len:0x17b8
+[   61.4] load:0x4ff29ed0,len:0xfb0
+[   61.4] load:0x4ff2cbd0,len:0x361c
+[   61.4] entry 0x4ff29eda
+[   61.4] I (8) boot: ESP-IDF v5.5.4-dirty 2nd stage bootloader
+[   61.4] I (9) boot: compile time Sep 29 2026 18:50:00
+[   61.4] I (9) boot: Multicore bootloader
+[   61.4] I (10) boot: chip revision: v1.3
+[   61.4] I (10) boot: efuse block revision: v0.3
+[   61.4] I (11) qio_mode: Enabling default flash chip QIO
+[   61.4] I (11) boot.esp32p4: SPI Speed      : 80MHz
+[   61.4] I (11) boot.esp32p4: SPI Mode       : QIO
+[   61.4] I (11) boot.esp32p4: SPI Flash Size : 16MB
+[   61.4] W (12) boot.esp32p4: CPU has been reset by WDT.
+[   61.4] I (12) boot: Enabling RNG early entropy source...
+[   61.4] I (13) boot: Partition Table:
+[   61.4] I (13) boot: ## Label            Usage          Type ST Offset   Length
+[   61.4] I (13) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+[   61.4] I (14) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+[   61.4] I (14) boot:  2 factory          factory app      00 00 00010000 00400000
+[   61.4] I (15) boot:  3 coredump         Unknown data     01 03 00410000 00040000
+[   61.4] I (16) boot: End of partition table
+[   61.4] I (17) esp_image: segment 0: paddr=00010020 vaddr=481b0020 size=1d57dch (1923036) map
+[   61.4] I (233) esp_image: segment 1: paddr=001e5804 vaddr=30100000 size=00068h (   104) load
+[   61.4] I (234) esp_image: segment 2: paddr=001e5874 vaddr=4ff00000 size=0a7a4h ( 42916) load
+[   61.4] I (241) esp_image: segment 3: paddr=001f0020 vaddr=48000020 size=1a0de0h (1707488) map
+[   61.7] I (433) esp_image: segment 4: paddr=00390e08 vaddr=4ff0a7a4 size=0f2e8h ( 62184) load
+[   61.7] I (443) esp_image: segment 5: paddr=003a00f8 vaddr=4ff19b00 size=11220h ( 70176) load
+[   61.7] I (454) esp_image: segment 6: paddr=003b1320 vaddr=4ff40000 size=04148h ( 16712) load
+[   61.7] I (457) esp_image: segment 7: paddr=003b5470 vaddr=50108080 size=0000ch (    12) load
+[   61.7] I (459) esp_image: segment 8: paddr=003b5484 vaddr=501080a0 size=00020h (    32) load
+[   61.7] I (468) boot: Loaded app from partition at offset 0x10000
+[   61.7] I (468) boot: Disabling RNG early entropy source...
+[   61.7] I (472) hex_psram: vendor id    : 0x0d (AP)
+[   61.7] I (473) hex_psram: Latency      : 0x01 (Fixed)
+[   61.7] I (473) hex_psram: DriveStr.    : 0x00 (25 Ohm)
+[   61.7] I (473) hex_psram: dev id       : 0x03 (generation 4)
+[   61.7] I (474) hex_psram: density      : 0x07 (256 Mbit)
+[   61.7] I (474) hex_psram: good-die     : 0x06 (Pass)
+[   61.7] I (474) hex_psram: SRF          : 0x02 (Slow Refresh)
+[   61.7] I (475) hex_psram: BurstType    : 0x00 ( Wrap)
+[   61.7] I (475) hex_psram: BurstLen     : 0x03 (2048 Byte)
+[   61.7] I (475) hex_psram: BitMode      : 0x01 (X16 Mode)
+[   61.7] I (476) hex_psram: Readlatency  : 0x04 (14 cycles@Fixed)
+[   61.7] I (476) hex_psram: DriveStrength: 0x00 (1/1)
+[   61.7] I (477) MSPI Timing: Enter psram timing tuning
+[   62.1] I esp_psram: Found 32MB PSRAM device
+[   62.1] I esp_psram: Speed: 200MHz
+[   62.1] I (737) mmu_psram: .rodata xip on psram
+[   62.1] I (820) mmu_psram: .text xip on psram
+[   62.1] I (821) hex_psram: psram CS IO is dedicated
+[   62.1] I (821) cpu_start: Multicore app
+[   62.7] I (1229) esp_psram: SPI SRAM memory test OK
+[   62.7] I (1245) cpu_start: Pro cpu start user code
+[   62.7] I (1245) cpu_start: cpu freq: 360000000 Hz
+[   62.7] I (1245) app_init: Application information:
+[   62.7] I (1245) app_init: Project name:     orcsdr_tab5
+[   62.7] I (1246) app_init: App version:      v0.3.0-beta.1
+[   62.7] I (1246) app_init: Compile time:     Oct  1 2026 15:44:43
+[   62.7] I (1246) app_init: ELF file SHA256:  0fbf3b20a...
+[   62.7] I (1246) app_init: ESP-IDF:          v5.5.4-dirty
+[   62.7] I (1246) efuse_init: Min chip rev:     v0.1
+[   62.7] I (1247) efuse_init: Max chip rev:     v1.99
+[   62.7] I (1247) efuse_init: Chip rev:         v1.3
+[   62.7] I (1247) heap_init: Initializing. RAM available for dynamic allocation:
+[   62.7] I (1247) heap_init: At 4FF2AD20 len 000102A0 (64 KiB): RETENT_RAM
+[   62.7] I (1248) heap_init: At 4FF3AFC0 len 00004BF0 (18 KiB): RAM
+[   62.7] I (1248) heap_init: At 4FF61FD0 len 0001E030 (120 KiB): RAM
+[   62.7] I (1248) heap_init: At 501080C0 len 00007F40 (31 KiB): RTCRAM
+[   62.7] I (1248) heap_init: At 30100068 len 00001F98 (7 KiB): TCM
+[   62.7] I (1249) esp_psram: Adding pool of 28538K of PSRAM memory to heap allocator
+[   62.7] I (1249) esp_psram: Adding pool of 60K of PSRAM memory gap generated due to end address alignment of irom to the heap allocator
+[   62.7] I (1250) esp_psram: Adding pool of 42K of PSRAM memory gap generated due to end address alignment of drom to the heap allocator
+[   62.7] I (1250) spi_flash: detected chip: generic
+[   62.7] I (1250) spi_flash: flash io: qio
+[   62.7] I (1251) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+[   62.7] I (1251) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+[   62.7] I (1251) esp_core_dump_flash: Init core dump to flash
+[   62.7] I (1252) esp_core_dump_flash: Found partition 'coredump' @ 410000 262144 bytes
+[   62.7] I (1271) esp_core_dump_flash: Core dump data checksum is correct
+[   62.7] I (1271) esp_core_dump_flash: Found core dump 35424 bytes in flash @ 0x410000
+[   62.7] I (1272) main_task: Started on CPU0
+[   62.7] I (1273) esp_psram: Reserving pool of 40K of internal memory for DMA/internal allocations
+[   62.7] I (1273) main_task: Calling app_main()
+[   62.7] RTL_RESET_NORMALIZED original_reason=4
+[   62.7] RTL_RESET_REASON code=7 name=wdt
+[   62.7] RTL_BROWNOUT det=off reset=off
+[   62.7] I (1280) M5GFX: [Autodetect] load from NVS : board:22
+[   62.7] I (1281) M5GFX: [Autodetect] board_M5Tab5
+[   62.7] I (1438) M5GFX: M5Tab5 ST touch FW version 03
+[   63.0] I (1518) M5GFX: M5Tab5 detected ST7123 display
+[   63.3] I (1912) tab5_kbd: RTL_KEYBOARD attached addr=0x6d firmware=1 mode=2
+[   63.3] RTL_DRAM_BUDGET stage=boot dma_free=158367 dma_largest=77824 intern_free=197915 intern_largest=77824 psram_free=25629912 psram_largest=25165824 always_int=8192 reserve_int=40960 hosted_dma_psram=1 usb_dma_psram=1 lwip_psram=1
+[   63.3] RTL_LORA_MEMORY stage=boot internal_free=197915 internal_largest=77824 dma_free=158367 dma_largest=77824 psram_free=25629912 psram_largest=25165824 decoder_psram=0 fft_table=UNALLOCATED fft_bytes=0 recovery=UNALLOCATED recovery_bytes=0 task_workspace=UNALLOCATED task_workspace_bytes=0 task_stack_hwm=0 reserve_int=40960
+[   63.3] RTL_VIS_SELF_CHECK_OK
+[   63.3] RTL_LAB_SELF_CHECK_OK
+[   63.3] RTL_ADSB_SELF_CHECK_OK
+[   63.3] RTL_POCSAG_SELF_CHECK_OK
+[   63.3] RTL_FM_DASHBOARD_SELF_CHECK_OK
+[   63.3] RTL_AM_DASHBOARD_SELF_CHECK_OK
+[   63.3] RTL_SHORTWAVE_MODEL_SELF_CHECK_OK
+[   63.3] RTL_SHORTWAVE_LIBRARY_SELF_CHECK_OK
+[   63.3] RTL_SHORTWAVE_HUNT_SELF_CHECK_OK
+[   63.3] RTL_SHORTWAVE_DASHBOARD_SELF_CHECK_OK
+[   63.3] RTL_CB_DASHBOARD_SELF_CHECK_OK
+[   63.3] RTL_AIRBAND_SELF_CHECK_OK
+[   63.3] RTL_RECEIVER_CONTROLS_SELF_CHECK_OK
+[   63.3] RTL_AM_FINDER_SELF_CHECK_OK
+[   63.3] RTL_FM_CONFIG_SELF_CHECK_OK
+[   63.3] RTL_P25_DASHBOARD_SELF_CHECK_OK
+[   63.6] RTL_P25_DECODER_SELF_CHECK_OK
+[   63.6] RTL_P25_VOICE_SELF_CHECK_OK
+[   63.6] ORC_SETTINGS_SELF_CHECK_OK
+[   63.6] ORC_TIME_SELF_CHECK_OK
+[   63.6] ORC_LOCATION_SELF_CHECK_OK
+[   63.6] ORC_RECEIVER_LOCATION_SELF_CHECK_OK
+[   63.6] ORC_SCREEN_CONTROLLER_SELF_CHECK_OK
+[   63.6] ORC_RADIO_UI_SELF_CHECK_OK
+[   63.6] ORC_RADIO_SCAN_SELF_CHECK_OK
+[   63.6] ORC_DEVICE_STATUS_SELF_CHECK_OK
+[   63.6] ORC_HOME_SELF_CHECK_OK
+[   63.6] RTL_WEB_SELF_CHECK_OK
+[   63.6] RTL_LORA_DASHBOARD_SELF_CHECK_OK
+[   63.6] RF24_DASHBOARD_SELF_CHECK_OK
+[   63.6] UI_DOC_SELF_CHECK_OK
+[   63.6] SPLASH_BOOT begin (loading screen)
+[   63.6] SPLASH_ROTATION ui=3
+[   63.6] W (2208) ldo: The voltage value 0 is out of the recommended range [500, 2700]
+[   63.6] Name: SD32G
+[   63.6] Type: SDHC
+[   63.6] Speed: 40.00 MHz (limit: 40.00 MHz)
+[   63.6] Size: 29820MB
+[   63.6] CSD: ver=2, sector_size=512, capacity=61071360 read_bl_len=9
+[   63.6] SSR: bus_width=4
+[   63.6] SPLASH_SD ready bus=sdmmc
+[   63.9] SPLASH_IMAGE ok bytes=137898 ms=378
+[   63.9] SPLASH_STATUS Starting…
+[   63.9] SPLASH_MODE embedded
+[   63.9] SPLASH_STATUS Loading settings…
+[   63.9] RTL_SERIAL_VERBOSITY mode=NORMAL
+[   63.9] RTL_REC_SD ready bus=sdmmc
+[   64.2] RTL_P25_CONFIG_LOAD status="Active P25 profile loaded" channels=4 talkgroups=8 control_hz=453925000 modulation=auto
+[   64.2] RTL_FM_CONFIG_LOAD status="FM.cfg loaded" frequency_hz=96100000 presets=1
+[   64.2] RTL_FM_LOAD frequency_hz=96100000
+[   64.2] RTL_BAND_RESTORE band=FM frequency_hz=96100000
+[   64.2] RTL_WIFI_DEFER_TO_LOOP issue66
+[   64.2] RTL_WEB_DEFERRED catalog_wifi_session
+[   64.2] RTL_WIFI_ANTENNA internal
+[   64.2] SPLASH_STATUS Checking SD card…
+[   64.2] SPLASH_STATUS Loading data packs and maps…
+[   65.8] SPLASH_STATUS Connecting to Wi-Fi "hardcorewifi"…
+[   65.8] RTL_WIFI_BOOT_CONNECT_QUEUED splash
+[   66.1] RTL_WIFI_C6_POWER_CYCLE ok
+[   66.1] RTL_WIFI_DMA free=155167 largest=77824 txq=4 rxq=2
+[   66.1] RTL_WIFI_ANTENNA internal
+[   66.1] I (4828) eh_mcu_transport: transport_init: probing bus backend
+[   66.1] I (4828) eh_sdio: transport[host]: SDIO 4-bit 10000 kHz CLK=12 CMD=13 D0=11 D1=10 D2=9 D3=8 RESET=15
+[   66.1] I (4829) sdmmc_periph: sdmmc_host_init: SDMMC host already initialized, skipping init flow
+[   66.1] W (4829) eh_sdio: SDIO clock freq set to [10000]KHz, Max possible (on PCB) is 40000KHz
+[   66.1] I (4829) eh_sdio: sdio_data_to_rx_buf_task started
+[   66.1] I (4830) eh_mcu_transport: transport_init: bus backend up
+[   66.4] E (4973) eh_host_port_sdio: sdio_card_fn_init failed
+[   66.4] E (5093) sdmmc_common: sdmmc_init_ocr: send_op_cond (1) returned 0x107
+[   66.4] E (5093) eh_host_port_sdio: sdmmc_card_init failed
+[   66.4] I (5223) eh_host_port_sdio: Function 0 Blocksize: 512
+[   66.4] I (5223) eh_host_port_sdio: Function 1 Blocksize: 512
+[   66.7] I (5323) eh_sdio: Card init success, TRANSPORT_RX_ACTIVE
+[   66.7] I (5330) eh_sdio: SDIO Host operating in STREAMING MODE
+[   66.7] I (5330) eh_sdio: Open data path at slave
+[   66.7] I (5330) eh_sdio: Starting SDIO process rx task
+[   66.7] I (5356) eh_init_evt: slave chip id: 0x0d (esp32c6)
+[   66.7] I (5357) eh_init_evt: capabilities: 0x0d
+[   66.7] I (5357) eh_init_evt: Features supported are:
+[   66.7] I (5357) eh_init_evt: 	 * WLAN over SDIO
+[   66.7] I (5357) eh_init_evt: 	   - HCI over SDIO
+[   66.7] I (5357) eh_init_evt: 	   - BLE only
+[   66.7] I (5357) eh_raw_tp: raw TP inactive
+[   66.7] I (5357) eh_init_evt: Default RPC to V2
+[   66.7] I (5357) eh_init_evt: esp-hosted fw versions: host=3.0.6 coprocessor=2.12.6
+[   66.7] E (5357) eh_init_evt: major version mismatch — OTA coprocessor from host
+[   66.7] I (5358) eh_init_evt: CP without SDIO SW_AGGR; compatible streaming mode enabled
+[   66.7] I (5358) eh_init_evt: SDIO mode: slave=streaming host=streaming
+[   66.7] I (5358) eh_init_evt: chip=0x0d (esp32c6) fw=0x00020c06 caps=0x0d ext=0x00000000
+[   66.7] W (5358) eh_host_port_xport_defaults: SDIO clock freq set to [10000]KHz, Max possible (on PCB) is 40000KHz
+[   66.7] I (5358) eh_auto_init: auto_init: found 1 descriptor(s)
+[   66.7] I (5358) eh_auto_init: auto_init: initialising 'wifi' (priority 150)
+[   66.7] I (5359) eh_wifi_itwt: wifi iTWT ext init
+[   67.0] I OrcSDR: ESP32-C6 detected
+[   67.0] I OrcSDR: ESP-Hosted C6 FW: 2.12.6
+[   67.0] I OrcSDR: ESP-Hosted transport: SDIO
+[   67.0] RTL_WIFI_INIT station=1 core=0
+[   67.0] RTL_DRAM_BUDGET stage=after_wifi dma_free=136123 dma_largest=77824 intern_free=175671 intern_largest=77824 psram_free=25156300 psram_largest=24641536 always_int=8192 reserve_int=40960 hosted_dma_psram=1 usb_dma_psram=1 lwip_psram=1
+[   67.0] RTL_WIFI_DMA pre_connect free=136123 largest=77824
+[   67.0] I (5827) eh_wifi: set_config iface=STA ssid="hardcorewifi" (12 bytes)
+[   67.0] I (5829) eh_wifi: rx RPC WifiEventNoArgs id=2
+[   67.3] RTL_WIFI_COEX event=connect_started elapsed_ms=0 effective_sps=0 usb_overruns=0 usb_drops=0 audio_chunks=0 audio_drops=0 dsp_block_us_max=0 ui_fps=0 connect_pause=1 rtl_ready=0 capture_state=0 capture_requested=0 band=FM frequency_hz=96100000 audio_enabled=1 speaker_running=0
+[   67.3] I (5917) eh_wifi: rx RPC WifiEventNoArgs id=43
+[   67.3] I (6037) eh_wifi: rx RPC WifiEventNoArgs id=43
+[   71.4] I (10198) eh_wifi: rx RPC StaDisconnected ssid="hardcorewifi" reason=2 rssi=-37
+[   71.4] W (10199) orcsdr_wifi: station disconnected reason=2
+[   71.7] RTL_WIFI_COEX event=connect_failed elapsed_ms=4519 effective_sps=0 usb_overruns=0 usb_drops=0 audio_chunks=0 audio_drops=0 dsp_block_us_max=0 ui_fps=0 connect_pause=1 rtl_ready=0 capture_state=0 capture_requested=0 band=FM frequency_hz=96100000 audio_enabled=1 speaker_running=0
+[   71.7] RTL_WIFI_RECONNECT_SCHEDULED reason=connect_failed attempt=1 delay_ms=3000
+[   71.7] SPLASH_STATUS Wi-Fi "hardcorewifi": retrying (attempt 2)…
+[   74.8] RTL_WIFI_RECONNECT attempt=1
+[   74.8] RTL_WIFI_DMA pre_connect free=136123 largest=77824
+[   74.8] I (13348) eh_wifi: set_config iface=STA ssid="hardcorewifi" (12 bytes)
+[   74.8] RTL_WIFI_COEX event=connect_started elapsed_ms=0 effective_sps=0 usb_overruns=0 usb_drops=0 audio_chunks=0 audio_drops=0 dsp_block_us_max=0 ui_fps=0 connect_pause=1 rtl_ready=0 capture_state=0 capture_requested=0 band=FM frequency_hz=96100000 audio_enabled=1 speaker_running=0
+[   75.5] I (14023) esp_wifi_remote: esp_wifi_internal_reg_rxcb: sta: 0x4813be3a
+[   76.7] I (15213) esp_netif_handlers: sta ip: 192.168.1.75, mask: 255.255.255.0, gw: 192.168.1.1
+[   76.7] RTL_WIFI_CONNECTED
+[   76.7] RTL_WIFI_COEX event=connect_complete elapsed_ms=1873 effective_sps=0 usb_overruns=0 usb_drops=0 audio_chunks=0 audio_drops=0 dsp_block_us_max=0 ui_fps=0 connect_pause=1 rtl_ready=0 capture_state=0 capture_requested=0 band=FM frequency_hz=96100000 audio_enabled=1 speaker_running=0
+[   76.7] SPLASH_STATUS Wi-Fi connected: 192.168.1.75
+[   76.7] RTL_WIFI_BOOT_SPLASH connected=1 elapsed_ms=10694 reconnect_attempts=0 station=1
+[   76.7] BOOT_STAGE usb_power_settle
+[   76.7] SPLASH_STATUS Powering RTL-SDR USB port…
+[   77.0] BOOT_STAGE speaker_start
+[   77.0] RTL_SPEAKER_DMA len=256 count=2 largest=77824
+[   77.0] RTL_SPEAKER_DMA len=256 count=2 largest=77824
+[   77.0] RTL_SPEAKER_CODEC_PRIME ok
+[   77.0] RTL_DRAM_BUDGET stage=speaker_before_usb dma_free=130555 dma_largest=77824 intern_free=170103 intern_largest=77824 psram_free=25155516 psram_largest=24641536 always_int=8192 reserve_int=40960 hosted_dma_psram=1 usb_dma_psram=1 lwip_psram=1
+[   77.0] RTL_IQ_PIPELINE ready slots=3 bytes=33280 core=1 priority=6
+[   77.0] I (15646) esp_rtl_sdr: [RTL0] USB host session started (shared)
+[   77.0] I (15646) esp_rtl_sdr: [RTL0] install v0.9.2 caps=0x001fff7f xfer=3x32768 bind=any
+[   77.0] RTL_INSTALL ok v0.9.2 caps=0x001fff7f delivery=callback xfer=3x32768 usb_core=0
+[   77.0] RTL_CORE_SPLIT usb=core0 callback=enqueue dsp_audio_ui_hosted=core1
+[   77.0] RTL_DRAM_BUDGET stage=after_usb dma_free=113415 dma_largest=69632 intern_free=152963 intern_largest=69632 psram_free=24882868 psram_largest=24641536 always_int=8192 reserve_int=40960 hosted_dma_psram=1 usb_dma_psram=1 lwip_psram=1
+[   77.0] BOOT_STAGE rtl_enumerating
+[   77.0] SPLASH_STATUS Detecting RTL-SDR…
+[   77.0] I (15666) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   82.6] I (21320) esp_rtl_sdr: [RTL0] usb new_device addr=1 queued=1
+[   82.6] I (21320) esp_rtl_sdr: [RTL0] usb probe_begin addr=1
+[   82.6] I (21321) esp_rtl_sdr: [RTL0] USB device opened addr=1 path=root serial=00000001 hs=1
+[   82.6] I (21321) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[   82.6] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=0
+[   82.6] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   82.6] RTL_DRAM_BUDGET stage=after_speaker dma_free=113279 dma_largest=69632 intern_free=152827 intern_largest=69632 psram_free=24881456 psram_largest=24641536 always_int=8192 reserve_int=40960 hosted_dma_psram=1 usb_dma_psram=1 lwip_psram=1
+[   82.6] BOOT_STAGE speaker_settle
+[   82.6] SPLASH_STATUS Starting audio…
+[   83.0] RTL_DRAM_BUDGET stage=ready dma_free=113279 dma_largest=69632 intern_free=152827 intern_largest=69632 psram_free=24881456 psram_largest=24641536 always_int=8192 reserve_int=40960 hosted_dma_psram=1 usb_dma_psram=1 lwip_psram=1
+[   83.0] BOOT_STAGE ready
+[   83.0] SPLASH_STATUS Ready
+[   83.0] SPLASH_READY 1
+[   83.0] SPLASH_STATUS SD card: ready   |   Wi-Fi: connected   |   RTL-SDR: ready
+[   83.0] BOOT_SPLASH_SUMMARY sd=1 wifi=1 rtl=1
+[   83.0] BOOT_SPLASH_GATE off
+[   83.0] SPLASH_BOOT done
+[   83.0] E (21681) sdmmc_io: sdmmc_io_rw_extended: sdmmc_send_cmd returned 0x107
+[   83.0] E (21681) eh_sdio: sdio_get_tx_buffer_num: err: 263
+[   83.0] E (21681) eh_sdio: sdio_is_write_buffer_available: SDIO slave unresponsive
+[   83.0] E (21681) orcsdr_wifi: RTL_WIFI_LINK_LOST reason=transport_failure
+[   87.9] W (26680) eh_host_feat_rpc: request: no response uid=11 msg_id=294 (5000 ms)
+[   88.3] RTL_WIFI_BOOT_STATUS station=1 hosted_match=1 stage=none error=0x0 message="Connection successful"
+[   88.3] RTL_WIFI_LINK_LOST
+[   88.3] RTL_WEB_RESTORED enabled=1
+[   88.3] I (26806) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   88.3] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   88.3] I (26806) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   88.3] E (27022) USBH: Dev 1 EP 0 STALL
+[   88.3] E (27025) USBH: Dev 1 EP 0 STALL
+[   88.3] E (27028) USBH: Dev 1 EP 0 STALL
+[   88.3] E (27030) USBH: Dev 1 EP 0 STALL
+[   88.3] E (27033) USBH: Dev 1 EP 0 STALL
+[   88.3] E (27035) USBH: Dev 1 EP 0 STALL
+[   89.2] I (27894) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[   89.2] I (27949) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   89.2] I (27963) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[   89.5] I (28022) esp_rtl_sdr: front-end route rf=96100000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[   89.5] I (28023) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   89.5] I (28023) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   89.5] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   89.5] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   89.5] RTL_SPEAKER_RESUME ok=I 1 ru(nnin2g=1 8play0ing=20 vol3ume=)128
+[   89.5] esp_rtl_sdr: tuner gain applied 0 (0.1 dB) [profile table]
+[   89.5] RTL_FM_AUTO_GAIN start gain_tenth_db=0 target_dbfs=-24.0
+[   89.5] I (28070) esp_rtl_sdr: front-end route rf=96100000 band=VHF r6=30 r5=f0 gpio=38 bias=0 reg05_low=10
+[   89.5] I (28070) esp_rtl_sdr: tuner gain applied 0 (0.1 dB) [async]
+[   89.8] RTL_FM_AUTO_GAIN selected gain_tenth_db=0 level_dbfs=-31.6 clipping_percent=0.304
+[   90.1] RTL_STOP_REQUESTED
+[   90.1] RTL_STOP_RESULT ESP_OK
+[   90.1] RTL_STOP bytes=3604480
+[   90.1] RTL_WIFI_LINK_RECOVERY attempt=1
+[   90.1] I (28881) eh_auto_init: auto_deinit: deinitialising 'wifi' (priority 150)
+[   90.1] I (28881) eh_wifi_itwt: wifi iTWT ext deinit
+[   90.1] E (28881) sdmmc_io: sdmmc_io_write_byte: sdmmc_io_rw_direct (write 0x140) returned 0x107
+[   90.1] I (28884) eh_sdio: free buffer[0] 0x481afa80
+[   90.1] I (28884) eh_sdio: free buffer[1] 0x481afd00
+[   90.4] W (28980) orcsdr_wifi: link recovery: esp_hosted_deinit=0
+[   90.4] I (28980) esp_wifi_remote: esp_wifi_internal_reg_rxcb: sta: 0x0
+[   90.7] RTL_WIFI_C6_POWER_CYCLE ok
+[   90.7] RTL_WIFI_DMA free=118267 largest=63488 txq=4 rxq=2
+[   90.7] RTL_WIFI_ANTENNA internal
+[   90.7] I (29278) eh_mcu_transport: transport_init: probing bus backend
+[   90.7] I (29279) eh_sdio: transport[host]: SDIO 4-bit 10000 kHz CLK=12 CMD=13 D0=11 D1=10 D2=9 D3=8 RESET=15
+[   90.7] I (29279) sdmmc_periph: sdmmc_host_init: SDMMC host already initialized, skipping init flow
+[   90.7] W (29279) eh_sdio: SDIO clock freq set to [10000]KHz, Max possible (on PCB) is 40000KHz
+[   90.7] I (29280) eh_sdio: sdio_data_to_rx_buf_task started
+[   90.7] I (29280) eh_mcu_transport: transport_init: bus backend up
+[   90.7] E (29423) eh_host_port_sdio: sdio_card_fn_init failed
+[   90.7] E (29543) sdmmc_common: sdmmc_init_ocr: send_op_cond (1) returned 0x107
+[   90.7] E (29543) eh_host_port_sdio: sdmmc_card_init failed
+[   91.1] I (29673) eh_host_port_sdio: Function 0 Blocksize: 512
+[   91.1] I (29673) eh_host_port_sdio: Function 1 Blocksize: 512
+[   91.1] I (29773) eh_sdio: Card init success, TRANSPORT_RX_ACTIVE
+[   91.1] I (29780) eh_sdio: SDIO Host operating in STREAMING MODE
+[   91.1] I (29780) eh_sdio: Open data path at slave
+[   91.1] I (29780) eh_sdio: Starting SDIO process rx task
+[   91.1] I (29806) eh_init_evt: slave chip id: 0x0d (esp32c6)
+[   91.1] I (29807) eh_init_evt: capabilities: 0x0d
+[   91.1] I (29807) eh_init_evt: Features supported are:
+[   91.1] I (29807) eh_init_evt: 	 * WLAN over SDIO
+[   91.1] I (29807) eh_init_evt: 	   - HCI over SDIO
+[   91.1] I (29807) eh_init_evt: 	   - BLE only
+[   91.1] I (29807) eh_raw_tp: raw TP inactive
+[   91.1] I (29807) eh_init_evt: Default RPC to V2
+[   91.1] I (29807) eh_init_evt: esp-hosted fw versions: host=3.0.6 coprocessor=2.12.6
+[   91.1] E (29808) eh_init_evt: major version mismatch — OTA coprocessor from host
+[   91.1] I (29808) eh_init_evt: CP without SDIO SW_AGGR; compatible streaming mode enabled
+[   91.1] I (29808) eh_init_evt: SDIO mode: slave=streaming host=streaming
+[   91.1] I (29808) eh_init_evt: chip=0x0d (esp32c6) fw=0x00020c06 caps=0x0d ext=0x00000000
+[   91.1] W (29808) eh_host_port_xport_defaults: SDIO clock freq set to [10000]KHz, Max possible (on PCB) is 40000KHz
+[   91.1] I (29809) eh_auto_init: auto_init: found 1 descriptor(s)
+[   91.1] I (29809) eh_auto_init: auto_init: initialising 'wifi' (priority 150)
+[   91.1] I (29809) eh_wifi_itwt: wifi iTWT ext init
+[   91.4] W (30145) event: handler already registered, overwriting
+[   91.4] W (30145) event: handler already registered, overwriting
+[   91.7] I OrcSDR: ESP32-C6 detected
+[   91.7] I OrcSDR: ESP-Hosted C6 FW: 2.12.6
+[   91.7] I OrcSDR: ESP-Hosted transport: SDIO
+[   91.7] RTL_WIFI_INIT station=1 core=0
+[   91.7] RTL_DRAM_BUDGET stage=after_wifi dma_free=108023 dma_largest=63488 intern_free=147571 intern_largest=63488 psram_free=24660904 psram_largest=24641536 always_int=8192 reserve_int=40960 hosted_dma_psram=1 usb_dma_psram=1 lwip_psram=1
+[   91.7] RTL_SPEAKER_DMA len=256 count=2 largest=63488
+[   91.7] I (30280) eh_wifi: rx RPC WifiEventNoArgs id=2
+[   91.7] I (30284) eh_wifi: rx RPC WifiEventNoArgs id=43
+[   91.7] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   91.7] RTL_WIFI_LINK_RECOVERY result=ok
+[   91.7] RTL_WIFI_RECONNECT_SCHEDULED reason=link_recovered attempt=1 delay_ms=3000
+[   91.7] RTL_MAIN_STALL stage=wifi_poll elapsed_ms=1482
+[   91.7] I (30294) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   91.7] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   91.7] I (30294) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   91.7] RTL_MAIN_STALL stage=loop_gap elapsed_ms=1497
+[   91.7] I (30315) eh_wifi: rx RPC WifiEventNoArgs id=2
+[   92.0] E (30510) USBH: Dev 1 EP 0 STALL
+[   92.0] E (30513) USBH: Dev 1 EP 0 STALL
+[   92.0] E (30515) USBH: Dev 1 EP 0 STALL
+[   92.0] E (30518) USBH: Dev 1 EP 0 STALL
+[   92.0] E (30521) USBH: Dev 1 EP 0 STALL
+[   92.0] E (30523) USBH: Dev 1 EP 0 STALL
+[   92.6] I (31382) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[   92.9] I (31437) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   92.9] I (31451) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[   92.9] I (31510) esp_rtl_sdr: front-end route rf=96100000 band=VHF r6=30 r5=f0 gpio=38 bias=0 reg05_low=10
+[   92.9] I (31511) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[   92.9] I (31511) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[   92.9] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[   92.9] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   92.9] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   94.5] RTL_WIFI_RECONNECT attempt=1
+[   94.8] RTL_STOP_REQUESTED
+[   94.8] RTL_STOP_RESULT ESP_OK
+[   94.8] RTL_STOP bytes=8585216
+[   94.8] RTL_WIFI_DMA pre_connect free=108023 largest=63488
+[   94.8] I (33368) eh_wifi: set_config iface=STA ssid="hardcorewifi" (12 bytes)
+[   94.8] RTL_WIFI_COEX event=connect_started elapsed_ms=0 effective_sps=0 usb_overruns=0 usb_drops=0 audio_chunks=42 audio_drops=0 dsp_block_us_max=8687 ui_fps=10 connect_pause=1 rtl_ready=1 capture_state=4 capture_requested=0 band=FM frequency_hz=96100000 audio_enabled=1 speaker_running=0
+[   94.8] RTL_SPEAKER_WATCHDOG restart
+[   94.8] RTL_SPEAKER_DMA len=256 count=2 largest=63488
+[   94.8] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   94.8] I (33534) eh_wifi: rx RPC WifiEventNoArgs id=43
+[   99.2] I (37702) eh_wifi: rx RPC StaDisconnected ssid="hardcorewifi" reason=2 rssi=-41
+[   99.2] W (37702) orcsdr_wifi: station disconnected reason=2
+[   99.2] W (37703) orcsdr_wifi: station disconnected reason=2
+[   99.2] RTL_WIFI_COEX event=connect_failed elapsed_ms=4584 effective_sps=0 usb_overruns=0 usb_drops=0 audio_chunks=42 audio_drops=0 dsp_block_us_max=8687 ui_fps=10 connect_pause=1 rtl_ready=1 capture_state=4 capture_requested=0 band=FM frequency_hz=96100000 audio_enabled=1 speaker_running=1
+[   99.2] RTL_WIFI_RECONNECT_SCHEDULED reason=connect_failed attempt=2 delay_ms=10000
+[   99.2] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   99.2] I (37959) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   99.2] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   99.2] I (37959) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   99.5] E (38175) USBH: Dev 1 EP 0 STALL
+[   99.5] E (38178) USBH: Dev 1 EP 0 STALL
+[   99.5] E (38180) USBH: Dev 1 EP 0 STALL
+[   99.5] E (38183) USBH: Dev 1 EP 0 STALL
+[   99.5] E (38185) USBH: Dev 1 EP 0 STALL
+[   99.5] E (38188) USBH: Dev 1 EP 0 STALL
+[  100.4] I (39046) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[  100.4] I (39102) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  100.4] I (39116) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=af r22=65 pll_if_hz=1814972
+[  100.4] I (39175) esp_rtl_sdr: front-end route rf=96100000 band=VHF r6=30 r5=f0 gpio=38 bias=0 reg05_low=10
+[  100.4] I (39176) esp_rtl_sdr: [RTL0] stream start freq=96100000 sps=2400000 urbs=3x32768
+[  100.4] I (39176) esp_rtl_sdr: stream start freq=96100000 exact_rate=2400000 urbs=3x32768
+[  100.4] RTL_START ESP_OK rate=2400000 display_hz=96100000 lo_hz=96100000
+[  100.4] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  100.4] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  101.3] W (40078) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  101.3] E (40078) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  101.3] W (40078) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  101.3] E (40078) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  101.3] W (40078) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  101.3] E (40079) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  101.3] W (40079) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  101.3] W (40079) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=1 (other handles unaffected)
+[  101.3] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  101.3] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=96100000
+[  101.3] I (40080) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  101.3] RTL_STOP_REQUESTED
+[  101.3] E (40093) i2s_common: i2s_del_channel(1091): the channel can't be deleted unless it is disabled
+[  101.3] RTL_STOP_RESULT ESP_OK
+[  101.3] RTL_STOP bytes=4325376
+[  101.3] RTL_SPEAKER_IDLE reason=no_receiver

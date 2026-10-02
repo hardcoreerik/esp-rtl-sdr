@@ -1,0 +1,272 @@
+[    0.0] #PORT_OPEN
+[    5.0] RTL_FM_SAVE frequency_hz=95747000
+[    5.0] I (270537) esp_rtl_sdr: tune rf=95747000 Hz tuner=95747000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=7b r22=33 pll_if_hz=1814972
+[    5.0] I (270612) esp_rtl_sdr: front-end route rf=95747000 band=VHF r6=30 r5=fd gpio=38 bias=0 reg05_low=1d
+[    5.0] I (270612) esp_rtl_sdr: hot retune applied rf=95747000 Hz tuner=95747000 Hz direct=0
+[    5.0] RTL_HOT_TUNE display=95747000 lo=95747000 ok
+[    5.3] RTL_FM_CONFIG_SAVE frequency_hz=95747000 presets=1
+[   10.3] W (275903) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   10.3] E (275903) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   10.3] W (275904) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   10.3] E (275904) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   10.3] W (275904) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   10.3] E (275904) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   10.3] W (275904) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   10.3] W (275905) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=1 (other handles unaffected)
+[   10.3] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   10.3] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=95747000
+[   10.3] I (275906) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   10.3] RTL_STOP_REQUESTED
+[   10.3] RTL_STOP_RESULT ESP_OK
+[   10.3] RTL_STOP bytes=68321280
+[   10.3] RTL_SPEAKER_IDLE reason=no_receiver
+[   20.6] W (285926) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   21.2] I (286793) esp_rtl_sdr: [RTL0] usb new_device addr=2 queued=1
+[   21.2] I (286793) esp_rtl_sdr: [RTL0] usb probe_begin addr=2
+[   21.2] I (286794) esp_rtl_sdr: [RTL0] USB device opened addr=2 path=root serial=00000001 hs=1
+[   21.2] I (286794) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[   21.2] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   21.2] RTL_SPEAKER_WATCHDOG restart
+[   21.2] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   21.2] RTL_HOTPLUG_RESUME band=FM frequency_hz=95747000 queued=1
+[   21.2] I (286806) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   21.2] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   21.2] I (286806) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   21.2] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   21.5] E (287022) USBH: Dev 2 EP 0 STALL
+[   21.5] E (287025) USBH: Dev 2 EP 0 STALL
+[   21.5] E (287028) USBH: Dev 2 EP 0 STALL
+[   21.5] E (287030) USBH: Dev 2 EP 0 STALL
+[   21.5] E (287033) USBH: Dev 2 EP 0 STALL
+[   21.5] E (287035) USBH: Dev 2 EP 0 STALL
+[   22.5] I (287894) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[   22.5] I (287949) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   22.5] I (287963) esp_rtl_sdr: tune rf=95747000 Hz tuner=95747000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=7b r22=33 pll_if_hz=1814972
+[   22.5] I (288023) esp_rtl_sdr: front-end route rf=95747000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[   22.5] I (288023) esp_rtl_sdr: [RTL0] stream start freq=95747000 sps=2400000 urbs=3x32768
+[   22.5] I (288023) esp_rtl_sdr: stream start freq=95747000 exact_rate=2400000 urbs=3x32768
+[   22.5] RTL_START ESP_OK rate=2400000 display_hz=95747000 lo_hz=95747000
+[   22.5] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   22.5] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   22.5] W (288052) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 1, live_urbs=3)
+[   37.8] W (303266) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   37.8] E (303266) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   37.8] W (303266) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   37.8] E (303266) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   37.8] W (303267) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   37.8] E (303267) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   37.8] W (303267) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   37.8] W (303267) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=2 (other handles unaffected)
+[   37.8] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   37.8] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=95747000
+[   37.8] I (303268) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   37.8] RTL_SPEAKER_IDLE reason=no_receiver
+[   37.8] RTL_STOP_REQUESTED
+[   37.8] RTL_STOP_RESULT ESP_OK
+[   37.8] RTL_STOP bytes=73039872
+[   47.8] W (313288) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   50.9] I (316434) esp_rtl_sdr: [RTL0] usb new_device addr=3 queued=1
+[   50.9] I (316434) esp_rtl_sdr: [RTL0] usb probe_begin addr=3
+[   50.9] I (316435) esp_rtl_sdr: [RTL0] USB device opened addr=3 path=root serial=00000001 hs=1
+[   50.9] I (316435) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[   50.9] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   50.9] RTL_HOTPLUG_RESUME band=FM frequency_hz=95747000 queued=1
+[   50.9] I 316441) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   50.9] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   50.9] I (316441) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   50.9] RTL_SPEAKER_WATCHDOG restart
+[   50.9] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   50.9] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   51.2] E (316658) USBH: Dev 3 EP 0 STALL
+[   51.2] E (316660) USBH: Dev 3 EP 0 STALL
+[   51.2] E (316663) USBH: Dev 3 EP 0 STALL
+[   51.2] E (316666) USBH: Dev 3 EP 0 STALL
+[   51.2] E (316668) USBH: Dev 3 EP 0 STALL
+[   51.2] E (316671) USBH: Dev 3 EP 0 STALL
+[   52.1] I (317529) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[   52.1] I (317585) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   52.1] I (317599) esp_rtl_sdr: tune rf=95747000 Hz tuner=95747000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=7b r22=33 pll_if_hz=1814972
+[   52.1] I (317658) esp_rtl_sdr: front-end route rf=95747000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[   52.1] I (317659) esp_rtl_sdr: [RTL0] stream start freq=95747000 sps=2400000 urbs=3x32768
+[   52.1] I (317659) esp_rtl_sdr: stream start freq=95747000 exact_rate=2400000 urbs=3x32768
+[   52.1] RTL_START ESP_OK rate=2400000 display_hz=95747000 lo_hz=95747000
+[   52.1] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   52.1] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   52.1] W (317679) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 2, live_urbs=3)
+[   67.7] W (333292) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   67.7] E (333292) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   67.7] W (333292) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   67.7] E (333293) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   67.7] W (333293) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   67.7] E (333293) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   67.7] W (333293) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   67.7] W (333293) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=3 (other handles unaffected)
+[   67.7] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   67.7] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=95747000
+[   67.7] I (333294) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   67.7] RTL_SPEAKER_IDLE reason=no_receiver
+[   67.7] RTL_STOP_REQUESTED
+[   67.7] RTL_STOP_RESULT ESP_OK
+[   67.7] RTL_STOP bytes=74907648
+[   77.7] W (343314) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[   79.3] I (344684) esp_rtl_sdr: [RTL0] usb new_device addr=4 queued=1
+[   79.3] I (344684) esp_rtl_sdr: [RTL0] usb probe_begin addr=4
+[   79.3] I (344685) esp_rtl_sdr: [RTL0] USB device opened addr=4 path=root serial=00000001 hs=1
+[   79.3] I (344685) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[   79.3] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[   79.3] RTL_SPEAKER_WATCHDOG restart
+[   79.3] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[   79.3] RTL_HOTPLUG_RESUME band=FM frequency_hz=95747000 queued=1
+[   79.3] I (344689) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[   79.3] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[   79.3] I (344689) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[   79.3] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   79.6] E (344905) USBH: Dev 4 EP 0 STALL
+[   79.6] E (344908) USBH: Dev 4 EP 0 STALL
+[   79.6] E (344910) USBH: Dev 4 EP 0 STALL
+[   79.6] E (344913) USBH: Dev 4 EP 0 STALL
+[   79.6] E (344916) USBH: Dev 4 EP 0 STALL
+[   79.6] E (344918) USBH: Dev 4 EP 0 STALL
+[   80.2] I (345777) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[   80.5] I (345832) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[   80.5] I (345846) esp_rtl_sdr: tune rf=95747000 Hz tuner=95747000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=7b r22=33 pll_if_hz=1814972
+[   80.5] I (345906) esp_rtl_sdr: front-end route rf=95747000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[   80.5] I (345906) esp_rtl_sdr: [RTL0] stream start freq=95747000 sps=2400000 urbs=3x32768
+[   80.5] I (345907) esp_rtl_sdr: stream start freq=95747000 exact_rate=2400000 urbs=3x32768
+[   80.5] RTL_START ESP_OK rate=2400000 display_hz=95747000 lo_hz=95747000
+[   80.5] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[   80.5] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[   80.5] W (345934) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 3, live_urbs=3)
+[   98.6] W (364157) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[   98.6] E (364157) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   98.6] W (364158) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   98.6] E (364158) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   98.6] W (364158) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   98.6] E (364158) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[   98.6] W (364158) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[   98.6] W (364159) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=4 (other handles unaffected)
+[   98.6] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[   98.6] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=95747000
+[   98.6] I (364159) esp_rtl_sdr: [RTL0] usb probe_rescan
+[   98.6] RTL_STOP_REQUESTED
+[   98.6] RTL_STOP_RESULT ESP_OK
+[   98.6] RTL_STOP bytes=87490560
+[   98.6] RTL_SPEAKER_IDLE reason=no_receiver
+[  108.6] W (374179) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  113.3] I (378654) esp_rtl_sdr: [RTL0] usb new_device addr=5 queued=1
+[  113.3] I (378654) esp_rtl_sdr: [RTL0] usb probe_begin addr=5
+[  113.3] I (378655) esp_rtl_sdr: [RTL0] USB device opened addr=5 path=root serial=00000001 hs=1
+[  113.3] I (378655) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[  113.3] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  113.3] RTL_SPEAKER_WATCHDOG restart
+[  113.3] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  113.3] RTL_HOTPLUG_RESUME band=FM frequency_hz=95747000 queued=1
+[  113.3] I (378659) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[  113.3] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[  113.3] I (378659) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[  113.3] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  113.3] E (378875) USBH: Dev 5 EP 0 STALL
+[  113.3] E (378878) USBH: Dev 5 EP 0 STALL
+[  113.3] E (378880) USBH: Dev 5 EP 0 STALL
+[  113.6] E (378883) USBH: Dev 5 EP 0 STALL
+[  113.6] E (378886) USBH: Dev 5 EP 0 STALL
+[  113.6] E (378888) USBH: Dev 5 EP 0 STALL
+[  114.2] I (379747) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[  114.2] I (379802) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  114.2] I (379816) esp_rtl_sdr: tune rf=95747000 Hz tuner=95747000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=7b r22=33 pll_if_hz=1814972
+[  114.5] I (379876) esp_rtl_sdr: front-end route rf=95747000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[  114.5] I (379876) esp_rtl_sdr: [RTL0] stream start freq=95747000 sps=2400000 urbs=3x32768
+[  114.5] I (379876) esp_rtl_sdr: stream start freq=95747000 exact_rate=2400000 urbs=3x32768
+[  114.5] RTL_START ESP_OK rate=2400000 display_hz=95747000 lo_hz=95747000
+[  114.5] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  114.5] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  114.5] W (379903) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 4, live_urbs=3)
+[  131.3] W (396847) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  131.3] E (396847) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  131.3] W (396848) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  131.3] E (396848) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  131.3] W (396848) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  131.3] E (396848) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  131.3] W (396848) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  131.3] W (396849) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=5 (other handles unaffected)
+[  131.3] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  131.3] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=95747000
+[  131.3] I (396849) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  131.3] RTL_SPEAKER_IDLE reason=no_receiver
+[  131.3] RTL_STOP_REQUESTED
+[  131.3] RTL_STOP_RESULT ESP_OK
+[  131.3] RTL_STOP bytes=81330176
+[  141.3] W (406870) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  147.9] I (413268) esp_rtl_sdr: [RTL0] usb new_device addr=6 queued=1
+[  147.9] I (413268) esp_rtl_sdr: [RTL0] usb probe_begin addr=6
+[  147.9] I (413269) esp_rtl_sdr: [RTL0] USB device opened addr=6 path=root serial=00000001 hs=1
+[  147.9] I (413269) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[  147.9] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  147.9] RTL_SPEAKER_WATCHDOG restart
+[  147.9] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  147.9] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  147.9] RTL_HOTPLUG_RESUME band=FM frequency_hz=95747000 queued=1
+[  147.9] I (413285) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[  147.9] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[  147.9] I (413285) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[  147.9] E (413501) USBH: Dev 6 EP 0 STALL
+[  147.9] E (413504) USBH: Dev 6 EP 0 STALL
+[  147.9] E (413506) USBH: Dev 6 EP 0 STALL
+[  147.9] E (413509) USBH: Dev 6 EP 0 STALL
+[  148.2] E (413512) USBH: Dev 6 EP 0 STALL
+[  148.2] E (413514) USBH: Dev 6 EP 0 STALL
+[  148.8] I (414373) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[  148.8] I (414428) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  149.1] I (414442) esp_rtl_sdr: tune rf=95747000 Hz tuner=95747000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=7b r22=33 pll_if_hz=1814972
+[  149.1] I (414502) esp_rtl_sdr: front-end route rf=95747000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[  149.1] I (414502) esp_rtl_sdr: [RTL0] stream start freq=95747000 sps=2400000 urbs=3x32768
+[  149.1] I (414502) esp_rtl_sdr: stream start freq=95747000 exact_rate=2400000 urbs=3x32768
+[  149.1] RTL_START ESP_OK rate=2400000 display_hz=95747000 lo_hz=95747000
+[  149.1] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  149.1] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  149.1] W (414529) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 5, live_urbs=3)
+[  160.4] W (425736) esp_rtl_sdr: [RTL0] bulk status=1 bytes=0
+[  160.4] E (425736) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  160.4] W (425736) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  160.4] E (425737) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  160.4] W (425737) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  160.4] E (425737) USB HOST: Enqueue URB error: ESP_ERR_INVALID_STATE
+[  160.4] W (425737) esp_rtl_sdr: [RTL0] bulk resubmit failed: ESP_ERR_INVALID_STATE; scheduling EP recovery
+[  160.4] W (425737) esp_rtl_sdr: [RTL0] usb disconnected profile=blog_v4_r828d addr=6 (other handles unaffected)
+[  160.4] RTL_BIAS_TEE_SAFE_OFF reason=disconnect
+[  160.4] RTL_SDR_DISCONNECTED previous=3 resume_pending=1 band=FM frequency_hz=95747000
+[  160.4] I (425738) esp_rtl_sdr: [RTL0] usb probe_rescan
+[  160.4] RTL_STOP_REQUESTED
+[  160.4] RTL_STOP_RESULT ESP_OK
+[  160.4] RTL_STOP bytes=53805056
+[  160.4] RTL_SPEAKER_IDLE reason=no_receiver
+[  170.4] W (435758) esp_rtl_sdr: [RTL0] usb no enumerated device for 10000 ms: power-cycling the root port
+[  173.8] I (439127) esp_rtl_sdr: [RTL0] usb new_device addr=7 queued=1
+[  173.8] I (439127) esp_rtl_sdr: [RTL0] usb probe_begin addr=7
+[  173.8] I (439128) esp_rtl_sdr: [RTL0] USB device opened addr=7 path=root serial=00000001 hs=1
+[  173.8] I (439128) esp_rtl_sdr: [RTL0] tuner=blog_v4_r828d caps=0x001fff3f
+[  173.8] RTL_SDR_PROBE_OK profile=1 profile_name="blog_v4_r828d" provisional=0 device_caps=0x001fff3f driver=esp_rtl_sdr v0.9.2 ready=1 resume_pending=1
+[  173.8] RTL_HOTPLUG_RESUME band=FM frequency_hz=95747000 queued=1
+[  173.8] I (439130) esp_rtl_sdr: HF direct route min=0 Hz (0 = upconverter)
+[  173.8] RTL_HF_ROUTE band=FM route=UPCONVERTER min_hz=0 result=ESP_OK
+[  173.8] I (439130) esp_rtl_sdr: init begin profile=blog_v4_r828d records=515
+[  173.8] RTL_SPEAKER_WATCHDOG restart
+[  173.8] RTL_SPEAKER_DMA len=256 count=2 largest=59392
+[  173.8] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  173.8] E (439346) USBH: Dev 7 EP 0 STALL
+[  173.8] E (439349) USBH: Dev 7 EP 0 STALL
+[  173.8] E (439352) USBH: Dev 7 EP 0 STALL
+[  173.8] E (439354) USBH: Dev 7 EP 0 STALL
+[  173.8] E (439357) USBH: Dev 7 EP 0 STALL
+[  173.8] E (439359) USBH: Dev 7 EP 0 STALL
+[  174.7] I (440218) esp_rtl_sdr: init complete profile=blog_v4_r828d skipped_v4_board=0
+[  174.7] I (440273) esp_rtl_sdr: [RTL0] rate readback sps=2400000 expected=0x03000000 actual=0x03000000 match=1
+[  174.7] I (440287) esp_rtl_sdr: tune rf=95747000 Hz tuner=95747000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=4a r21=7b r22=33 pll_if_hz=1814972
+[  175.0] I (440347) esp_rtl_sdr: front-end route rf=95747000 band=VHF r6=30 r5=e3 gpio=38 bias=0 reg05_low=03
+[  175.0] I (440347) esp_rtl_sdr: [RTL0] stream start freq=95747000 sps=2400000 urbs=3x32768
+[  175.0] I (440347) esp_rtl_sdr: stream start freq=95747000 exact_rate=2400000 urbs=3x32768
+[  175.0] RTL_START ESP_OK rate=2400000 display_hz=95747000 lo_hz=95747000
+[  175.0] RTL_WBFM_DSP rate=2400000 filter_hz=260000 iq_lpf_k=0.29 audio_lpf_k=0.34 decim=10/5 note=app_side_filter
+[  175.0] RTL_SPEAKER_RESUME ok=1 running=1 playing=0 volume=128
+[  175.0] W (440374) esp_rtl_sdr: [RTL0] bulk EP recovered (attempt 6, live_urbs=3)
+[  205.3] #DONE

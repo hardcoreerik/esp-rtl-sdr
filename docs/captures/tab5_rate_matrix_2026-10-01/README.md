@@ -79,6 +79,17 @@ Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.0
 | V3c | fixed (A fails; leaves the app idle for one more request) | 453.925 MHz 1 dB to 40 to 45 dB; 433 / 915 / 1090 MHz come alive | |
 | Nooelec | not measured | 453.925 MHz 17 dB to 46 dB; 915 / 1090 / 433 MHz up 5 to 15 dB | A cannot hold a manual gain (#44) |
 
+## Unplug / replug on the Tab5 (the #50 gate), Blog V4 (`hotplug/`)
+
+- **Release candidate B (V4 plugged in, 5 unplug/replug cycles asked): crashed on the second unplug.** `assert failed: tlsf_free ... block already marked as free`, then two
+  reboots (reset reason `wdt`). The backtrace decodes (with an ELF rebuilt from the same commit; 76 of 3.8 million bytes differ from the flashed image, all header/checksum)
+  to `rtl_dsp_task -> queue_audio_samples -> flush_audio_play_batch -> restart_rtl_speaker_i2s -> m5::Speaker_Class::begin -> _setup_i2s -> i2s_del_channel`: OrcSDR's speaker code,
+  not the driver. On disconnect the main task idled the speaker with an unguarded `M5.Speaker.end()` while the DSP task restarted it, and both deleted the same I2S channel.
+  The driver side of that run is clean: bulk resubmit errors, `usb disconnected`, re-probe, and a root-port power cycle after 10 s with nothing attached, as designed.
+- **B plus the OrcSDR speaker fix (all speaker end/begin under one mutex; no restart without a receiver): passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures,
+  0 reboots, 0 leaked URBs. One clean run is not proof for a race; the fix addresses the decoded cause. OrcSDR PR: `claude/fix-speaker-disconnect-race`.
+- Still to do: the same cycles on the V4L and V3c (and the Nooelec again) with the fixed app.
+
 ## Not shown
 
 the Nooelec 250 kS/s case (A cannot hold the test gain) and a Nooelec rate sweep on A; the per-rate filter and IF change (column C); a second site or antenna; any claim relative to the vendor DLL.

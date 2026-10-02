@@ -40,6 +40,7 @@
 #include "measured_tuner_bandwidth.hpp"
 #include "gain_r820t2.hpp"
 #include "reentrancy.hpp"
+#include "resampler_ratio.hpp"
 #include "rtl_multi.hpp"
 
 static const char *TAG = "esp_rtl_sdr";
@@ -1160,9 +1161,10 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
     if (!esp_rtl_sdr_quantize_sample_rate(sample_rate_sps, &exact)) {
         return ESP_RTL_SDR_ERR_BAD_RATE;
     }
-    uint32_t ratio = static_cast<uint32_t>(
-        (static_cast<uint64_t>(ESP_RTL_SDR_XTAL_HZ) << 22) / exact);
-    ratio &= 0x0ffffffcu;
+    /* Register value, not the realized ratio. quantize() already folded the
+     * bit-27 mirror into `exact`. Masking again clears bit 28, which is what
+     * demod bytes 0x9f..0xa2 store; the silicon mirrors bit 27 itself. */
+    const uint32_t ratio = resampler_ratio_register(exact);
     for (size_t i = kRtlSampleRateFirst; i <= kRtlSampleRateLast; ++i) {
         RtlControlRecord rec = kRtlInitTransfers[i];
         if (i == kRtlSampleRateRatioHighIndex) {

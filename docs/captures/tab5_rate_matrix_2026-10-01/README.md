@@ -1,4 +1,4 @@
-# Tab5 sample-rate / band A/B runs, Blog V4 and V4L, 2026-10-01
+# Tab5 sample-rate / band A/B runs, Blog V4, V4L and V3c, 2026-10-01
 
 Tab5 (ESP32-P4) with a Blog V4 and the ADS-B dipole in the east window, the same antenna as the PC captures. One-second pre-DSP IQ per
 cell, scored by `rtl-gate/band_snr.py`. All runs use the same OrcSDR build apart from the driver pin (OrcSDR `main` at #149 plus one
@@ -42,6 +42,22 @@ Reading: the V4 band change helps where the old route's `1b` was most mismatched
 Reading: on the V4L the band change is neutral for signal-to-noise on this site and antenna (no regression, no measured benefit); on the V4 it gave about
 +3 dB at 230 MHz. The two boards do not respond the same way to the same `1b` change.
 
+## Blog V3c (`blog_v3c-*.json`, descriptor `Realtek RTL2838UHIDIR`, profile `blog_v3_r820t2`)
+
+Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.048M) and an interleaved replication (A, B, A, B; 3 captures each) at
+960 kS/s across 118.9, 230, 433.92, 453.925, 915 and 1090 MHz, fixed 19.7 dB test gain.
+
+- **453.925 MHz: the R820T2 band select (#49) changes everything.** A reads 0.9 to 3.1 dB peak over noise, 0 strong bins and a noise floor pinned at the
+  -77 dBFS floor (the front end is effectively deaf, the issue #25 blind spot). B reads 40 to 45 dB, 159 to 246 strong bins and a -71 dBFS floor. Same in both
+  interleaved pairs.
+- **433.92, 915 and 1090 MHz:** the A floor is -77 dBFS everywhere; B lifts it to -74 to -76 dBFS and signals begin to appear (peak over noise up to 3 to 13 dB;
+  no known transmitters at 915 / 1090 on this site).
+- **230 MHz:** the level rises 4 to 6 dB on B (floor -69 vs -73/-75 dBFS) and peak over noise stays about the same (18 to 20 dB vs 17 to 23 dB): more
+  gain, not better signal-to-noise. 118.9 MHz: no reliable difference.
+- **250 kS/s:** fails on A, works on B (#43), as on the V4 and V4L. On A the failed start also left the V3c idle through the next request (960 kS/s);
+  it recovered only at 2.048 MS/s. The 960 kS/s cells on A are therefore `NO_IQ` for that reason, not a rate fault. A failed start leaving the app idle until the
+  next successful one is an OrcSDR-side robustness note.
+
 ## Not shown
 
-V3c and Nooelec on the Tab5; the per-rate filter and IF change (column C); a second site or antenna; any claim relative to the vendor DLL.
+the Nooelec on the Tab5; the per-rate filter and IF change (column C); a second site or antenna; any claim relative to the vendor DLL.

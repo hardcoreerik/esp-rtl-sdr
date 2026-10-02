@@ -91,7 +91,8 @@ Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.0
 - **Blog V4L, B plus the speaker fix: passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures, 0 reboots, 0 leaked URBs (`hotplug/v4l-hotplug-B2-speakerfix/`). The same run's gain stage failed on two console timeouts:
   a driver log line was interleaved into the middle of the `RTL_DRIVER_STATUS` reply, so the harness's pattern match timed out (the known two-writers-one-console problem; the Tab5 sweep script quiets the console to avoid it,
   the regression script's gain stage does not). It does not affect the unplug result.
-- Still to do: the same cycles on the V3c and Nooelec with the fixed app.
+- **Blog V3c, B plus the speaker fix: passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures, 0 reboots, 0 leaked URBs (`hotplug/v3c-hotplug-B2-speakerfix/`; the gain stage was skipped in this run).
+- Still to do: the same cycles on the Nooelec with the fixed app.
 
 ## Column C: per-rate filter and IF on the V4 (`blog_v4-C2-rate-plan-g197.json`, `blog_v4-repC-*.json`)
 

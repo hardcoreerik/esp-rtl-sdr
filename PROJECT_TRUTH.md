@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-09-30**
-Version: **0.9.2** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, not Hardware-verified. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec ESP32-P4 RF acceptance remains pending. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
+Version: **0.9.3** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, not Hardware-verified. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec ESP32-P4 RF acceptance remains pending. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -144,6 +144,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.9.0** | PC-measured V4/V4L/V3c controls, V4L HF route, V4L/V4 direct HF route, deferred device-close retry; V3c and V4L no longer provisional. Never tagged or published; first published as 0.9.1 |
 | **0.9.1** | Live tuner-bandwidth frequency/passband fixes verified on V3c/V4L/V4; first published 0.9 release |
 | **0.9.2** | Complete existing Nooelec SMArt v5 profile from independent PC captures; fix mismatched cold IF and preserve native gain/mode across retunes and HF returns. Host checks and P4 build verified; Nooelec P4 RF acceptance remains open |
+| **0.9.3** | R820T2 RF mux / tracking-filter band select (Blog V3, Nooelec; V4/V4L above 28.8 MHz) from our own vendor-DLL captures; unplug, failed-enumeration and control-transfer recovery; Nooelec manual-gain restart and low-band rate fixes. Host checks and P4 build verified; Tab5 band spot checks and five-cycle unplug tests passed on all four dongles; hubs untested |
 
 ---
 

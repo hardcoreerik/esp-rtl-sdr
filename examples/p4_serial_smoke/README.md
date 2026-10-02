@@ -55,7 +55,7 @@ selects min_rev 3.1 and esptool refuses: bootloader requires [v3.1-v3.99], chip 
 These symbols are **this example only**. They do not ship in the library. P4 rev
 <3.0 vs >=3.0 firmware is mutually exclusive; a v3.1+ module must not use this default.
 
-`CMakeLists.txt` sets `PROJECT_VER` to `0.9.2` so the image identity matches the
+`CMakeLists.txt` sets `PROJECT_VER` to `0.9.3` so the image identity matches the
 driver, not git-describe of an older tag.
 
 ## Build (ESP32-P4, IDF 5.5.4)

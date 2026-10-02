@@ -91,7 +91,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 9
-#define ESP_RTL_SDR_VERSION_PATCH 2
+#define ESP_RTL_SDR_VERSION_PATCH 3
 /** 1 while experimental prerelease; 0 for stable X.Y.Z. */
 #define ESP_RTL_SDR_VERSION_IS_PRERELEASE 0
 /** Token for prerelease suffix (stringized into VERSION_STRING when IS_PRERELEASE). */

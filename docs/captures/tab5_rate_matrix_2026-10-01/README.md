@@ -92,7 +92,8 @@ Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.0
   a driver log line was interleaved into the middle of the `RTL_DRIVER_STATUS` reply, so the harness's pattern match timed out (the known two-writers-one-console problem; the Tab5 sweep script quiets the console to avoid it,
   the regression script's gain stage does not). It does not affect the unplug result.
 - **Blog V3c, B plus the speaker fix: passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures, 0 reboots, 0 leaked URBs (`hotplug/v3c-hotplug-B2-speakerfix/`; the gain stage was skipped in this run).
-- Still to do: the same cycles on the Nooelec with the fixed app.
+- **Nooelec SMArt v5, B plus the speaker fix: passed.** 6 disconnects, 6 probes, 6 restarts, 0 start failures, 0 reboots, 0 leaked URBs (`hotplug/nooelec-hotplug-B2-speakerfix/`; gain stage skipped).
+- **Gate status for #50:** all four dongles (V4, V4L, V3c, Nooelec) have now passed five unplug/replug cycles on the Tab5 with the driver release candidate and the OrcSDR speaker fix. Hubs are still untested.
 
 ## Column C: per-rate filter and IF on the V4 (`blog_v4-C2-rate-plan-g197.json`, `blog_v4-repC-*.json`)
 

@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **Blog V4 and V4L: IF filter and IF follow the sample rate, like the vendor DLL does on a cold open.** Our PC captures (2026-10-01, two identical runs per dongle,
+  `docs/captures/vendor_dll_rate_matrix_2026-10-01.md`) show the DLL programming a different tuner filter (reg 0a/0b), IF and demod IF per rate on the V4 and V4L
+  (for example 1.70 MHz at 960 kS/s, 1.625 MHz at 2.048 MS/s, a 3.57 MHz wide filter from 2.56 MS/s). The driver used one fixed IF whatever the rate. Start now applies
+  the captured plan for the listed rates on the native route (above 28.8 MHz) and every hot retune keeps that IF, so the PLL LO, filter and demod IF stay in step.
+  2.4 MS/s keeps its existing AUTO plan; unlisted rates, the HF routes, explicit tuner bandwidths and the V3c and Nooelec (which keep 3.57 MHz at every rate on the DLL)
+  are unchanged. Parity with the vendor DLL only: on a Tab5 it showed no measurable reception change at 960 kS/s (`docs/captures/tab5_rate_matrix_2026-10-01/`).
+
 - **Blog V4 and V4L follow the captured RF mux / tracking-filter bands above 28.8 MHz ([#51](https://github.com/hardcoreerik/esp-rtl-sdr/issues/51)).**
   Our 2026-10-01 vendor-DLL captures (47 tunes up and down on each board, plus 10 kHz scans of every edge) show both boards stepping register 1b
   through the same rows as the R820T2 table, keyed on the LO the PLL uses. The V4 route wrote only `00` or `34` (the V4L `34`), so e.g. 116-306 MHz ran

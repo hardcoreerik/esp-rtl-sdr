@@ -343,6 +343,8 @@ struct esp_rtl_sdr_handle {
     bool ctrl_stall = false;
     uint16_t ctrl_data_len = 0; /* bytes the device returned in the data stage of the last control transfer */
     uint32_t last_pll_if_hz = 0; /* PLL IF used by the last run_tune; the band tables key on RF + this */
+    /** PLL IF of the vendor-table rate plan applied at start (Blog V4/V4L), 0 when none; hot retunes must keep it. */
+    uint32_t rate_plan_if_hz = 0;
     /** ctrl_xfer submitted and its callback not yet run. usb_host_device_close()
      *  asserts (usbh num_ctrl_xfers_inflight == 0) while this is true. */
     std::atomic<bool> ctrl_inflight{false};
@@ -752,6 +754,7 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     h->gain_tenth_db = 0;
     h->pending_retune_hz = 0;
+    h->rate_plan_if_hz = 0;
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_bias = false;
@@ -2162,7 +2165,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         }
         err = apply_bandwidth_transaction(h, tune_hz, applied_width);
     } else {
-        err = run_profile_tune(h, tune_hz, h->frequency_hz);
+        err = run_profile_tune(h, tune_hz, h->frequency_hz, h->rate_plan_if_hz);
         if (err == ESP_OK) err = run_band_frontend(h, tune_hz);
     }
     t_tuned = esp_timer_get_time();
@@ -3917,6 +3920,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->streaming = false;
     h->frontend_applied_valid = false;
     h->pending_retune_hz = 0;
+    h->rate_plan_if_hz = 0;
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_bias = false;
@@ -4165,6 +4169,11 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             local.sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
             measured_tuner_bandwidth_count(handle->profile, freq, hf_direct_route(handle, freq)) != 0) {
             ret = apply_bandwidth_transaction(handle, freq, 0);
+        } else if (MeasuredTunerBandwidthPlan rate_plan{};
+                   rtl_blog_rate_plan(handle->profile, local.sample_rate_sps, freq, &rate_plan)) {
+            /* Blog V4/V4L: filter, IF and demod IF follow the rate like the vendor DLL; hot retunes keep this IF. */
+            ret = run_bandwidth_program(handle, freq, 0, rate_plan);
+            if (ret == ESP_OK) handle->rate_plan_if_hz = rate_plan.if_hz;
         } else {
             ret = run_profile_tune(handle, freq, 0);
             if (ret == ESP_OK) ret = run_band_frontend(handle, freq);

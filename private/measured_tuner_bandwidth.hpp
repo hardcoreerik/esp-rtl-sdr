@@ -101,6 +101,52 @@ inline bool measured_tuner_bandwidth_plan(RtlProfileId profile, uint32_t rf_hz,
     return true;
 }
 
+/* Blog V4 / V4L: the vendor DLL's IF filter, IF and demod IF follow the sample rate on a cold open (our own black-box
+ * PC captures, 2026-10-01: docs/captures/vendor_dll_rate_matrix_2026-10-01.md, two identical runs per dongle). The V3c and the
+ * Nooelec keep the 3.57 MHz IF at every rate, so they are not in this table. 2.4 MS/s is the AUTO plan above and is left alone.
+ * Only the listed rates apply (anything else keeps the previous behaviour), only on the native route (the HF upconverter route
+ * was not measured), and never with an explicit tuner bandwidth (those are 2.4 MS/s only). The filter register 0a differs
+ * between the two boards (V4 c5/d5, V4L c4/d4); 0b, the IF and the demod IF bytes are identical. */
+struct BlogRateRow {
+    uint32_t rate_sps;
+    uint8_t reg0b;
+    uint32_t if_hz;
+    uint8_t if19, if1a, if1b;
+};
+constexpr BlogRateRow kBlogRateRows[] = {
+    {250000u,  0xe6, 2125000u, 0x3b, 0x47, 0x1d},
+    {256000u,  0xe6, 2125000u, 0x3b, 0x47, 0x1d},
+    {960000u,  0xeb, 1700000u, 0x3c, 0x38, 0xe4},
+    {1024000u, 0xeb, 1700000u, 0x3c, 0x38, 0xe4},
+    {1400000u, 0xec, 1575000u, 0x3c, 0x80, 0x00},
+    {1800000u, 0xac, 1750000u, 0x3c, 0x1c, 0x72},
+    {1920000u, 0xae, 1675000u, 0x3c, 0x47, 0x1d},
+    {2000000u, 0xaf, 1625000u, 0x3c, 0x63, 0x8f},
+    {2048000u, 0xaf, 1625000u, 0x3c, 0x63, 0x8f},
+    {2560000u, 0x6b, 3570000u, 0x38, 0x11, 0x12},
+    {2800000u, 0x6b, 3570000u, 0x38, 0x11, 0x12},
+    {2880000u, 0x6b, 3570000u, 0x38, 0x11, 0x12},
+    {3200000u, 0x6b, 3570000u, 0x38, 0x11, 0x12},
+};
+
+inline bool rtl_blog_rate_plan(RtlProfileId profile, uint32_t rate_sps, uint32_t rf_hz,
+                               MeasuredTunerBandwidthPlan *out)
+{
+    if (out == nullptr || (profile != RtlProfileId::BlogV4 && profile != RtlProfileId::BlogV4L)) {
+        return false;
+    }
+    if (rf_hz <= ESP_RTL_SDR_XTAL_HZ) return false; /* HF upconverter / direct routes: not measured */
+    for (const BlogRateRow &row : kBlogRateRows) {
+        if (row.rate_sps != rate_sps) continue;
+        const bool wide = row.reg0b == 0x6b;
+        const uint8_t reg0a = profile == RtlProfileId::BlogV4L ? (wide ? 0xd4 : 0xc4)
+                                                              : (wide ? 0xd5 : 0xc5);
+        *out = {0u, row.if_hz, reg0a, row.reg0b, row.if19, row.if1a, row.if1b};
+        return true;
+    }
+    return false;
+}
+
 /* Demod IF records of a bandwidth transaction: each IF byte write (0x19, 0x1a,
  * 0x1b) is followed by the page-0x0a reg-0x01 read that the captured init IF
  * sequence and PC live-bandwidth captures place after every demod write.

@@ -846,8 +846,87 @@ static void test_nooelec_captured_programming(void)
     }
 }
 
+/* Blog V4 / V4L per-rate filter and IF, replayed from our own 2026-10-01 vendor-DLL cold-open captures
+ * (docs/captures/rate_matrix_2026-10-01/blog_v4_run2.csv, blog_v4l_run2.csv; the two runs of each dongle are identical). */
+static void test_blog_rate_plan_matches_capture(void)
+{
+    struct Row {
+        uint32_t rate;
+        uint8_t reg0a, reg0b, if19, if1a, if1b;
+    };
+    static const Row kV4[] = {
+        {250000u, 0xc5, 0xe6, 0x3b, 0x47, 0x1d},
+        {256000u, 0xc5, 0xe6, 0x3b, 0x47, 0x1d},
+        {960000u, 0xc5, 0xeb, 0x3c, 0x38, 0xe4},
+        {1024000u, 0xc5, 0xeb, 0x3c, 0x38, 0xe4},
+        {1400000u, 0xc5, 0xec, 0x3c, 0x80, 0x00},
+        {1800000u, 0xc5, 0xac, 0x3c, 0x1c, 0x72},
+        {1920000u, 0xc5, 0xae, 0x3c, 0x47, 0x1d},
+        {2000000u, 0xc5, 0xaf, 0x3c, 0x63, 0x8f},
+        {2048000u, 0xc5, 0xaf, 0x3c, 0x63, 0x8f},
+        {2560000u, 0xd5, 0x6b, 0x38, 0x11, 0x12},
+        {2800000u, 0xd5, 0x6b, 0x38, 0x11, 0x12},
+        {2880000u, 0xd5, 0x6b, 0x38, 0x11, 0x12},
+        {3200000u, 0xd5, 0x6b, 0x38, 0x11, 0x12},
+    };
+    static const Row kV4L[] = {
+        {250000u, 0xc4, 0xe6, 0x3b, 0x47, 0x1d},
+        {256000u, 0xc4, 0xe6, 0x3b, 0x47, 0x1d},
+        {960000u, 0xc4, 0xeb, 0x3c, 0x38, 0xe4},
+        {1024000u, 0xc4, 0xeb, 0x3c, 0x38, 0xe4},
+        {1400000u, 0xc4, 0xec, 0x3c, 0x80, 0x00},
+        {1800000u, 0xc4, 0xac, 0x3c, 0x1c, 0x72},
+        {1920000u, 0xc4, 0xae, 0x3c, 0x47, 0x1d},
+        {2000000u, 0xc4, 0xaf, 0x3c, 0x63, 0x8f},
+        {2048000u, 0xc4, 0xaf, 0x3c, 0x63, 0x8f},
+        {2560000u, 0xd4, 0x6b, 0x38, 0x11, 0x12},
+        {2800000u, 0xd4, 0x6b, 0x38, 0x11, 0x12},
+        {2880000u, 0xd4, 0x6b, 0x38, 0x11, 0x12},
+        {3200000u, 0xd4, 0x6b, 0x38, 0x11, 0x12},
+    };
+    constexpr uint32_t kFm = 96100000u;
+    for (const Row &row : kV4) {
+        MeasuredTunerBandwidthPlan plan{};
+        EXPECT_TRUE(rtl_blog_rate_plan(RtlProfileId::BlogV4, row.rate, kFm, &plan));
+        EXPECT_EQ_U(plan.reg0a, row.reg0a);
+        EXPECT_EQ_U(plan.reg0b, row.reg0b);
+        EXPECT_EQ_U(plan.if19, row.if19);
+        EXPECT_EQ_U(plan.if1a, row.if1a);
+        EXPECT_EQ_U(plan.if1b, row.if1b);
+        EXPECT_EQ_U(plan.requested_hz, 0u);
+    }
+    for (const Row &row : kV4L) {
+        MeasuredTunerBandwidthPlan plan{};
+        EXPECT_TRUE(rtl_blog_rate_plan(RtlProfileId::BlogV4L, row.rate, kFm, &plan));
+        EXPECT_EQ_U(plan.reg0a, row.reg0a);
+        EXPECT_EQ_U(plan.reg0b, row.reg0b);
+        EXPECT_EQ_U(plan.if19, row.if19);
+        EXPECT_EQ_U(plan.if1a, row.if1a);
+        EXPECT_EQ_U(plan.if1b, row.if1b);
+    }
+    /* the IF the PLL uses must match the demod IF bytes: if_hz = -(word) * xtal / 2^22 within 100 Hz */
+    for (const BlogRateRow &row : kBlogRateRows) {
+        const uint32_t word = (static_cast<uint32_t>(row.if19) << 16) | (static_cast<uint32_t>(row.if1a) << 8) | row.if1b;
+        const double hz = static_cast<double>((0x400000u - word) & 0x3fffffu) * 28800000.0 / 4194304.0;
+        EXPECT_TRUE(hz > static_cast<double>(row.if_hz) - 100.0 && hz < static_cast<double>(row.if_hz) + 100.0);
+    }
+    MeasuredTunerBandwidthPlan none{};
+    /* 2.4 MS/s keeps the AUTO plan; unlisted and rejected rates, the HF routes and other profiles are untouched */
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV4, 2400000u, kFm, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV4, 1500000u, kFm, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV4, 900000u, kFm, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV4, 3300000u, kFm, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV4, 960000u, 28800000u, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV4L, 960000u, 10000000u, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV3, 960000u, kFm, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::NooelecSmartV5, 960000u, kFm, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::Unknown, 960000u, kFm, &none));
+    EXPECT_TRUE(!rtl_blog_rate_plan(RtlProfileId::BlogV4, 960000u, kFm, nullptr));
+}
+
 int main(void)
 {
+    test_blog_rate_plan_matches_capture();
     test_detection_matrix();
     test_unknown_reject_and_v3_probe();
     test_tuner_isolation();

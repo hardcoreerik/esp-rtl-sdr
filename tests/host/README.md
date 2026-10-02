@@ -11,7 +11,8 @@ build under WSL:
 ```sh
 wsl -e bash -lc "cd /mnt/f/Ai/ESP-RTL-SDR/esp-rtl-sdr-signal-anomaly/tests/host \
   && cmake -S . -B /tmp/hb && cmake --build /tmp/hb -j4 \
-  && for t in esp_rtl_sdr_host_tests esp_rtl_sdr_profile_tests esp_rtl_sdr_multi_tests; \
+  && for t in esp_rtl_sdr_host_tests esp_rtl_sdr_profile_tests esp_rtl_sdr_multi_tests \
+     esp_rtl_sdr_usb_check_tests; \
      do .//tmp/hb/\$t | tail -1; done"
 ```
 

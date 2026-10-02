@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### USB unplug and enumeration robustness
+
+Contributed by David Coulson ([@davidcoulson](https://github.com/davidcoulson), PR #48, originally
+from his fork's #26); integrated here with his commits and authorship kept. Hardware-checked on a Tab5 (ESP32-P4)
+with a Nooelec SMArt v5: 10 unplug/replug cycles mid-stream (every one detected, re-probed and restarted,
+no reboot), and a 105 s unplug with the empty-port retry power-cycling the root port at 10, 20 and 40 s
+before the dongle re-enumerated and streamed within 2 s of the replug.
+
+- **Retry timer reset while a device is open.** The "no device" timer is cleared whenever a device is open;
+  without that, the flag from the first moments after boot stayed set and the first unplug was power-cycled
+  at once rather than after 10 s.
+
+- **Unplug mid-stream no longer races the device close.** Bulk transfers that end
+  `NO_DEVICE` (or complete after DEV_GONE) are retired instead of resubmitted, so
+  they no longer schedule bulk EP recovery against a device being closed.
+  `bulk_resume()` and `bulk_recover_stall()` refuse a gone device, and EP recovery
+  now takes the shared EP0 window. The DEV_GONE handler takes that window and waits
+  for the bulk URBs to retire (pumping client events) before releasing the interface
+  and closing the device. URBs still live after that are halted/flushed and waited
+  for up to 2 s more, then flushed once more; any that still never complete are
+  logged and leaked (the pool is not freed) rather than hang the client task.
+  `device_gone` stays set until the device is closed, and `ctrl_submit()`
+  refuses to use a device marked gone.
+- **Retry a failed enumeration.** When this driver installed the host library and no
+  device has finished enumeration for 10 s (backing off to 60 s), power-cycle the
+  root port once, session-wide. Covers `ENUM: CHECK_SHORT_DEV_DESC FAILED` at power-on,
+  which otherwise needed a physical replug. The fault guard is armed around it.
+- **Control-transfer bounds.** Refuse `wLength` larger than the control buffer and
+  RTL2832U I2C passthrough reads over 16 bytes; on IN transfers copy only the bytes
+  actually received and report a short read as an error instead of returning stale
+  buffer contents.
+- **Device layout check.** A device that matches a profile by VID/PID/strings is
+  refused unless interface 0 has a bulk IN endpoint 0x81 with an 8–512 byte packet
+  size. Host tests: `tests/host/test_usb_checks.cpp`.
 ### Fixed
 
 - **Nooelec SMArt v5: every start after a manual gain failed on ESP32-P4.** v0.9.2 re-applied the

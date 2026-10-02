@@ -8,7 +8,9 @@ m,p,s=(C.create_string_buffer(256) for _ in range(3));l.rtlsdr_get_device_usb_st
 mark('device',product=p.value.decode())
 rc=l.rtlsdr_open(C.byref(d),0);assert rc==0
 try:
-    mark('rate',rc=l.rtlsdr_set_sample_rate(d,int(sys.argv[5]) if len(sys.argv)>5 else 2048000))
+    rate_rc=l.rtlsdr_set_sample_rate(d,int(sys.argv[5]) if len(sys.argv)>5 else 2048000)
+    mark('rate',rc=rate_rc)
+    if rate_rc!=0: raise SystemExit('rtlsdr_set_sample_rate failed: rc=%d, scan not run'%rate_rc)
     for f in range(start,stop+1,step):
         t=time.time();rc=l.rtlsdr_set_center_freq(d,f);mark('tune_scan_%d'%f,t_start=t,rc=rc,rf=f);time.sleep(0.03)
 finally:

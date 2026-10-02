@@ -12,6 +12,10 @@ XT=28800000.0
 rows=[];tunes=[e for e in ev if e['stage'].startswith('tune_')]
 rate_start={e['rate']:e['t_start'] for e in ev if e['stage'].startswith('rate_')}
 for e in tunes:
+    # Each column is the register STATE at the end of this tune's window: the last value written since the rate was set
+    # (t0) up to 0.40 s after this tune call (t1), never anything from a later tune or another rate. The DLL writes the
+    # filter (0a/0b) and demod IF once per rate, in the first tune's window, and later tunes at that rate do not rewrite
+    # them, so those cells hold the value the hardware keeps; they are not writes made by that tune.
     rate,rf=e['rate'],e['rf'];t0=rate_start[rate]-0.05;t1=e['t_start']+0.40
     st={}
     for t,r,v in tun:

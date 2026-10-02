@@ -170,6 +170,20 @@ static void test_v4_open_drain_edges()
     CHECK(r17_at(96100000u) == 0x20);   /* and so does FM */
 }
 
+/* The row follows the LO the PLL is programmed to, which includes the ppm correction (CodeRabbit, PR #54). At 307.9 MHz
+ * with +1000 ppm the corrected tuner frequency is 308.2079 MHz and the LO 310.02 MHz, past the 310 MHz row boundary,
+ * while the uncorrected LO (309.71 MHz) is still in the 280 MHz row. */
+static void test_row_follows_corrected_lo()
+{
+    const uint32_t rf = 307900000u, if_hz = 1814972u;
+    const uint32_t corrected_tuner = rf + rf / 1000u;
+    r820t2::V4Regs plain{}, corrected{};
+    CHECK(r820t2::v4_regs(rf, rf + if_hz, &plain));
+    CHECK(r820t2::v4_regs(rf, corrected_tuner + if_hz, &corrected));
+    CHECK(plain.r1a == 0x2a && plain.r1b == 0x00);      /* 280 MHz row: 1a = 0x28 | mux 0x02 */
+    CHECK(corrected.r1a == 0x69 && corrected.r1b == 0x00); /* 310 MHz row: 1a = 0x28 | mux 0x41 */
+}
+
 static void test_scope()
 {
     r820t2::V4Regs regs{};
@@ -190,6 +204,7 @@ int main()
     test_v4_replay();
     test_v4l_replay();
     test_v4_open_drain_edges();
+    test_row_follows_corrected_lo();
     test_scope();
     std::printf("RESULT v4_band passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

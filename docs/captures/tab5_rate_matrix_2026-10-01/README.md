@@ -15,8 +15,9 @@ they are only good for stream health and pass/fail. All other runs use one fixed
 
 ## Results
 
-- **Stream health (all builds, all rates 960k to 3.2M):** effective rate within 0.2% of requested, no overruns, no drops. DSP load stayed at 17% at
-  3.2 MS/s with an empty queue, so display and DSP load did not affect the stream.
+- **Stream health (builds B, B2 and C2, 960k to 3.2M):** every cell returned IQ, effective rate within 0.25% of requested (worst cell 0.24%), no overruns, no drops.
+  DSP load stayed at 17% at 3.2 MS/s with an empty queue, so display and DSP load did not affect the stream. Build A (the published 0.9.2 and 0.9.1) did not always start:
+  its result files record `NO_IQ` cells at 250 kS/s on every dongle, on the Nooelec also at 960 kS/s (433.92 MHz), 2.048 MS/s and 3.2 MS/s, and on the V3c also at 960 kS/s.
 - **250 kS/s:** A0 and A fail to start on the Tab5 (`RTL_START ESP_RTL_SDR_ERR_BAD_RATE rate=250000`, stream stays IDLE). B starts and streams at
   0.249 MS/s. This is the hardware confirmation of the low-band rate fix (#43).
 - **Fixed-gain A vs B, 960k to 3.2M at 96.1 / 433.92 / 1090 MHz (`compare_A_vs_B_g197.txt`):** no cells lost, noise floor -0.16 dB on average, no
@@ -100,8 +101,8 @@ Rates sweep (250k, 960k, 2.048M, 3.2M at 96.1 / 433.92 MHz, plus 1090 MHz at 2.0
 C is the driver branch `feat/v4-v4l-rate-filter-if` (3787e10): B plus the vendor DLL's per-rate IF filter, IF and demod IF for the V4 and V4L. Tested as "C2" = C plus the OrcSDR speaker fix, against
 "B2" = B plus the same speaker fix, so the app is identical.
 
-- **Sweep, one capture per cell (250k, 960k, 1.8M, 2.048M, 2.4M, 3.2M at 96.1 / 433.92 MHz, fixed 19.7 dB gain):** 12 of 12 cells returned IQ, zero overruns and drops, effective rates within 0.2% of
-  requested, 250 kS/s starts. Differences from B are a few dB in both directions. At 2.4 MS/s, where C changes nothing, the same cell still moves by +2.7 dB noise and +2.3 dB peak over noise,
+- **Sweep, one capture per cell (250k, 960k, 1.8M, 2.048M, 2.4M, 3.2M at 96.1 / 433.92 MHz, fixed 19.7 dB gain):** 12 of 12 cells returned IQ, zero overruns and drops, effective rates within 0.16% of
+  requested from 960 kS/s to 3.2 MS/s (the 250 kS/s cells run 0.45% low, 248,877 samples/s), 250 kS/s starts. Differences from B are a few dB in both directions. At 2.4 MS/s, where C changes nothing, the same cell still moves by +2.7 dB noise and +2.3 dB peak over noise,
   so single-capture variation is about +/-3 dB at 96.1 MHz.
 - **Replication at 960 kS/s, interleaved C2, B2, C2, B2, three captures per cell, 96.1 / 118.9 / 162.55 / 433.92 MHz:** peak over noise C2 minus B2 is +1.0, -0.2, +0.5 dB and the noise floor
   -1.1, +0.1, -0.1 dB (433.92 MHz is dominated by a burst in one B2 run and is not usable). All 48 cells returned IQ, zero overruns and drops, identical stream health.

@@ -342,7 +342,8 @@ struct esp_rtl_sdr_handle {
     esp_err_t ctrl_status = ESP_OK;
     bool ctrl_stall = false;
     uint16_t ctrl_data_len = 0; /* bytes the device returned in the data stage of the last control transfer */
-    uint32_t last_pll_if_hz = 0; /* PLL IF used by the last run_tune; the band tables key on RF + this */
+    uint32_t last_pll_if_hz = 0; /* PLL IF used by the last run_tune */
+    uint32_t last_lo_hz = 0;     /* LO the last run_tune programmed (ppm-corrected tuner frequency + IF); band rows key on it */
     /** ctrl_xfer submitted and its callback not yet run. usb_host_device_close()
      *  asserts (usbh num_ctrl_xfers_inflight == 0) while this is true. */
     std::atomic<bool> ctrl_inflight{false};
@@ -1403,6 +1404,7 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
               r16_active, r20, r21, r22, static_cast<unsigned>(if_offset_hz));
     if (h != nullptr) {
         h->last_pll_if_hz = static_cast<uint32_t>(if_offset_hz + 0.5);
+        h->last_lo_hz = r820t2::lo_hz(tune_hz, if_offset_hz);
     }
     /* The R820T2 RF mux and tracking filter follow the LO actually programmed (issue #25); the V4L above 28.8 MHz
      * switches on the same rows (our 2026-10-01 captures). */
@@ -1581,9 +1583,12 @@ static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t rf_hz,
      * PLL is using; the measured HF route keeps its fixed values. */
     r820t2::V4Regs mux{static_cast<uint8_t>(uhf ? 0x28 : 0x20), static_cast<uint8_t>(uhf ? 0x68 : 0x2a),
                        static_cast<uint8_t>(hf || uhf ? 0x00 : 0x34)};
-    const uint32_t pll_if_hz = h->last_pll_if_hz != 0
-        ? h->last_pll_if_hz : static_cast<uint32_t>(rtl_profile_pll_if_offset_hz(h->profile) + 0.5);
-    r820t2::v4_regs(rf_hz, rf_hz + pll_if_hz, &mux);
+    /* The LO run_tune programmed already includes the ppm correction; fall back to RF plus the default IF only if no
+     * tune has run on this handle yet. */
+    const uint32_t lo_hz = h->last_lo_hz != 0
+        ? h->last_lo_hz
+        : rf_hz + static_cast<uint32_t>(rtl_profile_pll_if_offset_hz(h->profile) + 0.5);
+    r820t2::v4_regs(rf_hz, lo_hz, &mux);
     const RtlControlRecord records[] = {
         measured_v4_ir_reg_write(0x17, mux.r17),
         measured_v4_ir_reg_write(0x1a, mux.r1a),

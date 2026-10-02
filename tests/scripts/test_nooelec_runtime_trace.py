@@ -64,7 +64,7 @@ struct esp_rtl_sdr_handle {
     RtlProfileId profile = RtlProfileId::NooelecSmartV5;
     uint32_t frequency_hz = 99100000, preferred_frequency_hz = 99100000;
     int32_t freq_correction_ppm = 0;
-    uint32_t last_pll_if_hz = 0;
+    uint32_t last_pll_if_hz = 0, last_lo_hz = 0;
     bool ctrl_stall = false, bias_tee_want = false, tuner_auto_applied = false;
     uint32_t tuner_reg_known = 0;
     uint8_t tuner_reg_val[32] = {}, tuner_reg05_low_bits = 3, tuner_reg07 = 0x75;

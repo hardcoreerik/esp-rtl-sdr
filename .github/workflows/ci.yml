@@ -1,7 +1,7 @@
 # Automated gates:
 # 1) Host policy unit tests (no IDF)
 # 2) Truth / version hygiene
-# 3) ESP-IDF ESP32-P4 compile of examples/p4_serial_smoke (no hardware)
+# 3) ESP-IDF ESP32-P4 compile of examples/p4_serial_smoke and examples/function_test (no hardware)
 
 name: ci
 
@@ -41,6 +41,7 @@ jobs:
           ctest --test-dir build --output-on-failure
           ./build/esp_rtl_sdr_host_tests
           python3 ../scripts/test_nooelec_runtime_trace.py
+          python3 -m unittest discover -s ../scripts -p 'test_function_test_runner.py'
 
       - name: Configure & build (Windows)
         if: runner.os == 'Windows'
@@ -80,6 +81,14 @@ jobs:
           esp_idf_version: ${{ matrix.idf_ver }}
           target: esp32p4
           path: examples/p4_serial_smoke
+          command: idf.py build
+
+      - name: Build function_test for esp32p4
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ matrix.idf_ver }}
+          target: esp32p4
+          path: examples/function_test
           command: idf.py build
 
       - name: Show binary size (if present)

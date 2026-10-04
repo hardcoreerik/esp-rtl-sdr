@@ -1,0 +1,40 @@
+menu "esp_rtl_sdr function test"
+
+    config FT_MAX_DEVICES
+        int "Handles to install (max dongles tested)"
+        range 1 3
+        default 3
+
+    config FT_MIN_DEVICES
+        int "Dongles that must be present (enumeration test fails below this)"
+        range 0 3
+        default 1
+
+    config FT_SOAK_SECONDS
+        int "Stream integrity / multi-device window (seconds)"
+        range 2 600
+        default 10
+
+    config FT_LIFECYCLE_CYCLES
+        int "start/stop cycles in the lifecycle test"
+        range 1 200
+        default 10
+
+    config FT_BOOT_DELAY_MS
+        int "Delay after install before testing, for enumeration (ms)"
+        range 500 20000
+        default 3000
+
+    config FT_ALLOW_BIAS
+        bool "Run bias-tee on/off test (SAFETY: only with nothing powered on the antenna port)"
+        default n
+
+    config FT_RUN_PASSPORT
+        bool "Run on-device rate passport probe (slow)"
+        default n
+
+    config FT_INTERACTIVE
+        bool "Run unplug/replug test (prompts the operator on the serial console)"
+        default n
+
+endmenu

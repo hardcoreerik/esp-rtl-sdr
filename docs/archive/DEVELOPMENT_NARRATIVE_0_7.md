@@ -1,8 +1,8 @@
 # Development narrative — 0.7.x (through v0.7.3)
 
 Verbose project commentary for readers of the git history and for future
-maintainers. Authoritative *truth labels* remain in [PROJECT_TRUTH.md](../PROJECT_TRUTH.md).
-Release deltas remain in [CHANGELOG.md](../CHANGELOG.md).
+maintainers. Authoritative *truth labels* remain in [PROJECT_TRUTH.md](../../PROJECT_TRUTH.md).
+Release deltas remain in [CHANGELOG.md](../../CHANGELOG.md).
 
 **Snapshot:** tip of the 0.7.3 line (`v0.7.3` / async retune). Still **0.x** —
 architecture is strong; production bar is “boring under load + lab evidence,”
@@ -67,7 +67,7 @@ RF reverse engineering. 0.7.2 paused Phase 3 hardware for hardening:
 | Byte-loop pull ring | Block `memcpy` |
 | Component honesty | `targets: [esp32p4]` in `idf_component.yml` |
 
-Detail: `docs/HARDENING_0_7_2.md`.
+Detail: `docs/archive/HARDENING_0_7_2.md`.
 
 ### 5. True async retune (0.7.3)
 

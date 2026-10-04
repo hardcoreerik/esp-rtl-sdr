@@ -301,7 +301,7 @@ install → IDLE
 | CI: host tests + **P4 compile** of smoke app | librtlsdr drop-in ABI |
 | Clean-room tables | |
 
-Details: [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) · story: [`docs/DEVELOPMENT_NARRATIVE_0_7.md`](docs/DEVELOPMENT_NARRATIVE_0_7.md).
+Details: [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) · story: [`docs/archive/DEVELOPMENT_NARRATIVE_0_7.md`](docs/archive/DEVELOPMENT_NARRATIVE_0_7.md).
 
 ---
 

@@ -66,7 +66,7 @@ Review-driven (pause Phase 3 hardware for one release):
 - [x] Delivery CALLBACK/READ/BOTH + lazy pull ring (**0.7.4**)
 - [ ] Lab soak evidence from this tree (procedure ready: `docs/SOAK.md`)
 
-See `docs/HARDENING_0_7_2.md`.
+See `docs/archive/HARDENING_0_7_2.md`.
 
 ---
 

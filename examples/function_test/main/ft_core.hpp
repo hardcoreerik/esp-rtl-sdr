@@ -16,6 +16,12 @@
 #include <cstdint>
 #include <cstdio>
 
+#if defined(__GNUC__)
+#define FT_PRINTF_FMT(fmt_idx, first_arg) __attribute__((format(printf, fmt_idx, first_arg)))
+#else
+#define FT_PRINTF_FMT(fmt_idx, first_arg) /* MSVC: no format attribute */
+#endif
+
 namespace ft {
 
 enum class Status : uint8_t { Pass, Fail, Skip };
@@ -95,7 +101,7 @@ public:
         emit(line);
     }
 
-    __attribute__((format(printf, 7, 8)))
+    FT_PRINTF_FMT(7, 8)
     void result(const char *test, int dev, const char *profile, Status st, uint32_t ms,
                 const char *fmt, ...)
     {
@@ -175,7 +181,7 @@ public:
         }
     }
 
-    __attribute__((format(printf, 3, 4)))
+    FT_PRINTF_FMT(3, 4)
     bool check(bool cond, const char *fmt, ...)
     {
         if (cond) {
@@ -190,7 +196,7 @@ public:
         return false;
     }
 
-    __attribute__((format(printf, 2, 3)))
+    FT_PRINTF_FMT(2, 3)
     void note(const char *fmt, ...)
     {
         va_list ap;
@@ -199,7 +205,7 @@ public:
         va_end(ap);
     }
 
-    __attribute__((format(printf, 2, 3)))
+    FT_PRINTF_FMT(2, 3)
     void skip(const char *fmt, ...)
     {
         char why[160];

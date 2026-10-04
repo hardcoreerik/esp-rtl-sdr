@@ -230,7 +230,7 @@ Play `screen-capture.webm` alongside the gain file to align slider dB with time.
 - Desktop programs used as **stimulus only**.  
 - Clean-room policy: [CLEAN_ROOM.md](CLEAN_ROOM.md).  
 - Procedure template: [GAIN_BIAS_CAPTURE.md](GAIN_BIAS_CAPTURE.md).  
-- Session handoff: [HANDOFF_PHASE3_GAIN_BIAS.md](HANDOFF_PHASE3_GAIN_BIAS.md).
+- Session handoff: [HANDOFF_PHASE3_GAIN_BIAS.md](archive/HANDOFF_PHASE3_GAIN_BIAS.md).
 
 ---
 

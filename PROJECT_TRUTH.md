@@ -187,7 +187,7 @@ unless a task explicitly says otherwise.
 |---|---|---|---|
 | ESP32-P4 Tab5 | HS | Blog V4 | **Provenance** |
 | ESP32-P4 Waveshare | HS | Blog V4 | **Provenance** |
-| ESP32-P4 Waveshare `waveshare-p4-wifi6` | HS | Driver (maintainer-reported) | **Hardware-verified** (maintainer-reported, 2026-10-06); third validated P4 board. Dongles, tests and log not yet recorded in tree |
+| ESP32-P4 Waveshare `waveshare-p4-wifi6` | HS, via hub/"squid" cable | Blog V4, V4L, V3c | **Hardware-verified** (maintainer-reported, 2026-10-06): all three sustained 3.20 MS/s, same as the other Waveshare board; third validated P4 board. First hub-attached result; no filled log in tree, hub model and run duration not recorded |
 | ESP32-S3/S2 | FS | — | **Not claimed** |
 
 ---

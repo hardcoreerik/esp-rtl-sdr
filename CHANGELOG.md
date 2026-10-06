@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Docs
+
+- Driver validated on a third ESP32-P4 board, the Waveshare `waveshare-p4-wifi6` (maintainer-reported, 2026-10-06). Blog V4, V4L and V3c each sustained 3.20 MS/s through a hub/squid cable, matching the other Waveshare board, in a 3-hour soak. The driver worked as a drop-in with no modification; only the OrcNode firmware's pin mappings changed for the new board. Host matrix updated; hub model, per-dongle vs combined soak duration and a filled log are still to be recorded.
+
 ## 0.9.3 (2026-10-02) — RF band select, unplug recovery, V4/V4L band select
 
 ### Fixed

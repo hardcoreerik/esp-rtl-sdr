@@ -7,9 +7,9 @@
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
-**Not a librtlsdr port.** Clean-room Blog V4 USB profile · PC-captured Nooelec SMArt v5 (P4 acceptance pending) · provisional Blog V3 stream · stand-alone ESP-IDF component · fail-closed lifecycle
+**Not a librtlsdr port.** Clean-room USB profiles for Blog V4, V4L and V3/V3c (hardware-verified on P4) · PC-captured Nooelec SMArt v5 (P4 RF acceptance pending) · stand-alone ESP-IDF component · fail-closed lifecycle
 
-**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.9.3**, pre-1.0 — early, public, honest. See the [0.9.3 release notes](docs/releases/v0.9.3.md) for the capture-derived Nooelec profile and its remaining hardware acceptance checks.
+**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.9.3**, pre-1.0 — early, public, honest. See the [0.9.3 release notes](docs/releases/v0.9.3.md) for the per-band RF front-end selection, unplug/enumeration recovery and the Nooelec fixes, and [CHANGELOG.md](CHANGELOG.md) for what is unreleased.
 
 Release numbers and `alpha` / `beta` / `rc` meanings are defined in
 [`docs/VERSIONING.md`](docs/VERSIONING.md).
@@ -38,7 +38,7 @@ That means:
 - **Health + metrics** (is USB starving? is the app too slow? RF clipping?)
 - **Rate passport** — probe which sample rates this **host + stick** actually sustain
 - **Intent presets** (`NEED_FM`, `NEED_ADSB`, …) so apps speak missions, not only registers
-- **Profiles** (Blog V4 first) so more dongles can be added without rewriting the core
+- **Profiles** (Blog V4, V4L, V3/V3c, Nooelec v5) so more dongles can be added without rewriting the core
 
 Board stuff (display, Ethernet, VBUS, audio) stays in **your** app. This component is the radio USB path only.
 
@@ -57,10 +57,10 @@ On a P4, the **host USB and RAM path is the hard part**. We lean into that:
 | Fixed rate list or “set and hope” | Windows + quantize + optional **on-device passport** |
 | Call set_freq from anywhere | **Hot retune** drains bulk before EP0; **async from callbacks** |
 | Opaque internals | Explicit **state machine**, error codes, reentrancy rules |
-| “Supports every RTL” marketing | **Fail closed** on unknown sticks; one measured profile first |
+| “Supports every RTL” marketing | **Fail closed** on unknown sticks; only measured profiles |
 | App figures out “is RF dead?” | **Health** narrative (USB / app / RF clip / weak) |
 
-We are **not** chasing full librtlsdr feature parity (tuner IF filter still open). We are chasing a driver that is **safe to live inside a real FreeRTOS product**.
+We are **not** chasing full librtlsdr feature parity (absolute gain and filter-passband calibration are still open). We are chasing a driver that is **safe to live inside a real FreeRTOS product**.
 
 ---
 
@@ -68,8 +68,8 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 
 | Item | Notes |
 |---|---|
-| **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.9.x** also supports the **Blog V4L** (R828S; 28.8 MHz HF upconverter, optional direct route for 24-28.8 MHz) and **Blog V3/V3c** (R820T2 `0x34` remap; direct-Q HF). This branch implements **Nooelec NESDR SMArt v5** from [first-party 2026-09-30 captures](docs/captures/nooelec_v5_2026-09-30.md), with P4 acceptance pending. Bare `0bda:2838` is never assumed V4. |
+| **MCU** | **ESP32-P4** with High-Speed USB Host. Run on M5Stack Tab5 and two Waveshare P4 boards, including `waveshare-p4-wifi6`, where the driver worked unmodified (only the app's pin map changed); Blog V4, V4L and V3c each sustained 3.20 MS/s through a hub in a 3-hour soak (maintainer-reported, log pending). See [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md). |
+| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.9.x** also supports the **Blog V4L** (R828S; 28.8 MHz HF upconverter, optional direct route for 24-28.8 MHz) and **Blog V3/V3c** (R820T2 `0x34` remap; direct-Q HF). **Nooelec NESDR SMArt v5** is implemented from [first-party 2026-09-30 captures](docs/captures/nooelec_v5_2026-09-30.md), with P4 acceptance pending. Bare `0bda:2838` is never assumed V4. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
@@ -249,7 +249,7 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `set_tuner_gain_mode(MANUAL\|AUTO)` | MANUAL ladder; AUTO measured R828D AGC (`CAP_GAIN_AUTO`, 0.7.8+). Streaming = async EP0. |
 | `set/get_rtl_agc` | RTL2832 digital AGC (`CAP_RTL_AGC`); not tuner AUTO. **get** = requested shadow, not readback. |
 | `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
-| HF/LF (unreleased) | Blog V4 accepts **24 kHz…1766 MHz** with exact-Hz requests; RF&lt;28.8 MHz uses +28.8 MHz LO and Cable-2 (`CAP_HF_UPCONVERTER`). Blog V3/V3c uses capture-derived Q-branch direct sampling below 24 MHz (`CAP_DIRECT_SAMPLING`); its tuner gain is bypassed there. Nooelec independently uses Q below the captured 24 MHz cutoff, accepts **100 kHz…1750 MHz**, and has no bias tee or upconverter; the 24 MHz PC native-boundary tune warned of no PLL lock (rated native floor 25 MHz). Nooelec P4 RF acceptance remains open. |
+| HF/LF | Blog V4 accepts **24 kHz…1766 MHz** with exact-Hz requests; RF&lt;28.8 MHz uses +28.8 MHz LO and Cable-2 (`CAP_HF_UPCONVERTER`). Blog V3/V3c uses capture-derived Q-branch direct sampling below 24 MHz (`CAP_DIRECT_SAMPLING`); its tuner gain is bypassed there. Nooelec independently uses Q below the captured 24 MHz cutoff, accepts **100 kHz…1750 MHz**, and has no bias tee or upconverter; the 24 MHz PC native-boundary tune warned of no PLL lock (rated native floor 25 MHz). Nooelec P4 RF acceptance remains open. |
 
 Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md), and the checked-in clean-room transfer table. The 0.7.15 routing composition is host/build verified only; P4 GPIO and RF acceptance remain open.
 
@@ -294,10 +294,10 @@ install → IDLE
 
 | Works | Not yet |
 |---|---|
-| Blog V4 stream + retune + metrics on P4 | Tuner IF / SDR# Bandwidth EP0 (USB-silent) |
-| Continuous rates + passport API | “Any RTL2832U” |
-| Manual gain + bias CAP (0.7.5+) | Formal multi-hour soak artifact from *this* repo only |
-| HF upconverter CAP (0.7.7) | IF / channel filter EP0 |
+| Blog V4, V4L, V3c stream + retune + metrics on P4 (three host boards) | “Any RTL2832U” |
+| Continuous rates + passport API | Filled soak log from *this* repo's stand-alone example |
+| Manual gain, tuner/RTL AGC, bias CAP | Nooelec SMArt v5 RF acceptance on P4 |
+| HF/LF routes, per-band RF front-end select (0.9.3) | Absolute gain / filter passband calibration; hubs only lightly tested |
 | CI: host tests + **P4 compile** of smoke app | librtlsdr drop-in ABI |
 | Clean-room tables | |
 
@@ -323,7 +323,7 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 | [docs/EXAMPLES.md](docs/EXAMPLES.md) | Usage recipes |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common failures |
 | [docs/KCONFIG.md](docs/KCONFIG.md) | menuconfig |
-| [docs/SCOPE.md](docs/SCOPE.md) | Why P4 + Blog V4 only (for now) |
+| [docs/SCOPE.md](docs/SCOPE.md) | Why P4 + a short list of measured dongles |
 | [docs/SOAK.md](docs/SOAK.md) | Hardware soak procedure |
 | [docs/VISION.md](docs/VISION.md) | Product direction |
 | [architecture.md](architecture.md) | Layering & threading |

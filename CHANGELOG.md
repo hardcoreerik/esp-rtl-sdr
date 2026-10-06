@@ -4,7 +4,7 @@
 
 ### Docs
 
-- Driver validated on a third ESP32-P4 board, the Waveshare `waveshare-p4-wifi6` (maintainer-reported, 2026-10-06). Blog V4, V4L and V3c each sustained 3.20 MS/s through a hub/squid cable, matching the other Waveshare board. Host matrix updated; hub model, run duration and a filled log are still to be recorded.
+- Driver validated on a third ESP32-P4 board, the Waveshare `waveshare-p4-wifi6` (maintainer-reported, 2026-10-06). Blog V4, V4L and V3c each sustained 3.20 MS/s through a hub/squid cable, matching the other Waveshare board, in a 3-hour soak. Host matrix updated; hub model, per-dongle vs combined soak duration and a filled log are still to be recorded.
 
 ## 0.9.3 (2026-10-02) — RF band select, unplug recovery, V4/V4L band select
 

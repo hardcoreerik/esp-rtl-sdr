@@ -28,7 +28,7 @@ That is enough for real evidence if every claim carries an evidence label
 |---|---|
 | ESP32-P4 M5Stack Tab5 | Provenance continuous IQ (OrcSDR) |
 | ESP32-P4 Waveshare Module-DEV-KIT | Second-board Blog V4 (OrcSDR shell) |
-| ESP32-P4 Waveshare `waveshare-p4-wifi6` | Third P4 board; Blog V4, V4L and V3c each sustained 3.20 MS/s through a hub/squid cable (maintainer-reported 2026-10-06; log pending) |
+| ESP32-P4 Waveshare `waveshare-p4-wifi6` | Third P4 board; Blog V4, V4L and V3c each sustained 3.20 MS/s through a hub/squid cable, 3-hour soak (maintainer-reported 2026-10-06; log pending) |
 | Stand-alone `examples/p4_serial_smoke` | Driver-only re-soak (open) |
 
 ## RTL-SDR under test

@@ -68,7 +68,7 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 
 | Item | Notes |
 |---|---|
-| **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
+| **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kits incl. `waveshare-p4-wifi6`) |
 | **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.9.x** also supports the **Blog V4L** (R828S; 28.8 MHz HF upconverter, optional direct route for 24-28.8 MHz) and **Blog V3/V3c** (R820T2 `0x34` remap; direct-Q HF). This branch implements **Nooelec NESDR SMArt v5** from [first-party 2026-09-30 captures](docs/captures/nooelec_v5_2026-09-30.md), with P4 acceptance pending. Bare `0bda:2838` is never assumed V4. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Docs
+
+- Driver validated on a third ESP32-P4 board, the Waveshare `waveshare-p4-wifi6` (maintainer-reported, 2026-10-06). Host matrix updated; dongles used and a filled log are still to be recorded.
+
 ## 0.9.3 (2026-10-02) — RF band select, unplug recovery, V4/V4L band select
 
 ### Fixed

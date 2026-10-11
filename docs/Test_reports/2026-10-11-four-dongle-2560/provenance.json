@@ -1,0 +1,10 @@
+{
+  "application": "OrcSDR Headless",
+  "application_base_commit": "dba470dadb884723d7c845d77a94a7888e349303",
+  "application_sha256": "D921E9EBE26F7322BA6158947D6A8610CA38AD0EA7341A951ECCB28C9B182B7E",
+  "driver_commit": "a5dc9d8847012a630373e0b75099fdf3fa1b3697",
+  "power": "External 5 V / 3 A supply, serial disconnected",
+  "snapshots_sha256": "2fe870a752beb9805dfaf0e1a5315159799aa2bf53820fc6b32d483ea2c9e161",
+  "snapshot_count": 119,
+  "acceptance": "Network-observed acquisition and scanning only; serial watchdog checks unavailable"
+}

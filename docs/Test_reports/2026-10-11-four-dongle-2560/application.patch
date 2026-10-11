@@ -1,0 +1,68 @@
+diff --git a/main/app_main.cpp b/main/app_main.cpp
+index dc3568d..37fed27 100644
+--- a/main/app_main.cpp
++++ b/main/app_main.cpp
+@@ -99,0 +100 @@ extern "C" void app_main(void)
++    orcnode_rxmgr_pause_auto_start();
+@@ -108,18 +108,0 @@ extern "C" void app_main(void)
+-    if (orcnode_rxmgr_count(&mgr) > 0) {
+-        ESP_LOGI(TAG, "auto IQ prove-out RTL0 @ 96.1 MHz / default rate");
+-        (void)orcnode_rxmgr_start_stream(&mgr, 0, 96100000u, 0);
+-    } else {
+-        ESP_LOGW(TAG, "no RTL-SDR yet — check dongle and USB host connection");
+-    }
+-    /* Slot 1 was hardcoded to 1.024 MS/s here, which quietly overrode
+-     * ORCNODE_SECONDARY_SPS: poll()'s auto-start only fires for slots that
+-     * are not already wanted, so slot 1 kept the rate set at boot while
+-     * slot 2 picked up the intended 2.4 MS/s. Two receivers looked like a
+-     * deliberate asymmetry and were not.
+-     *
+-     * Deferred to poll() so every secondary receiver takes the same rate
+-     * from one place. */
+-    if (orcnode_rxmgr_count(&mgr) > 1) {
+-        ESP_LOGI(TAG, "secondary receivers auto-start from poll()");
+-    }
+-
+@@ -131,16 +113,0 @@ extern "C" void app_main(void)
+-    /* Start the scanner when a receiver actually exists, not at this
+-     * instant.
+-     *
+-     * This used to be `else if (orcnode_rxmgr_count(&mgr) > 0)`, evaluated
+-     * once here. Discovery behind the onboard hub takes about 8 s, so the
+-     * count is still 0 at this point and the scanner never started. The
+-     * visible cost is that receiver 0 - the scanner's receiver - sits in
+-     * state 1 and never streams: over a 107 minute run the two fixed-tuned
+-     * dongles delivered 30.86 GB each while receiver 0 delivered 9.91 GB,
+-     * consistent with it being idle for the first 73 minutes. Drop counters
+-     * were correctly zero throughout; nothing was lost, it was never
+-     * running.
+-     *
+-     * Handled in the poll loop below rather than by blocking here, so boot
+-     * is not delayed and a receiver arriving late (or hot-plugged) still
+-     * gets the scanner going. Latched so it happens exactly once. */
+@@ -148 +114,0 @@ extern "C" void app_main(void)
+-    bool scan_autostarted = false;
+@@ -151,3 +116,0 @@ extern "C" void app_main(void)
+-    } else if (!orcnode_rxmgr_auto_start_paused() && !orcnode_fm_owns_receiver(0) &&
+-               orcnode_rxmgr_count(&mgr) > 0) {
+-        scan_autostarted = (orcnode_scan_start("FM_REFERENCE") == 0);
+@@ -169,9 +131,0 @@ extern "C" void app_main(void)
+-        if (scan_init_ok && !scan_autostarted && !orcnode_rxmgr_auto_start_paused() &&
+-            !orcnode_fm_owns_receiver(0) && orcnode_rxmgr_count(&mgr) > 0) {
+-            if (orcnode_scan_start("FM_REFERENCE") == 0) {
+-                ESP_LOGI(TAG, "scanner auto-started once receivers appeared");
+-                scan_autostarted = true;
+-            }
+-            /* A receiver can appear before its stable hub port is known.
+-             * Retry on the next poll instead of leaving its scanner off. */
+-        }
+diff --git a/main/scan_engine.cpp b/main/scan_engine.cpp
+index 5dc8930..7654650 100644
+--- a/main/scan_engine.cpp
++++ b/main/scan_engine.cpp
+@@ -297,2 +296,0 @@ static int hop_once(scan_context_t *c, int receiver, int hop)
+-        } else {
+-            vTaskDelay(pdMS_TO_TICKS(1));
+@@ -299,0 +298,2 @@ static int hop_once(scan_context_t *c, int receiver, int hop)
++        // Let idle run even when all four scanners have continuous FFT work.
++        vTaskDelay(1);

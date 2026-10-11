@@ -198,4 +198,3 @@ finally:
     checkpoint()
     print(json.dumps({'state': state['state'], 'samples': state['samples'],
                       'failure_count': len(failures)}), flush=True)
-

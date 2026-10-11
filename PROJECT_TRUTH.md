@@ -91,7 +91,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Sync `read()` | **Implemented** | |
 | Delivery modes BOTH/CALLBACK/READ + lazy pull ring | **Implemented** | 0.7.4; CAP_DELIVERY_MODE |
 | Multi-device select | **Implemented** | pick-one candidate per handle |
-| Concurrent multi-handle USB session | **Implemented** (host/build) | exclusive USB-address claims; shared `usb_host_install` refcount; `[RTLn]` logs; identity/stats/metadata APIs. Hardware 2- and 3-dongle streams **not yet measured** |
+| Concurrent multi-handle USB session | **Implemented; four-device application provenance** | Exclusive USB-address claims; shared host lifetime; identity/stats APIs. [OrcSDR Headless one-hour run](docs/Test_reports/FOUR_DONGLE_2560K_EXTERNAL_POWER.md): four devices at 2.56 MS/s, zero new observed IQ drops/USB errors. Network-only evidence; watchdog, RF/audio and replug acceptance remain open. Standalone driver-example re-soak remains separate. |
 | Multi-rtl hardware harness | **Implemented** | `examples/multi_rtlsdr_test/` — Gates 1–6 procedure; no soak log in tree |
 | Blog V4 filter `0bda:2838` | **Implemented** | Exact `RTLSDRBlog` / `Blog V4` only — never bare VID/PID |
 | Nooelec NESDR SMArt v5 `0bda:2838` | **Implemented from first-party PC captures; P4 acceptance pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; serial is evidence, not a whitelist. I2C `0x34`; model bounds 100 kHz–1750 MHz; Q below captured 24 MHz cutoff. [Capture record](docs/captures/nooelec_v5_2026-09-30.md), [merge/acceptance notes](docs/nooelec_v5_merge_notes.md). |

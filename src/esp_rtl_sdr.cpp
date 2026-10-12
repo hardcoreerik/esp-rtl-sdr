@@ -5,7 +5,8 @@
  * measured EP0 tables, continuous rates, need/health/passport. Not a librtlsdr port.
  *
  * Core 0: USB host lib + client/owner (events, EP0, URB submit/resubmit)
- * Core 1: IQ delivery task posts EVT_IQ_BLOCK (keep callback light!)
+ * IQ delivery uses core 1 on dual-core builds, core 0 on single-core builds.
+ * Delivery task posts EVT_IQ_BLOCK (keep callback light!).
  * App should run demod/play at high prio on core 1 and graphics at low prio.
  */
 
@@ -64,7 +65,11 @@ static constexpr size_t kCtrlXferBytes = 64 + sizeof(usb_setup_packet_t);
 /* Named runtime constants — see docs/RUNTIME_CONSTANTS.md (not Kconfig yet). */
 static constexpr size_t kRingDepth = 6;       /* IQ free/filled queue depth */
 static constexpr int kUsbCore = 0;            /* default USB owner core (P4) */
+#if CONFIG_FREERTOS_UNICORE
+static constexpr int kDeliveryCore = 0;       /* Single-core targets share the USB core. */
+#else
 static constexpr int kDeliveryCore = 1;       /* IQ event delivery core */
+#endif
 static constexpr UBaseType_t kUsbPrio = 20;
 static constexpr UBaseType_t kClientPrio = 19;
 /* Delivery only posts IQ; app audio task should be >= this and graphics much lower. */

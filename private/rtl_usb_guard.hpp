@@ -16,6 +16,12 @@
 
 namespace rtl_usb {
 
+constexpr bool bulk_packet_size_valid(uint16_t packet, bool high_speed)
+{
+    return high_speed ? packet == 512 :
+           (packet == 8 || packet == 16 || packet == 32 || packet == 64);
+}
+
 constexpr size_t kSetupBytes = 8;       /**< USB setup packet that precedes the data stage. */
 constexpr uint8_t kDirDeviceToHost = 0x80;
 /** The RTL2832U routes I2C passthrough through "block 6" (high byte of wIndex); reads there are capped. */

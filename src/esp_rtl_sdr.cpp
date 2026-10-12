@@ -32,6 +32,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "usb/usb_host.h"
+#include "usb/usb_helpers.h"
 
 #include "rtl_profile.hpp"
 #include "transfers_blog_v3.hpp"
@@ -1158,6 +1159,37 @@ static bool probe_blog_v3_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
     out_probe->completed = true;
     out_probe->chip_id = chip_id;
     return rtl_profile_v3_probe_matches(*out_probe);
+}
+
+static esp_err_t configure_full_speed_packets(esp_rtl_sdr_handle *h)
+{
+    if (h->info.high_speed) return ESP_OK;
+    const usb_config_desc_t *config = nullptr;
+    esp_err_t err = usb_host_get_active_config_descriptor(h->dev, &config);
+    if (err != ESP_OK) return err;
+    if (config == nullptr) return ESP_ERR_INVALID_STATE;
+    const usb_ep_desc_t *ep = usb_parse_endpoint_descriptor_by_address(
+        config, 0, 0, ESP_RTL_SDR_BULK_EP_IN, nullptr);
+    if (ep == nullptr || (ep->bmAttributes & 3) != 2 ||
+        !rtl_usb::bulk_packet_size_valid(ep->wMaxPacketSize, false) ||
+        h->cfg.transfer_bytes % ep->wMaxPacketSize != 0) return ESP_ERR_NOT_SUPPORTED;
+    uint8_t before[2] = {};
+    err = ctrl_submit_device(h, h->dev, 0xc0, 0, 0x2158, 0x0100,
+                             nullptr, 2, false, before, sizeof(before));
+    if (err != ESP_OK) return err;
+    RTL_LOGI(h, "FS bulk ep=%02x descriptor_mps=%u transfer_bytes=%u maxpkt_before=%02x%02x",
+             ep->bEndpointAddress, ep->wMaxPacketSize,
+             static_cast<unsigned>(h->cfg.transfer_bytes), before[1], before[0]);
+    // Captured High Speed initialization must not set 512-byte packets on Full Speed.
+    const uint8_t packet[2] = {static_cast<uint8_t>(ep->wMaxPacketSize), 0};
+    err = ctrl_submit(h, 0x40, 0, 0x2158, 0x0110, packet, sizeof(packet), false);
+    if (err != ESP_OK) return err;
+    uint8_t after[2] = {};
+    err = ctrl_submit_device(h, h->dev, 0xc0, 0, 0x2158, 0x0100,
+                             nullptr, 2, false, after, sizeof(after));
+    if (err != ESP_OK) return err;
+    RTL_LOGI(h, "FS bulk maxpkt_after=%02x%02x", after[1], after[0]);
+    return std::memcmp(packet, after, sizeof(packet)) == 0 ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
@@ -4135,6 +4167,8 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             ret = run_bias_gpio_records(handle, false);
             if (ret != ESP_OK) break;
         }
+        ret = configure_full_speed_packets(handle);
+        if (ret != ESP_OK) break;
         ret = run_sample_rate(handle, local.sample_rate_sps);
         if (ret != ESP_OK) {
             break;

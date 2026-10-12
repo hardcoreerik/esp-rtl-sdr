@@ -206,6 +206,14 @@ static void test_enum_retry_reset_and_wrap()
 
 int main()
 {
+    CHECK(bulk_packet_size_valid(64, false));
+    CHECK(bulk_packet_size_valid(8, false));
+    CHECK(bulk_packet_size_valid(16, false));
+    CHECK(bulk_packet_size_valid(32, false));
+    CHECK(!bulk_packet_size_valid(512, false));
+    CHECK(!bulk_packet_size_valid(63, false));
+    CHECK(bulk_packet_size_valid(512, true));
+    CHECK(!bulk_packet_size_valid(64, true));
     test_ctrl_request_limits();
     test_ctrl_data_bytes();
     test_config_descriptor();

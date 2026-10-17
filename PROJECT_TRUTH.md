@@ -187,6 +187,7 @@ unless a task explicitly says otherwise.
 |---|---|---|---|
 | ESP32-P4 Tab5 | HS | Blog V4 | **Provenance** |
 | ESP32-P4 Waveshare | HS | Blog V4 | **Provenance** |
+| ESP32-P4 Waveshare `waveshare-p4-wifi6` | HS, via hub/"squid" cable | Blog V4, V4L, V3c | **Hardware-verified** (maintainer-reported, 2026-10-06): all three sustained 3.20 MS/s, same as the other Waveshare board; third validated P4 board. Drop-in: driver unchanged; only OrcNode firmware pin mappings changed for the new board. 3-hour soak reported (whether per dongle or combined not recorded). First hub-attached result; no filled log in tree, so the stand-alone P4 re-soak item stays open; hub model not recorded |
 | ESP32-S3/S2 | FS | — | **Not claimed** |
 
 ---

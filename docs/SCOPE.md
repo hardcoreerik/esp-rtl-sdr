@@ -9,7 +9,7 @@ This project **fails closed** on unsupported hardware. Narrow support is a
 
 | Piece | Status | Notes |
 |---|---|---|
-| **MCU** | ESP32-**P4** High-Speed USB Host | e.g. M5Stack Tab5, Waveshare P4 kits |
+| **MCU** | ESP32-**P4** High-Speed USB Host | e.g. M5Stack Tab5, Waveshare P4 kits (incl. `waveshare-p4-wifi6`) |
 | **Dongle** | RTL-SDR **Blog V4** (primary) | Exact `RTLSDRBlog` / `Blog V4` |
 | **Nooelec** | NESDR SMArt v5 PC-captured profile | Exact descriptors; 2026-09-30 control/IQ evidence, 100 kHz–1750 MHz with direct-Q HF; ESP32-P4 reception/soak acceptance pending. See [capture record](captures/nooelec_v5_2026-09-30.md). |
 | **V3** | Provisional stream | R820T2 remap; community soak; not Hardware-verified |

@@ -1,0 +1,14 @@
+# Waveshare ESP32-P4-Module-DEV-KIT multi-RTL harness defaults.
+# Hub support is required for USB-A ports 2-4 (CH334). Direct port 1
+# (HOST jumper) does not need a hub driver but cannot run 2+ dongles.
+CONFIG_IDF_TARGET="esp32p4"
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_FREERTOS_HZ=1000
+
+CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# Do not pin Tab5 pre-v3 silicon here. Waveshare P4 modules are typically
+# rev v3.x. Tab5 users: overlay sdkconfig.defaults.tab5.

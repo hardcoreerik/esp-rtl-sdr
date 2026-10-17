@@ -1,0 +1,9 @@
+I (123) boot: ESP-IDF v5.5.4
+FT_BEGIN
+{"ft":"begin","version":"0.9.3","sha":"abc123def456","board":"esp32p4"}
+{"ft":"result","test":"env.version","dev":-1,"profile":"","status":"PASS","ms":0,"detail":"driver 0.9.3"}
+W (4000) esp_rtl_sdr: some driver warning
+{"ft":"result","test":"dev.identity","dev":0,"profile":"blog_v4_r828d","status":"PASS","ms":1,"detail":"RTLSDRBlog Blog V4 serial=00000001"}
+{"ft":"result","test":"controls.bias_tee","dev":0,"profile":"blog_v4_r828d","status":"SKIP","ms":0,"detail":"disabled"}
+{"ft":"summary","pass":2,"fail":0,"skip":1,"devices":1,"ok":true}
+FT_END rc=0

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **`examples/function_test`: automated hardware function-test firmware.** Runs identity, capability, API-contract, lifecycle, rate, retune, gain/AGC/bandwidth,
+  stream-integrity, sync-read, health and multi-dongle tests against whatever is plugged in, and prints one JSON line per result.
+  `tests/scripts/function_test_runner.py` captures a run over serial (or judges a saved log) and returns an exit code. Per-profile expectations live in
+  `ft_expect.hpp` and are cross-checked against the driver in the host tests. Compiles in the P4 CI job; **not yet run on hardware**. No driver change.
+
 ## 0.9.3 (2026-10-02) — RF band select, unplug recovery, V4/V4L band select
 
 ### Fixed

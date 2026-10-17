@@ -29,6 +29,7 @@ That is enough for real evidence if every claim carries an evidence label
 | ESP32-P4 M5Stack Tab5 | Provenance continuous IQ (OrcSDR) |
 | ESP32-P4 Waveshare Module-DEV-KIT | Second-board Blog V4 (OrcSDR shell) |
 | Stand-alone `examples/p4_serial_smoke` | Driver-only re-soak (open) |
+| `examples/function_test` | Automated pass/fail suite on 1-3 dongles ([README](../examples/function_test/README.md)) |
 
 ## RTL-SDR under test
 

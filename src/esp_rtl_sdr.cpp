@@ -1187,7 +1187,11 @@ static bool probe_e4000_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
     if (out_probe == nullptr) return false;
     const RtlControlRecord select = {
         0x0064, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
+    // The E4000 datasheet specifies one unacknowledged dummy I2C command
+    // after power-on/reset. Accept that first NACK, then retry the ID pointer.
     if (ctrl_submit_device(h, dev, select.request_type, 0, select.value, select.index,
+                           select.data, select.length, true) != ESP_OK ||
+        ctrl_submit_device(h, dev, select.request_type, 0, select.value, select.index,
                            select.data, select.length, false) != ESP_OK) {
         return false;
     }
@@ -1220,6 +1224,14 @@ static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
             const esp_err_t e = run_record(h, rec, false);
             if (e != ESP_OK) return e;
         }
+        // First E4000 I2C access after a reset is documented as a dummy
+        // command that may not be acknowledged. Never treat that expected
+        // NACK as a reason to abandon the profile initialization.
+        const RtlControlRecord e4000_dummy = {
+            0x0064, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
+        const esp_err_t dummy_err = run_record(h, e4000_dummy, true);
+        if (dummy_err != ESP_OK) return dummy_err;
+
         const RtlControlRecord init_writes[] = {
             {0x0064, 0x0610, 0x40, 2, {0x00, 0x02, 0, 0, 0, 0, 0, 0}}, // normal mode
             {0x0064, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // clock output off

@@ -1271,6 +1271,12 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
      * demod bytes 0x9f..0xa2 store; the silicon mirrors bit 27 itself. */
     const uint32_t ratio = resampler_ratio_register(exact);
     for (size_t i = kRtlSampleRateFirst; i <= kRtlSampleRateLast; ++i) {
+        // This captured V4 sample-rate slice begins with two R828D gain writes.
+        // They must never be redirected to an E4000's register 0x05.
+        if (h->profile == RtlProfileId::E4000 &&
+            (i == kRtlSampleRateFirst || i == kRtlSampleRateFirst + 1)) {
+            continue;
+        }
         RtlControlRecord rec = kRtlInitTransfers[i];
         if (i == kRtlSampleRateRatioHighIndex) {
             rec.data[0] = static_cast<uint8_t>(ratio >> 24);

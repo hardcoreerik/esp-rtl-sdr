@@ -359,9 +359,9 @@ inline uint32_t rtl_profile_tuner_frequency_hz(RtlProfileId profile, uint32_t rf
 }
 
 /**
- * PLL reference crystal, Hz. This is 28.8 MHz for every profile tested so
- * far, V3c included -- see rtl_profile_pll_if_offset_hz() below for the
- * correction that actually mattered.
+ * PLL reference crystal, Hz. 28.8 MHz is measured for the existing supported
+ * Blog/Nooelec profiles. The E4000 profile currently assumes the same value;
+ * that board-specific clock remains unverified until an XTR v5 is measured.
  *
  * (History: an earlier same-session pass mistakenly concluded V3c used a
  * 32 MHz crystal, from analyzing the integer N-divider byte (reg 0x14) in

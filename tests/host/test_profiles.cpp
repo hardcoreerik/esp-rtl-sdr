@@ -882,6 +882,9 @@ static void test_e4000_pll_policy(void)
     EXPECT_TRUE(e4000::make_pll_plan(666000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.band == e4000::Band::Uhf);
     EXPECT_TRUE(!p.three_phase_mixing);
+    EXPECT_EQ_U(p.divider_code, 1); // /4 gives the datasheet's 2.664 GHz VCO example.
+    EXPECT_EQ_U(p.integer_divider, 92);
+    EXPECT_EQ_U(p.fractional_divider, 32768);
     EXPECT_EQ_U(p.rf_filter_code, 10);
     EXPECT_TRUE(e4000::make_pll_plan(1575000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.band == e4000::Band::L);

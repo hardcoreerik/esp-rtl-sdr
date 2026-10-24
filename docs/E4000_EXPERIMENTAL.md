@@ -16,8 +16,9 @@ every E4000-branded receiver has identical RF routing or clocking.
   product descriptor is ambiguous.
 - A separate E4000 register-control path, without R820T2/R828D init or tune
   tables.
-- Datasheet-based fractional-N PLL calculation, frequency-band selection and
-  RF tracking-filter selection.
+- Datasheet-based fractional-N PLL calculation, frequency-band selection,
+  RF tracking-filter selection, zero-IF setup and a conservative fixed IF
+  filter configuration.
 - Reuse of the shared RTL2832U USB, sample-rate and IQ streaming path.
 
 ## Limits

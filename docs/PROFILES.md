@@ -32,7 +32,7 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 | Caps | STREAM/RETUNE and common driver services only. No tuner gain, tuner AGC, RTL AGC, tuner bandwidth, direct sampling, HF upconverter or bias tee |
 | Evidence | PLL math/profile selection have host tests. No XTR v5 ESP32-P4 capture, PLL-lock record or RF reception acceptance exists yet. See [E4000 experimental notes](E4000_EXPERIMENTAL.md). |
 
-The profile deliberately bypasses the R828D/R820-family initialization and tune tables. The E4000 tuner clock is an assumption until confirmed on hardware; high-band divider fallbacks are logged when they fall outside the datasheet's nominal VCO range.
+The profile deliberately bypasses the R828D/R820-family initialization, tune tables, and the two R828D gain writes embedded in the shared sample-rate slice. It uses a fixed, conservative IF-filter configuration and no gain controls. The E4000 tuner clock is an assumption until confirmed on hardware; divider fallbacks outside the datasheet's nominal VCO range are logged.
 
 ### `blog_v4` (RTL-SDR Blog V4 / R828D) — PRIMARY
 

@@ -1233,10 +1233,15 @@ static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
         if (dummy_err != ESP_OK) return dummy_err;
 
         const RtlControlRecord init_writes[] = {
-            {0x0064, 0x0610, 0x40, 2, {0x00, 0x02, 0, 0, 0, 0, 0, 0}}, // normal mode
-            {0x0064, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // clock output off
-            {0x0064, 0x0610, 0x40, 2, {0x1a, 0x00, 0, 0, 0, 0, 0, 0}}, // serial gain control
-            {0x0064, 0x0610, 0x40, 2, {0x29, 0x01, 0, 0, 0, 0, 0, 0}}, // DC offset calibration
+            {0x0064, 0x0610, 0x40, 2, {0x00, 0x06, 0, 0, 0, 0, 0, 0}}, // normal mode; clear POR flag
+            {0x0064, 0x0610, 0x40, 2, {0x06, 0x00, 0, 0, 0, 0, 0, 0}}, // low-power LVDS clock mode
+            {0x0064, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // documented clock-output disable key
+            {0x0064, 0x0610, 0x40, 2, {0x11, 0xec, 0, 0, 0, 0, 0, 0}}, // mixer / IF RC filters
+            {0x0064, 0x0610, 0x40, 2, {0x12, 0x1f, 0, 0, 0, 0, 0, 0}}, // narrowest IF channel filter
+            {0x0064, 0x0610, 0x40, 2, {0x7e, 0x01, 0, 0, 0, 0, 0, 0}}, // unlock extended registers
+            {0x0064, 0x0610, 0x40, 2, {0x7f, 0xfe, 0, 0, 0, 0, 0, 0}},
+            {0x0064, 0x0610, 0x40, 2, {0x87, 0x20, 0, 0, 0, 0, 0, 0}}, // required mixer config
+            {0x0064, 0x0610, 0x40, 2, {0x88, 0x01, 0, 0, 0, 0, 0, 0}},
         };
         for (const auto &rec : init_writes) {
             const esp_err_t e = run_record(h, rec, false);
@@ -1507,6 +1512,7 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         {0x0064, 0x0610, 0x40, 2, {0x0a, static_cast<uint8_t>(plan.fractional_divider & 0xffu), 0, 0, 0, 0, 0, 0}},
         {0x0064, 0x0610, 0x40, 2, {0x0b, static_cast<uint8_t>(plan.fractional_divider >> 8), 0, 0, 0, 0, 0, 0}},
         {0x0064, 0x0610, 0x40, 2, {0x0e, 0x05, 0, 0, 0, 0, 0, 0}}, // auto-calibrate VCO
+        {0x0064, 0x0610, 0x40, 2, {0x29, 0x01, 0, 0, 0, 0, 0, 0}}, // request frequency-specific DC calibration
     };
     for (const auto &rec : writes) {
         err = run_record(h, rec, false);

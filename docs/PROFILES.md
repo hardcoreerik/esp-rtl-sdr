@@ -25,7 +25,7 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 | Field | Value |
 |---|---|
 | Status | **Implemented experimentally; not hardware-verified on ESP32-P4** |
-| USB | Exact `0bda:2838` + `Nooelec` / product contains `SMArTee XTR v5`; ambiguous shared-ID devices may be accepted only after the E4000 register-0x02 ID reads `0x40` |
+| USB | Exact `0bda:2838` + `Nooelec` / product contains `SMArTee XTR v5`; other shared-ID descriptors require E4000 register-0x02 ID `0x40`. Other VID/PID pairs are not accepted yet |
 | Tuner | E4000 at RTL2832U control I2C value `0x64` |
 | Clock / RF | Assumes a 28.8 MHz tuner reference; published E4000 range **64 MHz–1.7 GHz** |
 | Path | Shared RTL2832U demodulator and IQ streaming; E4000-specific zero-IF tuning and RF filter selection |

@@ -1476,7 +1476,8 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     }
     const uint32_t corrected_hz = apply_freq_correction_hz(frequency_hz, h->freq_correction_ppm);
     e4000::PllPlan plan{};
-    if (!e4000::make_pll_plan(corrected_hz, e4000::kReferenceXtalHz, &plan)) {
+    if (!e4000::make_pll_plan(corrected_hz,
+                              static_cast<uint32_t>(rtl_profile_pll_xtal_hz(h->profile)), &plan)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
     esp_err_t err = run_e4000_set_zero_if(h);

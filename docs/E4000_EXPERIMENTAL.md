@@ -4,8 +4,9 @@
 
 **Experimental implementation — not hardware-verified on ESP32-P4.**
 
-This profile targets the Nooelec SMArTee XTR v5 and other compatible RTL2832U
-devices only when the E4000 tuner can be identified. It is not a claim that
+This profile currently targets the Nooelec SMArTee XTR v5 descriptor and
+ambiguous devices using the shared `0bda:2838` identity only when an E4000 ID
+probe succeeds. Other USB IDs are not accepted yet. It is not a claim that
 every E4000-branded receiver has identical RF routing or clocking.
 
 ## What is implemented

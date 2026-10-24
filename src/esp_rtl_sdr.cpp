@@ -1212,6 +1212,7 @@ static bool probe_e4000_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
 
 static esp_err_t run_e4000_initialize_tuner(esp_rtl_sdr_handle *h)
 {
+    const uint16_t tuner_address = tuner_i2c_value_for_handle(h);
     for (const auto &rec : kBlogV3TunerRepeaterOn) {
         const esp_err_t e = run_record(h, rec, false);
         if (e != ESP_OK) return e;
@@ -1219,20 +1220,20 @@ static esp_err_t run_e4000_initialize_tuner(esp_rtl_sdr_handle *h)
     // First E4000 I2C access after a reset is documented as a dummy command
     // that may not be acknowledged. Accept that expected NACK and continue.
     const RtlControlRecord dummy = {
-        0x0064, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
+        tuner_address, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
     const esp_err_t dummy_err = run_record(h, dummy, true);
     if (dummy_err != ESP_OK) return dummy_err;
 
     const RtlControlRecord init_writes[] = {
-        {0x0064, 0x0610, 0x40, 2, {0x00, 0x06, 0, 0, 0, 0, 0, 0}}, // normal mode; clear POR flag
-        {0x0064, 0x0610, 0x40, 2, {0x06, 0x00, 0, 0, 0, 0, 0, 0}}, // low-power LVDS clock mode
-        {0x0064, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // documented clock-output disable key
-        {0x0064, 0x0610, 0x40, 2, {0x11, 0xec, 0, 0, 0, 0, 0, 0}}, // mixer / IF RC filters
-        {0x0064, 0x0610, 0x40, 2, {0x12, 0x1f, 0, 0, 0, 0, 0, 0}}, // narrowest IF channel filter
-        {0x0064, 0x0610, 0x40, 2, {0x7e, 0x01, 0, 0, 0, 0, 0, 0}}, // unlock extended registers
-        {0x0064, 0x0610, 0x40, 2, {0x7f, 0xfe, 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x87, 0x20, 0, 0, 0, 0, 0, 0}}, // required mixer config
-        {0x0064, 0x0610, 0x40, 2, {0x88, 0x01, 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x00, 0x06, 0, 0, 0, 0, 0, 0}}, // normal mode; clear POR flag
+        {tuner_address, 0x0610, 0x40, 2, {0x06, 0x00, 0, 0, 0, 0, 0, 0}}, // low-power LVDS clock mode
+        {tuner_address, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // documented clock-output disable key
+        {tuner_address, 0x0610, 0x40, 2, {0x11, 0xec, 0, 0, 0, 0, 0, 0}}, // mixer / IF RC filters
+        {tuner_address, 0x0610, 0x40, 2, {0x12, 0x1f, 0, 0, 0, 0, 0, 0}}, // narrowest IF channel filter
+        {tuner_address, 0x0610, 0x40, 2, {0x7e, 0x01, 0, 0, 0, 0, 0, 0}}, // unlock extended registers
+        {tuner_address, 0x0610, 0x40, 2, {0x7f, 0xfe, 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x87, 0x20, 0, 0, 0, 0, 0, 0}}, // required mixer config
+        {tuner_address, 0x0610, 0x40, 2, {0x88, 0x01, 0, 0, 0, 0, 0, 0}},
     };
     for (const auto &rec : init_writes) {
         const esp_err_t e = run_record(h, rec, false);
@@ -1510,22 +1511,30 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
                               static_cast<uint32_t>(rtl_profile_pll_xtal_hz(h->profile)), &plan)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
-    esp_err_t err = run_e4000_set_zero_if(h);
+    esp_err_t err = ESP_OK;
+    // The shared sample-rate path can touch demod state; explicitly reopen
+    // the RTL2832U I2C repeater before every E4000 retune.
+    for (const auto &rec : kBlogV3TunerRepeaterOn) {
+        err = run_record(h, rec, false);
+        if (err != ESP_OK) return err;
+    }
+    err = run_e4000_set_zero_if(h);
     if (err != ESP_OK) return err;
 
     const uint8_t band_bits = static_cast<uint8_t>(static_cast<uint8_t>(plan.band) << 1);
     const uint8_t divider = static_cast<uint8_t>(
         plan.divider_code | (plan.three_phase_mixing ? 0x08u : 0x00u));
+    const uint16_t tuner_address = tuner_i2c_value_for_handle(h);
     const RtlControlRecord writes[] = {
-        {0x0064, 0x0610, 0x40, 2, {0x07, band_bits, 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x78, plan.bias_register, 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x10, plan.rf_filter_code, 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x0d, divider, 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x09, plan.integer_divider, 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x0a, static_cast<uint8_t>(plan.fractional_divider & 0xffu), 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x0b, static_cast<uint8_t>(plan.fractional_divider >> 8), 0, 0, 0, 0, 0, 0}},
-        {0x0064, 0x0610, 0x40, 2, {0x0e, 0x05, 0, 0, 0, 0, 0, 0}}, // auto-calibrate VCO
-        {0x0064, 0x0610, 0x40, 2, {0x29, 0x01, 0, 0, 0, 0, 0, 0}}, // request frequency-specific DC calibration
+        {tuner_address, 0x0610, 0x40, 2, {0x07, band_bits, 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x78, plan.bias_register, 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x10, plan.rf_filter_code, 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x0d, divider, 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x09, plan.integer_divider, 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x0a, static_cast<uint8_t>(plan.fractional_divider & 0xffu), 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x0b, static_cast<uint8_t>(plan.fractional_divider >> 8), 0, 0, 0, 0, 0, 0}},
+        {tuner_address, 0x0610, 0x40, 2, {0x0e, 0x05, 0, 0, 0, 0, 0, 0}}, // auto-calibrate VCO
+        {tuner_address, 0x0610, 0x40, 2, {0x29, 0x01, 0, 0, 0, 0, 0, 0}}, // request frequency-specific DC calibration
     };
     for (const auto &rec : writes) {
         err = run_record(h, rec, false);

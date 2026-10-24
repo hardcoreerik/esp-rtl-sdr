@@ -41,6 +41,7 @@ HARNESS = r'''
 #include <iterator>
 #include <vector>
 #include "rtl_profile.hpp"
+#include "rtl_tuner.hpp"
 #include "e4000.hpp"
 #include "r820t2_band.hpp"
 #include "transfers_blog_v3.hpp"
@@ -73,6 +74,9 @@ struct esp_rtl_sdr_handle {
     esp_rtl_sdr_gain_mode_t gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     int gain_tenth_db = 0;
 };
+// This trace harness is scoped to legacy Nooelec behavior. Keep the new tuner
+// registry empty here so the captured Nooelec path remains the subject tested.
+const RtlTunerDriver *rtl_tuner_driver_for_profile(RtlProfileId) { return nullptr; }
 static std::vector<RtlControlRecord> wire;
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool) {

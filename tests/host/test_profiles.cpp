@@ -894,6 +894,10 @@ static void test_e4000_pll_policy(void)
     EXPECT_TRUE(p.valid);
     EXPECT_TRUE(!e4000::make_pll_plan(1700000001u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(!e4000::make_pll_plan(100000000u, 15000000u, &p));
+    EXPECT_TRUE(!e4000::allows_sample_rate_record(kRtlSampleRateFirst, kRtlSampleRateFirst));
+    EXPECT_TRUE(!e4000::allows_sample_rate_record(kRtlSampleRateFirst + 1, kRtlSampleRateFirst));
+    EXPECT_TRUE(e4000::allows_sample_rate_record(kRtlSampleRateFirst + 2, kRtlSampleRateFirst));
+    EXPECT_TRUE(e4000::allows_sample_rate_record(kRtlSampleRateLast, kRtlSampleRateFirst));
     EXPECT_TRUE(e4000::make_pll_plan(433920000u, e4000::kReferenceXtalHz, &p));
     const uint64_t reconstructed =
         static_cast<uint64_t>(e4000::kReferenceXtalHz) * p.integer_divider +

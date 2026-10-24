@@ -33,6 +33,7 @@
 #include "usb/usb_host.h"
 
 #include "rtl_profile.hpp"
+#include "rtl_tuner.hpp"
 #include "e4000.hpp"
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
@@ -1064,6 +1065,10 @@ static uint16_t tuner_i2c_value_for_handle(const esp_rtl_sdr_handle *h)
     if (h == nullptr) {
         return kBlogV4TunerI2cValue;
     }
+    const RtlTunerDriver *driver = rtl_tuner_driver_for_profile(h->profile);
+    if (driver != nullptr && driver->i2c_address != 0) {
+        return driver->i2c_address;
+    }
     const uint16_t v = rtl_profile_tuner_i2c_value(h->profile);
     return v != 0 ? v : kBlogV4TunerI2cValue;
 }
@@ -1205,53 +1210,62 @@ static bool probe_e4000_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
     return chip_id == 0x40;
 }
 
+static esp_err_t run_e4000_initialize_tuner(esp_rtl_sdr_handle *h)
+{
+    for (const auto &rec : kBlogV3TunerRepeaterOn) {
+        const esp_err_t e = run_record(h, rec, false);
+        if (e != ESP_OK) return e;
+    }
+    // First E4000 I2C access after a reset is documented as a dummy command
+    // that may not be acknowledged. Accept that expected NACK and continue.
+    const RtlControlRecord dummy = {
+        0x0064, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
+    const esp_err_t dummy_err = run_record(h, dummy, true);
+    if (dummy_err != ESP_OK) return dummy_err;
+
+    const RtlControlRecord init_writes[] = {
+        {0x0064, 0x0610, 0x40, 2, {0x00, 0x06, 0, 0, 0, 0, 0, 0}}, // normal mode; clear POR flag
+        {0x0064, 0x0610, 0x40, 2, {0x06, 0x00, 0, 0, 0, 0, 0, 0}}, // low-power LVDS clock mode
+        {0x0064, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // documented clock-output disable key
+        {0x0064, 0x0610, 0x40, 2, {0x11, 0xec, 0, 0, 0, 0, 0, 0}}, // mixer / IF RC filters
+        {0x0064, 0x0610, 0x40, 2, {0x12, 0x1f, 0, 0, 0, 0, 0, 0}}, // narrowest IF channel filter
+        {0x0064, 0x0610, 0x40, 2, {0x7e, 0x01, 0, 0, 0, 0, 0, 0}}, // unlock extended registers
+        {0x0064, 0x0610, 0x40, 2, {0x7f, 0xfe, 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x87, 0x20, 0, 0, 0, 0, 0, 0}}, // required mixer config
+        {0x0064, 0x0610, 0x40, 2, {0x88, 0x01, 0, 0, 0, 0, 0, 0}},
+    };
+    for (const auto &rec : init_writes) {
+        const esp_err_t e = run_record(h, rec, false);
+        if (e != ESP_OK) {
+            ESP_LOGE(TAG, "E4000 init write reg=0x%02x result=%s",
+                     static_cast<unsigned>(rec.data[0]), esp_rtl_sdr_err_to_name(e));
+            return e;
+        }
+    }
+    ESP_LOGW(TAG, "E4000 tuner initialized experimentally; no hardware acceptance recorded");
+    return ESP_OK;
+}
+
 static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
 {
     ESP_LOGI(TAG, "init begin profile=%s records=%u", rtl_profile_name(h->profile),
              static_cast<unsigned>(std::size(kRtlInitTransfers)));
-    if (h->profile == RtlProfileId::E4000) {
+    const RtlTunerDriver *driver = rtl_tuner_driver_for_profile(h->profile);
+    if (driver != nullptr) {
         // Only the shared RTL2832U demodulator prefix is safe to reuse.
-        // Never replay the R828D/R820-family tuner or board-GPIO sequence.
+        // New tuner drivers own their tuner initialization; legacy profiles
+        // continue through the existing, unchanged profile-specific table.
         for (size_t i = 0; i < kDemodBringupRecordCount; ++i) {
             const esp_err_t e = run_record(h, kRtlInitTransfers[i], false);
             if (e != ESP_OK) {
-                ESP_LOGE(TAG, "E4000 demod init failed record=%u result=%s",
-                         static_cast<unsigned>(i), esp_rtl_sdr_err_to_name(e));
+                ESP_LOGE(TAG, "%s demod init failed record=%u result=%s",
+                         driver->name, static_cast<unsigned>(i), esp_rtl_sdr_err_to_name(e));
                 return e;
             }
         }
-        for (const auto &rec : kBlogV3TunerRepeaterOn) {
-            const esp_err_t e = run_record(h, rec, false);
-            if (e != ESP_OK) return e;
+        if (driver->initialize != nullptr) {
+            return driver->initialize(h);
         }
-        // First E4000 I2C access after a reset is documented as a dummy
-        // command that may not be acknowledged. Never treat that expected
-        // NACK as a reason to abandon the profile initialization.
-        const RtlControlRecord e4000_dummy = {
-            0x0064, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
-        const esp_err_t dummy_err = run_record(h, e4000_dummy, true);
-        if (dummy_err != ESP_OK) return dummy_err;
-
-        const RtlControlRecord init_writes[] = {
-            {0x0064, 0x0610, 0x40, 2, {0x00, 0x06, 0, 0, 0, 0, 0, 0}}, // normal mode; clear POR flag
-            {0x0064, 0x0610, 0x40, 2, {0x06, 0x00, 0, 0, 0, 0, 0, 0}}, // low-power LVDS clock mode
-            {0x0064, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // documented clock-output disable key
-            {0x0064, 0x0610, 0x40, 2, {0x11, 0xec, 0, 0, 0, 0, 0, 0}}, // mixer / IF RC filters
-            {0x0064, 0x0610, 0x40, 2, {0x12, 0x1f, 0, 0, 0, 0, 0, 0}}, // narrowest IF channel filter
-            {0x0064, 0x0610, 0x40, 2, {0x7e, 0x01, 0, 0, 0, 0, 0, 0}}, // unlock extended registers
-            {0x0064, 0x0610, 0x40, 2, {0x7f, 0xfe, 0, 0, 0, 0, 0, 0}},
-            {0x0064, 0x0610, 0x40, 2, {0x87, 0x20, 0, 0, 0, 0, 0, 0}}, // required mixer config
-            {0x0064, 0x0610, 0x40, 2, {0x88, 0x01, 0, 0, 0, 0, 0, 0}},
-        };
-        for (const auto &rec : init_writes) {
-            const esp_err_t e = run_record(h, rec, false);
-            if (e != ESP_OK) {
-                ESP_LOGE(TAG, "E4000 init write reg=0x%02x result=%s",
-                         static_cast<unsigned>(rec.data[0]), esp_rtl_sdr_err_to_name(e));
-                return e;
-            }
-        }
-        ESP_LOGW(TAG, "E4000 profile initialized experimentally; no hardware acceptance recorded");
         return ESP_OK;
     }
     size_t skipped = 0;
@@ -1287,11 +1301,10 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
      * bit-27 mirror into `exact`. Masking again clears bit 28, which is what
      * demod bytes 0x9f..0xa2 store; the silicon mirrors bit 27 itself. */
     const uint32_t ratio = resampler_ratio_register(exact);
+    const RtlTunerDriver *driver = rtl_tuner_driver_for_profile(h->profile);
     for (size_t i = kRtlSampleRateFirst; i <= kRtlSampleRateLast; ++i) {
-        // This captured V4 sample-rate slice begins with two R828D gain writes.
-        // They must never be redirected to an E4000's register 0x05.
-        if (h->profile == RtlProfileId::E4000 &&
-            (i == kRtlSampleRateFirst || i == kRtlSampleRateFirst + 1)) {
+        if (driver != nullptr && driver->allows_sample_rate_record != nullptr &&
+            !driver->allows_sample_rate_record(i)) {
             continue;
         }
         RtlControlRecord rec = kRtlInitTransfers[i];
@@ -1537,6 +1550,25 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     return ESP_OK;
 }
 
+static bool e4000_sample_rate_record_allowed(size_t index)
+{
+    return e4000::allows_sample_rate_record(index, kRtlSampleRateFirst);
+}
+
+const RtlTunerDriver *rtl_tuner_driver_for_profile(RtlProfileId profile)
+{
+    static const RtlTunerDriver e4000_driver = {
+        "E4000",
+        0x0064,
+        e4000::kMinFrequencyHz,
+        e4000::kMaxFrequencyHz,
+        run_e4000_initialize_tuner,
+        run_e4000_tune,
+        e4000_sample_rate_record_allowed,
+    };
+    return profile == RtlProfileId::E4000 ? &e4000_driver : nullptr;
+}
+
 /**
  * Program R828D PLL for *user RF* frequency_hz.
  * Blog V4 HF (public): RF < 28.8 MHz is upconverted by 28.8 MHz before the tuner.
@@ -1545,14 +1577,20 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
 static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
                           uint32_t tuner_if_hz = 0)
 {
-    if (h != nullptr && !rtl_profile_supports_rf_hz(h->profile, frequency_hz)) {
-        ESP_LOGW(TAG, "profile %s rejects rf=%u",
-                 rtl_profile_name(h->profile), static_cast<unsigned>(frequency_hz));
-        return ESP_RTL_SDR_ERR_BAD_FREQ;
-    }
     const RtlProfileId profile = h != nullptr ? h->profile : RtlProfileId::BlogV4;
-    if (h != nullptr && profile == RtlProfileId::E4000) {
-        return run_e4000_tune(h, frequency_hz);
+    const RtlTunerDriver *driver = h != nullptr ? rtl_tuner_driver_for_profile(profile) : nullptr;
+    if (driver != nullptr && driver->tune != nullptr) {
+        if (frequency_hz < driver->min_rf_hz || frequency_hz > driver->max_rf_hz) {
+            ESP_LOGW(TAG, "tuner %s rejects rf=%u", driver->name,
+                     static_cast<unsigned>(frequency_hz));
+            return ESP_RTL_SDR_ERR_BAD_FREQ;
+        }
+        return driver->tune(h, frequency_hz);
+    }
+    if (h != nullptr && !rtl_profile_supports_rf_hz(profile, frequency_hz)) {
+        ESP_LOGW(TAG, "profile %s rejects rf=%u",
+                 rtl_profile_name(profile), static_cast<unsigned>(frequency_hz));
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
     const bool hf_direct = hf_direct_route(h, frequency_hz);
     const uint32_t tuner_base =

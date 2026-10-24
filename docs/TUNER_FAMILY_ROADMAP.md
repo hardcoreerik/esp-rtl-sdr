@@ -47,6 +47,10 @@ verified until real reception and lifecycle tests have been run on that hardware
 
 ## E4000 branch boundary
 
+A generic internal tuner-driver operations interface is now introduced and used by
+E4000 only. Existing R820/R828 profiles stay on their established legacy path;
+migrating them into the interface is a separate, regression-gated change.
+
 The initial E4000 implementation is intentionally narrow:
 
 - Recognize the Nooelec SMArTee XTR v5 descriptor or a confirmed E4000 chip ID.

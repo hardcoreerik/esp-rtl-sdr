@@ -128,7 +128,7 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 - [x] Keep the shared RTL2832U stream path separate from tuner-specific control.
 - [x] Add an experimental E4000 profile path with host-tested PLL policy.
 - [ ] Validate E4000 on an ESP32-P4 with a Nooelec SMArTee XTR v5; do not call it hardware-verified before reception and soak tests.
-- [ ] Introduce a generic internal tuner-driver interface without changing existing R820/R828 transfer sequences.
+- [x] Introduce a generic internal tuner-driver interface for new families; keep existing R820/R828 transfer sequences on the legacy path until they can be migrated with regression evidence.
 - [ ] Add FC0012, FC0013 and FC2580 tuner families from public datasheets and host-tested calculations.
 - [ ] Expand the known-device database and safely probe additional RTL2832U identities.
 - [ ] Blog V4: HF upconverter CAP, R828D input AUTO, notches

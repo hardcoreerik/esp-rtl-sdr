@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace e4000 {
@@ -16,6 +17,13 @@ enum class Band : uint8_t {
     Uhf = 2,
     L = 3,
 };
+
+constexpr bool allows_sample_rate_record(size_t index, size_t sample_rate_first)
+{
+    // The captured shared slice starts with two R828D gain writes. They are
+    // tuner-specific, not RTL2832U sample-rate programming.
+    return index != sample_rate_first && index != sample_rate_first + 1;
+}
 
 struct PllPlan {
     bool valid = false;

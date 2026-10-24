@@ -20,6 +20,20 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 
 ## Active profiles
 
+### `e4000_experimental` (Nooelec SMArTee XTR v5 / E4000) — EXPERIMENTAL; HARDWARE ACCEPTANCE PENDING
+
+| Field | Value |
+|---|---|
+| Status | **Implemented experimentally; not hardware-verified on ESP32-P4** |
+| USB | Exact `0bda:2838` + `Nooelec` / product contains `SMArTee XTR v5`; ambiguous shared-ID devices may be accepted only after the E4000 register-0x02 ID reads `0x40` |
+| Tuner | E4000 at RTL2832U control I2C value `0x64` |
+| Clock / RF | Assumes a 28.8 MHz tuner reference; published E4000 range **64 MHz–1.7 GHz** |
+| Path | Shared RTL2832U demodulator and IQ streaming; E4000-specific zero-IF tuning and RF filter selection |
+| Caps | STREAM/RETUNE and common driver services only. No tuner gain, tuner AGC, RTL AGC, tuner bandwidth, direct sampling, HF upconverter or bias tee |
+| Evidence | PLL math/profile selection have host tests. No XTR v5 ESP32-P4 capture, PLL-lock record or RF reception acceptance exists yet. See [E4000 experimental notes](E4000_EXPERIMENTAL.md). |
+
+The profile deliberately bypasses the R828D/R820-family initialization and tune tables. The E4000 tuner clock is an assumption until confirmed on hardware; high-band divider fallbacks are logged when they fall outside the datasheet's nominal VCO range.
+
 ### `blog_v4` (RTL-SDR Blog V4 / R828D) — PRIMARY
 
 | Field | Value |

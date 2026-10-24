@@ -13,11 +13,14 @@ enum class RtlProfileId : uint8_t {
     BlogV3 = ESP_RTL_SDR_PROFILE_BLOG_V3,
     NooelecSmartV5 = ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5,
     BlogV4L = ESP_RTL_SDR_PROFILE_BLOG_V4L,
+    E4000 = ESP_RTL_SDR_PROFILE_E4000,
 };
 
 struct RtlProfileProbeResult {
     bool completed = false;
     uint8_t chip_id = 0;
+    bool e4000_completed = false;
+    uint8_t e4000_id = 0;
 };
 
 /** Shared Realtek USB identity used by many RTL2832U sticks. */
@@ -84,6 +87,10 @@ inline RtlProfileId rtl_profile_from_descriptors(uint16_t vid, uint16_t pid,
         rtl_profile_text_contains(product, "NESDR SMArt v5")) {
         return RtlProfileId::NooelecSmartV5;
     }
+    if (rtl_profile_text_is(manufacturer, "Nooelec") &&
+        rtl_profile_text_contains(product, "SMArTee XTR v5")) {
+        return RtlProfileId::E4000;
+    }
     return RtlProfileId::Unknown;
 }
 
@@ -112,6 +119,10 @@ inline RtlProfileId rtl_profile_select(uint16_t vid, uint16_t pid, const char *m
         rtl_profile_v3_probe_matches(v3_probe)) {
         return RtlProfileId::BlogV3;
     }
+    if (vid == kRtlSharedVid && pid == kRtlSharedPid &&
+        v3_probe.e4000_completed && v3_probe.e4000_id == 0x40) {
+        return RtlProfileId::E4000;
+    }
     return RtlProfileId::Unknown;
 }
 
@@ -122,6 +133,7 @@ inline const char *rtl_profile_name(RtlProfileId profile)
     case RtlProfileId::BlogV3: return "blog_v3_r820t2";
     case RtlProfileId::BlogV4L: return "blog_v4l_r828s";
     case RtlProfileId::NooelecSmartV5: return "nooelec_smart_v5_r820t2";
+    case RtlProfileId::E4000: return "e4000_experimental";
     default: return "unknown";
     }
 }
@@ -143,6 +155,8 @@ inline uint16_t rtl_profile_tuner_i2c_value(RtlProfileId profile)
         return kR820T2TunerI2cValue;
     case RtlProfileId::BlogV4:
         return kBlogV4TunerI2cValue;
+    case RtlProfileId::E4000:
+        return 0x0064; // E4000 7-bit I2C address in RTL2832U control encoding.
     default:
         return 0;
     }
@@ -203,6 +217,11 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
                ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO |
                ESP_RTL_SDR_CAP_RTL_AGC | ESP_RTL_SDR_CAP_DIRECT_SAMPLING |
                ESP_RTL_SDR_CAP_TUNER_BANDWIDTH;
+    case RtlProfileId::E4000:
+        /* Experimental: tuning/stream path only; gain, AGC, bandwidth, HF and
+         * board controls remain unavailable until separately implemented. */
+        return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
+               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT;
     default:
         return 0;
     }
@@ -298,6 +317,8 @@ inline uint32_t rtl_profile_v3_direct_nco_word(uint32_t frequency_hz, int32_t pp
 inline bool rtl_profile_allows_init_record(RtlProfileId profile,
                                            const RtlControlRecord &record)
 {
+    // E4000 must never inherit the R828D/R820-family initialization table.
+    if (profile == RtlProfileId::E4000) return false;
     if (!rtl_profile_uses_r820t2_i2c_remap(profile)) {
         return true;
     }
@@ -312,6 +333,9 @@ inline bool rtl_profile_supports_rf_hz(RtlProfileId profile, uint32_t frequency_
     if (profile == RtlProfileId::NooelecSmartV5) {
         /* Manufacturer's model limits; the 60 kHz capture was exploratory. */
         return frequency_hz >= 100000u && frequency_hz <= 1750000000u;
+    }
+    if (profile == RtlProfileId::E4000) {
+        return frequency_hz >= 64000000u && frequency_hz <= 1700000000u;
     }
     if (profile == RtlProfileId::Unknown) {
         return false;
@@ -375,6 +399,9 @@ inline double rtl_profile_pll_if_offset_hz(RtlProfileId profile)
     constexpr double kMeasuredV4IfOffsetHz = 1814972.0;
     if (profile == RtlProfileId::BlogV3 || profile == RtlProfileId::NooelecSmartV5) {
         return static_cast<double>(kBlogV3DemodIfHz);
+    }
+    if (profile == RtlProfileId::E4000) {
+        return 0.0; // E4000 is configured for zero-IF operation.
     }
     return kMeasuredV4IfOffsetHz;
 }

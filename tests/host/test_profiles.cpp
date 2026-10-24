@@ -3,6 +3,7 @@
  * No USB / FreeRTOS. Pure profile + V4 frontend composition + tuner isolation.
  */
 #include "esp_rtl_sdr.h"
+#include "e4000.hpp"
 #include "gain_r820t2.hpp"
 #include "measured_gain_bias_v4.hpp"
 #include "measured_v4l_frontend.hpp"
@@ -58,6 +59,9 @@ static void test_detection_matrix(void)
     EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "Nooelec",
                                                        "NESDR SMArt v5 Bulk"),
                 (unsigned)RtlProfileId::NooelecSmartV5);
+    EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "Nooelec",
+                                                       "SMArTee XTR v5"),
+                (unsigned)RtlProfileId::E4000);
 
     /* Never treat bare / unknown 0bda:2838 as V4. */
     EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "RTL2832U", "Generic"),
@@ -81,6 +85,12 @@ static void test_unknown_reject_and_v3_probe(void)
                 (unsigned)RtlProfileId::Unknown);
     EXPECT_EQ_U((unsigned)rtl_profile_select(0x0BDA, 0x2838, "RTL2832U", "Generic",
                                              {true, 0x00}),
+                (unsigned)RtlProfileId::Unknown);
+    EXPECT_EQ_U((unsigned)rtl_profile_select(0x0BDA, 0x2838, "RTL2832U", "Generic",
+                                             {false, 0x00, true, 0x40}),
+                (unsigned)RtlProfileId::E4000);
+    EXPECT_EQ_U((unsigned)rtl_profile_select(0x0BDA, 0x2838, "RTL2832U", "Generic",
+                                             {false, 0x00, true, 0x00}),
                 (unsigned)RtlProfileId::Unknown);
     EXPECT_EQ_U((unsigned)rtl_profile_select(0x1234, 0x2838, "RTLSDRBlog", "Blog V4", {}),
                 (unsigned)RtlProfileId::Unknown);
@@ -106,7 +116,9 @@ static void test_tuner_isolation(void)
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::BlogV4), 0x0074);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::BlogV3), 0x0034);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::NooelecSmartV5), 0x0034);
+    EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::E4000), 0x0064);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::Unknown), 0);
+    EXPECT_TRUE(!rtl_profile_allows_init_record(RtlProfileId::E4000, kRtlInitTransfers[0]));
 
     /* Remap policy: only low byte of tuner IR value when index is 0x0610/0x0600. */
     RtlControlRecord v4_ir = {0x0074, 0x0610, 0x40, 2, {0x05, 0xa3}};
@@ -197,6 +209,15 @@ static void test_frequency_policy(void)
     EXPECT_TRUE(rtl_profile_uses_r820t2_i2c_remap(RtlProfileId::BlogV3));
     EXPECT_TRUE(rtl_profile_uses_r820t2_i2c_remap(RtlProfileId::NooelecSmartV5));
     EXPECT_TRUE(!rtl_profile_uses_r820t2_i2c_remap(RtlProfileId::BlogV4));
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::E4000, 64000000u));
+    EXPECT_TRUE(rtl_profile_supports_rf_hz(RtlProfileId::E4000, 1700000000u));
+    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::E4000, 63999999u));
+    EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::E4000, 1700000001u));
+    EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::E4000, 433920000u), 433920000u);
+    EXPECT_TRUE(rtl_profile_supports_stream(RtlProfileId::E4000));
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_STREAM) != 0);
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_GAIN) == 0);
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
     EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::Unknown, 100000000u));
 
     struct DirectNcoCase { uint32_t rf_hz; uint32_t nco; };
@@ -846,6 +867,39 @@ static void test_nooelec_captured_programming(void)
     }
 }
 
+static void test_e4000_pll_policy(void)
+{
+    e4000::PllPlan p{};
+    EXPECT_TRUE(!e4000::make_pll_plan(63999999u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(e4000::make_pll_plan(64000000u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(p.valid);
+    EXPECT_TRUE(p.three_phase_mixing);
+    EXPECT_TRUE(p.band == e4000::Band::Vhf2);
+    EXPECT_TRUE(e4000::make_pll_plan(100000000u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(p.vco_in_nominal_range);
+    EXPECT_EQ_U(p.rf_filter_code, 0);
+    EXPECT_EQ_U(p.bias_register, 0x0f);
+    EXPECT_TRUE(e4000::make_pll_plan(666000000u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(p.band == e4000::Band::Uhf);
+    EXPECT_TRUE(!p.three_phase_mixing);
+    EXPECT_EQ_U(p.rf_filter_code, 10);
+    EXPECT_TRUE(e4000::make_pll_plan(1575000000u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(p.band == e4000::Band::L);
+    EXPECT_EQ_U(p.rf_filter_code, 8);
+    EXPECT_EQ_U(p.bias_register, 0x0c);
+    EXPECT_TRUE(e4000::make_pll_plan(1700000000u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(p.valid);
+    EXPECT_TRUE(!e4000::make_pll_plan(1700000001u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(!e4000::make_pll_plan(100000000u, 15000000u, &p));
+    EXPECT_TRUE(e4000::make_pll_plan(433920000u, e4000::kReferenceXtalHz, &p));
+    const uint64_t reconstructed =
+        static_cast<uint64_t>(e4000::kReferenceXtalHz) * p.integer_divider +
+        (static_cast<uint64_t>(e4000::kReferenceXtalHz) * p.fractional_divider) / 65536ull;
+    const uint64_t target = static_cast<uint64_t>(p.vco_hz);
+    const uint64_t error = reconstructed > target ? reconstructed - target : target - reconstructed;
+    EXPECT_TRUE(error <= 440u);
+}
+
 int main(void)
 {
     test_detection_matrix();
@@ -864,6 +918,7 @@ int main(void)
     test_profile_transition_matrix();
     test_blog_v4l_identity();
     test_nooelec_captured_programming();
+    test_e4000_pll_policy();
     std::printf("RESULT profiles passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

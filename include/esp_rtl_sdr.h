@@ -392,6 +392,7 @@ typedef enum {
     ESP_RTL_SDR_PROFILE_BLOG_V3 = 2,          /**< Blog V3 / V3c, R820T2 (0x34 remap) */
     ESP_RTL_SDR_PROFILE_NOOELEC_SMART_V5 = 3, /**< NESDR SMArt v5 / R820-family, PC-captured */
     ESP_RTL_SDR_PROFILE_BLOG_V4L = 4,         /**< RTL-SDR Blog V4L (Lite) / R828S */
+    ESP_RTL_SDR_PROFILE_E4000 = 5,             /**< Experimental E4000 tuner; hardware acceptance pending */
 } esp_rtl_sdr_profile_t;
 
 typedef struct {

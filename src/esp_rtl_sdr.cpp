@@ -33,6 +33,7 @@
 #include "usb/usb_host.h"
 
 #include "rtl_profile.hpp"
+#include "e4000.hpp"
 #include "transfers_blog_v3.hpp"
 #include "transfers_blog_v4.hpp"
 #include "measured_gain_bias_v4.hpp"
@@ -1180,10 +1181,62 @@ static bool probe_blog_v3_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
     return rtl_profile_v3_probe_matches(*out_probe);
 }
 
+static bool probe_e4000_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
+                              RtlProfileProbeResult *out_probe)
+{
+    if (out_probe == nullptr) return false;
+    const RtlControlRecord select = {
+        0x0064, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
+    if (ctrl_submit_device(h, dev, select.request_type, 0, select.value, select.index,
+                           select.data, select.length, false) != ESP_OK) {
+        return false;
+    }
+    uint8_t chip_id = 0;
+    if (ctrl_submit_device(h, dev, 0xc0, 0, 0x0064, 0x0600, nullptr, 1, false,
+                           &chip_id, sizeof(chip_id)) != ESP_OK) {
+        return false;
+    }
+    out_probe->e4000_completed = true;
+    out_probe->e4000_id = chip_id;
+    return chip_id == 0x40;
+}
+
 static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
 {
     ESP_LOGI(TAG, "init begin profile=%s records=%u", rtl_profile_name(h->profile),
              static_cast<unsigned>(std::size(kRtlInitTransfers)));
+    if (h->profile == RtlProfileId::E4000) {
+        // Only the shared RTL2832U demodulator prefix is safe to reuse.
+        // Never replay the R828D/R820-family tuner or board-GPIO sequence.
+        for (size_t i = 0; i < kDemodBringupRecordCount; ++i) {
+            const esp_err_t e = run_record(h, kRtlInitTransfers[i], false);
+            if (e != ESP_OK) {
+                ESP_LOGE(TAG, "E4000 demod init failed record=%u result=%s",
+                         static_cast<unsigned>(i), esp_rtl_sdr_err_to_name(e));
+                return e;
+            }
+        }
+        for (const auto &rec : kBlogV3TunerRepeaterOn) {
+            const esp_err_t e = run_record(h, rec, false);
+            if (e != ESP_OK) return e;
+        }
+        const RtlControlRecord init_writes[] = {
+            {0x0064, 0x0610, 0x40, 2, {0x00, 0x02, 0, 0, 0, 0, 0, 0}}, // normal mode
+            {0x0064, 0x0610, 0x40, 2, {0x7a, 0x96, 0, 0, 0, 0, 0, 0}}, // clock output off
+            {0x0064, 0x0610, 0x40, 2, {0x1a, 0x00, 0, 0, 0, 0, 0, 0}}, // serial gain control
+            {0x0064, 0x0610, 0x40, 2, {0x29, 0x01, 0, 0, 0, 0, 0, 0}}, // DC offset calibration
+        };
+        for (const auto &rec : init_writes) {
+            const esp_err_t e = run_record(h, rec, false);
+            if (e != ESP_OK) {
+                ESP_LOGE(TAG, "E4000 init write reg=0x%02x result=%s",
+                         static_cast<unsigned>(rec.data[0]), esp_rtl_sdr_err_to_name(e));
+                return e;
+            }
+        }
+        ESP_LOGW(TAG, "E4000 profile initialized experimentally; no hardware acceptance recorded");
+        return ESP_OK;
+    }
     size_t skipped = 0;
     for (size_t i = 0; i < std::size(kRtlInitTransfers); ++i) {
         if (!rtl_profile_allows_init_record(h->profile, kRtlInitTransfers[i])) {
@@ -1392,6 +1445,73 @@ static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t rf_hz)
            rf_hz < ESP_RTL_SDR_XTAL_HZ;
 }
 
+static esp_err_t run_e4000_set_zero_if(esp_rtl_sdr_handle *h)
+{
+    // The E4000 is a zero-IF tuner; do not inherit the R828D/V3 IF settings.
+    const RtlControlRecord records[] = {
+        {0x1920, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},
+        {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
+        {0x1a20, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},
+        {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
+        {0x1b20, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},
+        {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
+    };
+    for (const auto &rec : records) {
+        const esp_err_t err = run_record(h, rec, false);
+        if (err != ESP_OK) return err;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
+{
+    if (h == nullptr || !rtl_profile_supports_rf_hz(RtlProfileId::E4000, frequency_hz)) {
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
+    }
+    const uint32_t corrected_hz = apply_freq_correction_hz(frequency_hz, h->freq_correction_ppm);
+    e4000::PllPlan plan{};
+    if (!e4000::make_pll_plan(corrected_hz, e4000::kReferenceXtalHz, &plan)) {
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
+    }
+    esp_err_t err = run_e4000_set_zero_if(h);
+    if (err != ESP_OK) return err;
+
+    const uint8_t band_bits = static_cast<uint8_t>(static_cast<uint8_t>(plan.band) << 1);
+    const uint8_t divider = static_cast<uint8_t>(
+        plan.divider_code | (plan.three_phase_mixing ? 0x08u : 0x00u));
+    const RtlControlRecord writes[] = {
+        {0x0064, 0x0610, 0x40, 2, {0x07, band_bits, 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x78, plan.bias_register, 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x10, plan.rf_filter_code, 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x0d, divider, 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x09, plan.integer_divider, 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x0a, static_cast<uint8_t>(plan.fractional_divider & 0xffu), 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x0b, static_cast<uint8_t>(plan.fractional_divider >> 8), 0, 0, 0, 0, 0, 0}},
+        {0x0064, 0x0610, 0x40, 2, {0x0e, 0x05, 0, 0, 0, 0, 0, 0}}, // auto-calibrate VCO
+    };
+    for (const auto &rec : writes) {
+        err = run_record(h, rec, false);
+        if (err != ESP_OK) return err;
+    }
+
+    h->last_pll_if_hz = 0;
+    h->last_lo_hz = corrected_hz;
+    if (!plan.vco_in_nominal_range) {
+        RTL_LOGW(h, "E4000 RF=%u Hz uses provisional VCO=%u Hz outside nominal 2.6-3.9 GHz window",
+                 static_cast<unsigned>(frequency_hz), static_cast<unsigned>(plan.vco_hz));
+    }
+    RTL_LOGI(h, "E4000 tune rf=%u corrected=%u band=%u div=%u phase3=%u "
+                "z=%u x=%u rf_filter=%u vco=%u nominal=%u",
+             static_cast<unsigned>(frequency_hz), static_cast<unsigned>(corrected_hz),
+             static_cast<unsigned>(plan.band), static_cast<unsigned>(plan.divider_code),
+             plan.three_phase_mixing ? 1u : 0u,
+             static_cast<unsigned>(plan.integer_divider),
+             static_cast<unsigned>(plan.fractional_divider),
+             static_cast<unsigned>(plan.rf_filter_code), static_cast<unsigned>(plan.vco_hz),
+             plan.vco_in_nominal_range ? 1u : 0u);
+    return ESP_OK;
+}
+
 /**
  * Program R828D PLL for *user RF* frequency_hz.
  * Blog V4 HF (public): RF < 28.8 MHz is upconverted by 28.8 MHz before the tuner.
@@ -1406,6 +1526,9 @@ static esp_err_t run_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz,
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
     const RtlProfileId profile = h != nullptr ? h->profile : RtlProfileId::BlogV4;
+    if (h != nullptr && profile == RtlProfileId::E4000) {
+        return run_e4000_tune(h, frequency_hz);
+    }
     const bool hf_direct = hf_direct_route(h, frequency_hz);
     const uint32_t tuner_base =
         rtl_profile_tuner_frequency_hz(profile, frequency_hz, hf_direct);
@@ -2908,6 +3031,10 @@ static RtlProfileId identify_profile(esp_rtl_sdr_handle *h, usb_device_handle_t 
         /* ctrl_submit_device pumps client events when probing from client_task. */
         (void)probe_blog_v3_tuner(h, dev, &probe);
         profile = rtl_profile_select(dd->idVendor, dd->idProduct, mfg, prod, probe);
+        if (profile == RtlProfileId::Unknown) {
+            (void)probe_e4000_tuner(h, dev, &probe);
+            profile = rtl_profile_select(dd->idVendor, dd->idProduct, mfg, prod, probe);
+        }
     }
     if (profile == RtlProfileId::Unknown) {
         return RtlProfileId::Unknown;

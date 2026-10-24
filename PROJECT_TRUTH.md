@@ -8,6 +8,10 @@ claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-10-29**
 Version: **0.9.3** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, plus bounded standalone Waveshare V4+V3/R820T2 hardware verification on 2026-10-29; universal reentry/hotplug qualification remains open. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec is implemented, not experimental; standalone Tab5 streaming/control checks passed on 2026-10-29. Per-band RF/calibration qualification remains separate. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
+This branch adds an **experimental E4000 profile**; XTR v5 physical acceptance remains pending.
+
+This branch adds an **experimental E4000 profile**; XTR v5 physical acceptance remains pending.
+
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -69,7 +73,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Area | State | Boundary |
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
-| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 is implemented and passed standalone Tab5 streaming/control smoke on 2026-10-29; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional** |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 is implemented and passed standalone Tab5 streaming/control smoke on 2026-10-29; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional**; E4000 streaming is not hardware-verified |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225001–300000 ∪ 900001–3.2M. quantize mirrors resampler bit 27 into bit 28 before reporting Hz (low band was ~2×; #24) |
@@ -79,6 +83,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | ESP-IDF P4 compile CI | **Implemented** | `examples/p4_serial_smoke` idf.py build esp32p4 |
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
+| E4000 profile | **Experimental implementation / hardware acceptance pending** | Host-tested PLL math and profile selection; Nooelec SMArTee XTR v5 has not been tested on ESP32-P4. Tuning assumes 28.8 MHz reference and uses zero-IF. Gain, AGC, bandwidth, bias tee, direct sampling and HF upconverter are not exposed. |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
 | Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; P4 re-soak open |

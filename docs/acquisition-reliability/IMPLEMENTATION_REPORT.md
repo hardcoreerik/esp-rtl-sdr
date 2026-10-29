@@ -25,7 +25,7 @@ review is claimed.
 
 COM8 currently runs a serial-only test program, so the Hosyond display is blank.
 Its original factory application and partition table remain backed up locally.
-COM39 remains under the user's no-flash restriction. Neither board's original
+At this delivery point COM39 was under the user's no-flash restriction. Neither board's original
 application has been restored. Recovery backups and raw hardware logs are
 local ignored artifacts, not committed release deliverables.
 
@@ -164,3 +164,6 @@ The test ran on COM8 only; COM39 was not flashed during this final work.
 All implementation work selected for this session and available automated/
 hardware checks are delivered. Independent review and the explicitly listed
 physical/calibration qualification gates remain outstanding.
+## Subsequent reauthorized COM39 regression pass
+
+The user subsequently authorized COM39 flashing/testing. Latest driver smoke passed on Tab5/Nooelec under IDF5.5.4 (default46/46 and acquisition48/48) and IDF6.1 (acquisition48/48). Quiet-window throughput matched the baseline with zero window drops/overruns. IDF6.1 had a smaller automatic pull ring (139264 versus245760 bytes); its buffering margin needs further qualification. COM39 now retains the serial-only IDF6.1 acquisition image. Full commands, hashes and scope: [COM39 regression report](COM39_REGRESSION_2026-10-29.md). No runtime source changes were made in this pass.

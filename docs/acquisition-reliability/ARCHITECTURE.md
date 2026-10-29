@@ -1,6 +1,6 @@
 # Acquisition reliability architecture and approved design
 
-Base: b283029dd0257ec207d5e94db3730077c40a23de. User approved the staged scope and delegated API design on 2026-10-29. COM39 is the designated Tab5 and is now under a no-flash hold. The Waveshare P4-Module-DEV-KIT with 7-inch Hosyond display is authorized on COM8; its built-in hub currently connects V4 and V3/R820T2-profile devices.
+Base: b283029dd0257ec207d5e94db3730077c40a23de. User approved the staged scope and delegated API design on 2026-10-29. COM39 is the designated Tab5; the user subsequently reauthorized flashing for regression tests. The Waveshare P4-Module-DEV-KIT with 7-inch Hosyond display is authorized on COM8; its built-in hub currently connects V4 and V3/R820T2-profile devices.
 
 ## Contract
 

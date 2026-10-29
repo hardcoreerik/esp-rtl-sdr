@@ -26,7 +26,7 @@ Physical records are retained under ignored `build/phase2-evidence`:
 | Waveshare COM8, V4 alone | 46 passed, 1 skipped |
 | Waveshare COM8, V4 + V3/R820T2 | Initial 60-second shared-host run passed; independent rates, retune/restart/release |
 
-COM39 is under an explicit no-flash hold. COM8 is authorized. Application and
+COM39 was subsequently reauthorized for regression flashing/testing. COM8 is authorized. Application and
 partition backups precede application-only writes; no credential partitions
 were extracted. Final refinement runs must be recorded separately from prototypes.
 
@@ -51,3 +51,11 @@ Both reported zero metadata invariant and USB errors. Retune, rate restart,
 peer release and final cleanup returned ESP_OK. This crosses 4 GiB on receiver1;
 it does not claim an entirely lossless stream. Exact hashes/configuration and
 UTC capture bounds are in IMPLEMENTATION_REPORT.md.
+
+Subsequent reauthorized COM39 regression pass: IDF5.5.4 default46/46,
+IDF5.5.4 acquisition48/48 and IDF6.1 acquisition48/48 passed, all hardware RUN.
+All reproduced the baseline8sec window15351808bytes/959488sps with zero overrun,
+drop or short counts. Both acquisition runs had zero read/callback metadata
+errors. IDF6.1 allocated a smaller auto ring139264bytes versus245760 in5.5.4;
+reduced buffering margin is an outstanding SDK-upgrade qualification item.
+See [COM39 report](COM39_REGRESSION_2026-10-29.md).

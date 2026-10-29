@@ -243,3 +243,9 @@ This does not claim calibrated gain, every RF band or every host configuration.
 See `docs/acquisition-reliability/IMPLEMENTATION_REPORT.md` for exact scope.
 
 Standalone acquisition refinement: Waveshare V4 + V3/R820T2 completed 900003ms with zero metadata/USB errors and successful final cleanup. The continuous 2.4-MS/s receiver crossed 4GiB (4320247806 delivered bytes); one known lost pair was reported. Retune/restart/peer-release passed. No lossless or physical RF clock/coherence claim. Details: [implementation report](docs/acquisition-reliability/IMPLEMENTATION_REPORT.md).
+
+Subsequent reauthorized Tab5/Nooelec regression check: latest IDF5.5.4 default
+46/46 and acquisition48/48; IDF6.1 acquisition48/48. All reproduced baseline
+960kS/s quiet-window throughput with zero drops/overruns. IDF6.1's auto ring was
+smaller (139264 versus245760bytes), so buffering-margin qualification remains.
+[Exact regression evidence](docs/acquisition-reliability/COM39_REGRESSION_2026-10-29.md).

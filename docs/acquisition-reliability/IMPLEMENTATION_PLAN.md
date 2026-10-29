@@ -9,7 +9,7 @@ Spec: ARCHITECTURE.md and the user's approved Phase 2 request.
 
 ## Global constraints
 
-No master merge, version/tag/release, customer repo changes, copied tuner code, network/decoder dependency, per-sample allocation or hardware claims without logs. COM39 is under a no-flash hold. Waveshare COM8 is authorized. Retain original firmware recovery artifacts without extracting credentials.
+No master merge, version/tag/release, customer repo changes, copied tuner code, network/decoder dependency, per-sample allocation or hardware claims without logs. COM39 was subsequently reauthorized for regression flashing/testing. Waveshare COM8 is authorized. Retain original firmware recovery artifacts without extracting credentials.
 
 ## Review focus
 

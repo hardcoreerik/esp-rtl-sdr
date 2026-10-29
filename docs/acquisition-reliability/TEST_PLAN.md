@@ -43,3 +43,11 @@ ctest --test-dir build/host-asan -R "acquisition|recovery" --output-on-failure
 ```
 Result: 5/5 selected suites passed with AddressSanitizer/UndefinedBehaviorSanitizer.
 Truth hygiene: `bash tests/scripts/check_truth_hygiene.sh` passed for 0.9.3.
+
+Final COM8 refinement runs: 60-second PASS and 900,003-ms PASS. Final long run
+V4 receiver0: 1,324,711,936 delivered bytes / 80,854 spans, zero known loss;
+V3/R820T2 receiver1: 4,320,247,806 bytes / 263,687 spans, one known lost pair.
+Both reported zero metadata invariant and USB errors. Retune, rate restart,
+peer release and final cleanup returned ESP_OK. This crosses 4 GiB on receiver1;
+it does not claim an entirely lossless stream. Exact hashes/configuration and
+UTC capture bounds are in IMPLEMENTATION_REPORT.md.

@@ -27,3 +27,10 @@ Final host run (Linux Release, 20,000 blocks of 16,384 bytes): copy baseline
 full-scan quality 22,417.4. One run, not a statistical confidence interval.
 Metadata is 152 bytes; host sidecar64 is 10,256 bytes. These numbers demonstrate
 relative work only and are not microcontroller performance predictions.
+
+Final 15-minute Waveshare run: continuous 2.4-MS/s receiver reported
+4,320,247,808 observed bytes and 4,320,247,806 delivered at the final snapshot,
+with one known lost pair and no USB errors. Peer retune/restart/release did not
+change its epoch. This setup differs from the initial single-device Tab5
+baseline; it cannot isolate the CPU cost of metadata. No target CPU utilization
+or calibrated RF clock measurement was made.

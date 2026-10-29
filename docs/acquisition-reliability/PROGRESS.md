@@ -1,0 +1,17 @@
+# Progress — docs/acquisition-reliability/IMPLEMENTATION_PLAN.md
+
+Base b283029dd0257ec207d5e94db3730077c40a23de; branch feature/decoder-grade-acquisition-20261029.
+Task 1: complete for available initial Tab5 baseline. Existing 14/14 host suites pass. COM39 P4 rev1.3, 16MB flash; original OrcSDR factory application saved without NVS access. Original partition table retained. Baseline app-only flash and physical smoke PASS 45/45 on COM39 with Nooelec SMArt v5; eight-second window 15351808 bytes, 959488 sps, zero window overruns/drops. Later undrained transitions accumulated drops; no overall zero-loss claim. Enumeration/late-attachment gate remains open.
+Ruling: implement inline and review the final branch once; no repeated design approval needed after user delegated API choices.
+
+Task 2: in progress. New public opt-in acquisition header, epoch/cursor/sidecar core and driver integration added. Host model and actual producer/read IO harness pass; partial reads retain old RF metadata and expose known ring loss. Quality and caller-supplied clock estimate tests pass. First default-path 5.5.4 compile passed; opt-in hardware build in progress.
+Hardware: Waveshare is COM8 (corrected from COM6), P4 rev1.3, V4 reported by user. Original 7 MiB factory application and partition layout preserved; original app is orcsdr_p4_hosyond_console, IDF5.5.4-dirty. No NVS access. Port6 has not been opened.
+Ruling: preserve queued acquisition spans across stop/restart; read_ex can drain stopped captured data, while legacy read retains its streaming-state check. Configuration becomes immutable before first submission to avoid attaching metadata to already queued legacy blocks.
+Ruling: defer an additional reliability-assessment API; existing passport/health/window metrics plus exact sample metadata cover the measurements without redundant counters. Document an evidence-scoped integration recipe.
+
+User restriction: no further COM39 flashing unless explicitly reauthorized. Current device retains the first opt-in 5.5.4 metadata prototype (144-byte metadata), 48/48 smoke PASS, 965 read spans and 1400 callbacks with zero invariant errors; 8-second window again 15351808 bytes, 959488 sps, zero window overruns/drops. Subsequent header/rate-precision refinements are NOT hardware-verified on COM39. Continue host/build work and authorized COM8 testing only. No pending command will flash COM39.
+S31 generic C probe build succeeded with installed IDF v6.1 and USB1.6.0; no S31 hardware present. Current actual IO and C consumer tests pass; Linux 18/18 plus 7990 Nooelec trace checks passed before the latest small metadata refinement.
+
+2026-10-29 final refinement: Windows/Linux 19/19 suites and 7,990 Nooelec trace checks passed. FIFO reset, recovery drain failure and C ABI checks included. Nooelec SMArt v5 is Implemented per user direction, not experimental/provisional. Calibration is separate.
+COM8 final short probe: V4 + V3/R820T2, 960 kS/s and 2.4 MS/s, 60 seconds, PASS failures=0. Receiver1 reported one known lost pair (2 ring bytes); no metadata invariant or USB errors. This is not a lossless claim. Retune/restart/release of receiver0 succeeded; receiver1 continued.
+The Hosyond display is blank because the probe does not initialize a display. User reported this and asked to continue; explained serial-only behavior. Original application remains backed up. Long 900,000-ms COM8 run started; results pending. Independent reviewer could not run due account usage limit, so independent review remains open.

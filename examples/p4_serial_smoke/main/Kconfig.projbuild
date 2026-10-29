@@ -24,6 +24,10 @@ choice ESP_RTL_SDR_SMOKE_URB
         bool "3 x 32 KiB (OrcSDR-like)"
 endchoice
 
+config ESP_RTL_SDR_SMOKE_ACQUISITION
+    bool "Validate opt-in acquisition metadata and sparse I/Q quality"
+    default n
+
 config ESP_RTL_SDR_SMOKE_SOAK_MS
     int "Quiet soak duration (ms)"
     default 8000

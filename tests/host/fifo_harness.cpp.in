@@ -1,0 +1,25 @@
+#include "esp_rtl_sdr.h"
+#include "transfers_blog_v4.hpp"
+#include <cstdio>
+#include <iterator>
+#include <vector>
+struct esp_rtl_sdr_handle { void *acquisition=nullptr; };
+static std::vector<RtlControlRecord> wire;
+static esp_err_t injected=ESP_OK;
+static esp_err_t run_records(esp_rtl_sdr_handle *,const RtlControlRecord *records,size_t count) {
+    wire.assign(records,records+count);return injected;
+}
+static esp_err_t run_acquisition_fifo_reset(esp_rtl_sdr_handle *);
+// ACTUAL_FIFO_RESET
+int main() {
+    esp_rtl_sdr_handle h;
+    if (run_acquisition_fifo_reset(&h)!=ESP_OK || !wire.empty()) return 1;
+    h.acquisition=reinterpret_cast<void *>(1);
+    if (run_acquisition_fifo_reset(&h)!=ESP_OK || wire.size()!=2) return 1;
+    if (wire[0].value!=0x2148 || wire[0].index!=0x0110 || wire[0].length!=2 ||
+        wire[0].data[0]!=0x10 || wire[0].data[1]!=0x02 ||
+        wire[1].value!=0x2148 || wire[1].data[0]!=0 || wire[1].data[1]!=0) return 1;
+    injected=ESP_ERR_TIMEOUT;
+    if (run_acquisition_fifo_reset(&h)!=ESP_ERR_TIMEOUT) return 1;
+    std::puts("capture-derived FIFO reset ordering and failure propagation passed");return 0;
+}

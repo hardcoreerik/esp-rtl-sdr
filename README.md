@@ -7,7 +7,7 @@
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
-**Not a librtlsdr port.** Clean-room Blog V4 USB profile · PC-captured Nooelec SMArt v5 (P4 acceptance pending) · provisional Blog V3 stream · stand-alone ESP-IDF component · fail-closed lifecycle
+**Not a librtlsdr port.** Clean-room Blog V4 USB profile · Implemented Nooelec SMArt v5 profile · provisional Blog V3 stream · stand-alone ESP-IDF component · fail-closed lifecycle
 
 **Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.9.3**, pre-1.0 — early, public, honest. See the [0.9.3 release notes](docs/releases/v0.9.3.md) for the capture-derived Nooelec profile and its remaining hardware acceptance checks.
 
@@ -69,7 +69,7 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | Item | Notes |
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.9.x** also supports the **Blog V4L** (R828S; 28.8 MHz HF upconverter, optional direct route for 24-28.8 MHz) and **Blog V3/V3c** (R820T2 `0x34` remap; direct-Q HF). This branch implements **Nooelec NESDR SMArt v5** from [first-party 2026-09-30 captures](docs/captures/nooelec_v5_2026-09-30.md), with P4 acceptance pending. Bare `0bda:2838` is never assumed V4. |
+| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.9.x** also supports the **Blog V4L** (R828S; 28.8 MHz HF upconverter, optional direct route for 24-28.8 MHz) and **Blog V3/V3c** (R820T2 `0x34` remap; direct-Q HF). This branch implements **Nooelec NESDR SMArt v5** from [first-party 2026-09-30 captures](docs/captures/nooelec_v5_2026-09-30.md), with standalone Tab5 streaming/control verification. RF calibration remains a separate gate. Bare `0bda:2838` is never assumed V4. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 

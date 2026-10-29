@@ -23,6 +23,7 @@ static int alloc_bulk_pool(esp_rtl_sdr_handle *, uint32_t num, uint32_t len) {
     if (bytes > internal_free) return ESP_ERR_NO_MEM;
     internal_free -= bytes; return ESP_OK;
 }
+static int ensure_acquisition(esp_rtl_sdr_handle *) { return ESP_OK; }
 static int ensure_ring(esp_rtl_sdr_handle *, size_t len) {
     ++iq_calls; Heap heap;
     return heap.psram(6*len) || heap.internal(6*len) ? ESP_OK : ESP_ERR_NO_MEM;
@@ -54,7 +55,7 @@ int main() {
     CHECK(allocate_start(&h) == ESP_OK && pool_calls == 1 && iq_calls == 1 && pull_calls == 1);
     CHECK(internal_free >= 32768);
     h.cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_READ;
-    reset(300*1024, 0); CHECK(allocate_start(&h) == ESP_OK);
+    reset(220*1024, 0); CHECK(allocate_start(&h) == ESP_OK && iq_calls == 0 && pull_calls == 1);
     h.cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_CALLBACK;
     reset(200*1024, 0); CHECK(allocate_start(&h) == ESP_OK && pull_calls == 0);
     h.cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_BOTH;

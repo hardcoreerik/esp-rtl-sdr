@@ -197,7 +197,7 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
                ESP_RTL_SDR_CAP_HF_UPCONVERTER | ESP_RTL_SDR_CAP_TUNER_BANDWIDTH;
     case RtlProfileId::NooelecSmartV5:
         /* First-party PC captures, 2026-09-30. Q bypasses tuner controls;
-         * this board has no bias tee or V4 HF upconverter. P4 acceptance open. */
+         * this implemented profile has no bias tee or V4 HF upconverter. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
                ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_GAIN_AUTO |

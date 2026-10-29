@@ -1,0 +1,46 @@
+# Decoder-grade acquisition implementation plan
+
+> For agentic workers: use superpowers:executing-plans inline; one focused branch review at the end.
+
+Goal: optional byte-associated integrity metadata and truthful timing/quality diagnostics for independent applications.
+Architecture: per-handle epoch/timeline plus bounded metadata sidecar; existing APIs/default paths preserved.
+Tech stack: C++17, C API, ESP-IDF 5.5.4 and 6.1, CMake/CTest on Windows and Linux.
+Spec: ARCHITECTURE.md and the user's approved Phase 2 request.
+
+## Global constraints
+
+No master merge, version/tag/release, customer repo changes, copied tuner code, network/decoder dependency, per-sample allocation or hardware claims without logs. COM39 is under a no-flash hold. Waveshare COM8 is authorized. Retain original firmware recovery artifacts without extracting credentials.
+
+## Review focus
+
+Old queued bytes after retune; partial read boundaries; independent receiver loss counters; metadata exhaustion without payload overwrite; failed controls and asynchronous coalescing.
+
+## Task 1: Baseline and safety
+
+- [ ] Verify branch/base, existing tests/builds and physical COM39 identity; preserve application/partition recovery artifacts.
+- [ ] Run existing smoke on COM39 and investigate failures before new acquisition code.
+- [ ] Record unresolved enumeration/SDK gates honestly.
+
+## Task 2: Integrity model and APIs
+
+Files: include/esp_rtl_sdr.h, private/rtl_acquisition.hpp, tests/host/test_acquisition.cpp, tests/host/CMakeLists.txt, API_DESIGN.md.
+Interfaces: versioned acquisition config and metadata; configure_acquisition(handle, config); read_ex(handle, bytes, capacity, timeout, out_bytes, metadata); new borrowed extended IQ event.
+- [ ] Write failing host tests for epochs, known/unknown loss, independent receivers, wrap, bounded descriptors and partial reads.
+- [ ] Implement and verify pure acquisition/descriptor logic.
+- [ ] Integrate completion snapshots, control/start boundaries, callback slots and the opt-in pull sidecar; verify actual runtime with fault-injected platform calls.
+- [ ] Verify C and existing C++ API consumers; commit with docs and measured memory cost.
+
+## Task 3: Timing, quality and assessment
+
+Files: private/rtl_acquisition.hpp, src/esp_rtl_sdr.cpp, public API, focused host tests, PERFORMANCE_REPORT.md.
+- [ ] Test requested/programmed/unknown physical rates and integer I/Q quality against generated buffers.
+- [ ] Implement optional measurements and an evidence-scoped reliability assessment without duplicating existing health/passport counters.
+- [ ] Benchmark identical synthetic workloads before/after; run builds and physical metadata smoke; commit.
+
+## Task 4: Multi-device, portability and delivery
+
+Files: customer-neutral smoke/harness, HARDWARE_PORTABILITY.md, TEST_PLAN.md, CUSTOMER_INTEGRATION_GUIDE.md, IMPLEMENTATION_REPORT.md, PROJECT_TRUTH.md.
+- [ ] Test independently identified handles, different rates, loss/retune/restart/disconnect isolation and resource exhaustion.
+- [ ] Verify official P4/S31/S2/S3 capabilities and installed target/toolchain support; compile only justified targets and label evidence separately.
+- [ ] Execute available physical tests/soaks with per-receiver records; retain NOT RUN for unavailable setups.
+- [ ] Complete documentation and final focused review; commit coherent changes and push only the feature branch.

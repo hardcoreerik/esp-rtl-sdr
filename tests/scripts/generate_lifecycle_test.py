@@ -207,3 +207,21 @@ allocation_end = source.index("        if (handle->delivery_task == nullptr)", a
 template = (root / "tests/host/start_alloc_harness.cpp.in").read_text()
 Path(sys.argv[1]).with_name("test_actual_start_alloc.cpp").write_text(
     template.replace("// ACTUAL_START_ALLOCATIONS", source[allocation_start:allocation_end]))
+
+template = (root / "tests/host/acquisition_io_harness.cpp.in").read_text()
+functions = [function(source, name) for name in ["static size_t pull_ring_used(",
+    "static size_t pull_ring_space(", "static esp_err_t acquisition_read(",
+    "esp_err_t esp_rtl_sdr_configure_acquisition(", "esp_err_t esp_rtl_sdr_read_ex("]]
+# Skip the producer's forward declaration.
+producer_start = source.index("static void pull_ring_push(", source.index("static size_t pull_ring_space("))
+functions.insert(2, function(source[producer_start:], "static void pull_ring_push("))
+Path(sys.argv[1]).with_name("test_actual_acquisition_io.cpp").write_text(
+    template.replace("// ACTUAL_IO_FUNCTIONS", "\n".join(functions)))
+
+template = (root / "tests/host/recovery_harness.cpp.in").read_text()
+Path(sys.argv[1]).with_name("test_actual_recovery.cpp").write_text(
+    template.replace("// ACTUAL_RECOVERY", function(source, "static void bulk_recover_stall(")))
+
+template = (root / "tests/host/fifo_harness.cpp.in").read_text()
+reset = function(source, "static esp_err_t run_acquisition_fifo_reset(") if "static esp_err_t run_acquisition_fifo_reset(" in source else ""
+Path(sys.argv[1]).with_name("test_actual_fifo.cpp").write_text(template.replace("// ACTUAL_FIFO_RESET", reset))

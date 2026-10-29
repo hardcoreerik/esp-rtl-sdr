@@ -1,0 +1,106 @@
+#include "rtl_acquisition.hpp"
+#include <cstring>
+#include <cstdio>
+#include <thread>
+#define pdTRUE 1
+#define pdMS_TO_TICKS(x) (x)
+using TickType_t = unsigned;
+using SemaphoreHandle_t = void *;
+struct AcquisitionRuntime { rtl_acq::Sidecar<2> sidecar; rtl_acq::Cursor read_cursor; uint32_t pull_pending_causes=0; uint64_t metadata_drop_bytes=0; };
+struct esp_rtl_sdr_handle {
+    uint8_t *pull_buf; size_t pull_cap;
+    std::atomic<size_t> pull_w{0}, pull_r{0};
+    void *pull_mux = reinterpret_cast<void *>(1), *pull_sem = nullptr;
+    bool streaming = true;
+    AcquisitionRuntime *acquisition;
+    esp_rtl_sdr_acquisition_config_t acquisition_config{};
+    bool acquisition_configuration_locked = false;
+    esp_rtl_sdr_state_t state = ESP_RTL_SDR_STATE_IDLE;
+    struct { esp_rtl_sdr_delivery_mode_t delivery_mode = ESP_RTL_SDR_DELIVERY_READ; } cfg;
+    struct { uint32_t consumer_drops=0, ring_overrun_blocks=0, ring_high_water=0;
+             uint64_t ring_overrun_bytes=0, bytes_consumed=0; } metrics;
+};
+static unsigned ticks;
+static unsigned xTaskGetTickCount() { return ticks; }
+static void vTaskDelay(unsigned n) { ticks+=n; }
+static int xSemaphoreTake(void *, unsigned n) { ticks+=n; return pdTRUE; }
+static void xSemaphoreGive(void *) {}
+static bool handle_ok(esp_rtl_sdr_handle *h) { return h!=nullptr; }
+struct HandleLock { explicit HandleLock(esp_rtl_sdr_handle *) {} bool ok() { return true; } };
+static esp_err_t check_not_reentrant(esp_rtl_sdr_handle *) { return ESP_OK; }
+// ACTUAL_IO_FUNCTIONS
+static int checks;
+#define CHECK(x) do { ++checks; if (!(x)) { std::printf("FAIL %d: %s\n", __LINE__, #x); return 1; } } while(0)
+int main() {
+    esp_rtl_sdr_handle configuration{};
+    esp_rtl_sdr_acquisition_config_t config;
+    esp_rtl_sdr_acquisition_config_default(&config);config.enabled=true;
+    CHECK(esp_rtl_sdr_configure_acquisition(&configuration,&config)==ESP_OK);
+    config.quality_stride_pairs=257;
+    CHECK(esp_rtl_sdr_configure_acquisition(&configuration,&config)==ESP_ERR_INVALID_ARG);
+    config.quality_stride_pairs=64;configuration.acquisition_configuration_locked=true;
+    CHECK(esp_rtl_sdr_configure_acquisition(&configuration,&config)==ESP_ERR_INVALID_STATE);
+    uint8_t storage[16]{}, out[20]{};
+    const uint8_t first[]={0,1,2,3,4,5,6,7}, second[]={8,9,10,11,12,13,14,15};
+    AcquisitionRuntime runtime;
+    esp_rtl_sdr_handle h{}; h.pull_buf=storage;h.pull_cap=sizeof(storage);h.acquisition=&runtime;
+    rtl_acq::Timeline timeline;
+    CHECK(timeline.begin(1,100000000,960000,960000,0,ESP_RTL_SDR_ACQ_START));
+    auto m=timeline.observe(8,10); pull_ring_push(&h,first,8,&m);
+    CHECK(timeline.begin(1,137100000,2400000,2399999,0,ESP_RTL_SDR_ACQ_RETUNE));
+    m=timeline.observe(8,20);pull_ring_push(&h,second,8,&m); // only six bytes fit
+    CHECK(h.metrics.ring_overrun_bytes==2 && h.metrics.ring_overrun_blocks==1);
+    esp_rtl_sdr_sample_meta_t meta{};size_t n=0;
+    esp_rtl_sdr_sample_meta_default(&meta);
+    CHECK(esp_rtl_sdr_read_ex(&h,out,2,0,&n,&meta)==ESP_OK && n==2 && out[0]==0 && meta.epoch==1);
+    CHECK(meta.sample_index==0 && meta.center_frequency_hz==100000000);
+    CHECK(acquisition_read(&h,out,20,0,&n,&meta)==ESP_OK && n==6 && out[0]==2 && meta.sample_index==1);
+    CHECK(meta.known_lost_samples==0 && !(meta.flags & ESP_RTL_SDR_ACQ_EPOCH_START));
+    CHECK(acquisition_read(&h,out,20,0,&n,&meta)==ESP_OK && n==6 && out[0]==8 && meta.epoch==2);
+    CHECK(meta.center_frequency_hz==137100000 && meta.requested_rate_sps==2400000 && meta.programmed_rate_sps==2399999);
+    m=timeline.observe(8,30);pull_ring_push(&h,first,8,&m);
+    CHECK(acquisition_read(&h,out,20,0,&n,&meta)==ESP_OK && n==8 && meta.sample_index==4 && meta.known_lost_samples==1);
+    CHECK(std::memcmp(first,out,8)==0);
+    // Same byte storage is used by legacy reads; draining it must also retire descriptors.
+    m=timeline.observe(4,40);pull_ring_push(&h,first,4,&m);
+    CHECK(acquisition_read(&h,out,4,0,&n,nullptr)==ESP_OK && n==4);
+    m=timeline.observe(4,50);pull_ring_push(&h,second,4,&m);
+    h.streaming=false; // extended reads may drain already captured data after stop
+    CHECK(acquisition_read(&h,out,4,0,&n,&meta)==ESP_OK && out[0]==8 && meta.sample_index==10);
+    CHECK(acquisition_read(&h,out,4,0,&n,&meta)==ESP_RTL_SDR_ERR_NOT_STREAMING);
+    // Actual producer/read functions on independent threads: every returned pair
+    // must match its descriptor index, including wrap and pressure-induced gaps.
+    uint8_t concurrent_storage[128]{};
+    AcquisitionRuntime concurrent_runtime;
+    esp_rtl_sdr_handle concurrent{};
+    concurrent.pull_buf=concurrent_storage;concurrent.pull_cap=sizeof(concurrent_storage);
+    concurrent.acquisition=&concurrent_runtime;
+    std::atomic<bool> done{false};
+    std::thread producer([&] {
+        rtl_acq::Timeline t;t.begin(42,99100000,2400000,2400000,0,ESP_RTL_SDR_ACQ_START);
+        for (unsigned block=0;block<20000;++block) {
+            uint8_t bytes[14]; auto observed=t.observe(sizeof(bytes),block+1);
+            for (unsigned pair=0;pair<7;++pair) {
+                const auto index=observed.sample_index+pair;
+                bytes[2*pair]=static_cast<uint8_t>(index);bytes[2*pair+1]=static_cast<uint8_t>(index>>8);
+            }
+            pull_ring_push(&concurrent,bytes,sizeof(bytes),&observed);
+            if (!(block%8)) std::this_thread::yield();
+        }
+        done.store(true,std::memory_order_release);
+    });
+    unsigned corruption=0, received=0;uint64_t expected_end=0;
+    while (!done.load(std::memory_order_acquire) || pull_ring_used(&concurrent)) {
+        esp_rtl_sdr_sample_meta_t observed{};size_t copied=0;
+        if (acquisition_read(&concurrent,out,6,0,&copied,&observed)!=ESP_OK) { std::this_thread::yield();continue; }
+        if (observed.known_lost_samples!=observed.sample_index-expected_end || observed.receiver_id!=42) ++corruption;
+        for (size_t pair=0;pair<copied/2;++pair) {
+            const auto index=observed.sample_index+pair;
+            if (out[2*pair]!=static_cast<uint8_t>(index) || out[2*pair+1]!=static_cast<uint8_t>(index>>8)) ++corruption;
+        }
+        expected_end=observed.sample_index+copied/2;++received;
+    }
+    producer.join();
+    CHECK(received>0 && corruption==0);
+    std::printf("actual acquisition IO checks=%d\n",checks); return 0;
+}

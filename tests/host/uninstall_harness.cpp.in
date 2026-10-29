@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <cstdlib>
 #include "esp_err.h"
 #ifdef _MSC_VER
 // Platform atomic read shim; concurrency is not simulated by this harness.
@@ -15,6 +16,7 @@
 #define ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS 1000
 #define ESP_RTL_SDR_STATE_UNINSTALLED 0
 #define RTL_LOGE(...) ((void)0)
+#define RTL_LOGI(...) ((void)0)
 #define pdMS_TO_TICKS(x) (x)
 #define pdTRUE 1
 using TickType_t = unsigned;
@@ -25,7 +27,9 @@ static int destroyed, deregistered, released, freed;
 static int stop_result, deregister_result, release_result;
 static bool stall_workers, lock_ok = true;
 static unsigned ticks;
+struct AcquisitionRuntime { uint64_t metadata_drop_bytes=0; };
 struct esp_rtl_sdr_handle {
+    AcquisitionRuntime *acquisition = nullptr;
     unsigned magic = kHandleMagic;
     void *lock = reinterpret_cast<void *>(1);
     bool destroying = false, uninstall_active = false, tasks_run = true, client_registered = true;

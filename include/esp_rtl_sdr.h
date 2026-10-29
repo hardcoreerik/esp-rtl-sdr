@@ -823,8 +823,9 @@ bool esp_rtl_sdr_delivery_mode_uses_read(esp_rtl_sdr_delivery_mode_t mode);
 
 /**
  * Create handle and prepare USB client registration path.
- * On success *out_handle is non-NULL. On failure *out_handle is NULL
- * (always cleared first when out_handle is non-NULL).
+ * On success *out_handle is non-NULL. Cleared first on entry. On failure it
+ * normally remains NULL; if partial initialization cannot safely unwind,
+ * returns a non-NULL cleanup-only handle. Retain it and retry uninstall.
  *
  * Does not require a dongle present. Device attach is reported via events
  * as devices attach and detach.
@@ -838,9 +839,13 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
 
 /**
  * Destroy handle. Safe to call with NULL (returns ESP_OK).
- * If streaming, performs stop first (best effort).
- * Always releases resources. Second call on the same pointer after destroy
- * returns STALE_HANDLE (use-after-free is still undefined — do not retain).
+ * If streaming, drains transfers before joining workers and releasing USB.
+ * ESP_OK destroys the handle. On failure resources are retained; keep the
+ * pointer and retry uninstall from its owner task (other APIs are disabled).
+ * An empty host device list cannot prove enumeration idle; final uninstall
+ * returns ESP_ERR_INVALID_STATE and retains the host in that case. A reboot
+ * may be necessary. No repeated host-install support is implied.
+ * Never use the pointer after a successful destroy (use-after-free is undefined).
  */
 esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle);
 

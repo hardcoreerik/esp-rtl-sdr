@@ -41,6 +41,8 @@
 #include "gain_r820t2.hpp"
 #include "r820t2_band.hpp"
 #include "rtl_usb_guard.hpp"
+#include "rtl_usb_shutdown.hpp"
+#include "rtl_pull_alloc.hpp"
 #include "reentrancy.hpp"
 #include "resampler_ratio.hpp"
 #include "rtl_multi.hpp"
@@ -211,14 +213,17 @@ esp_err_t esp_rtl_sdr_usb_fault_guard_reset(void)
 /* -------------------------------------------------------------------------- */
 
 struct UsbSession {
-    SemaphoreHandle_t lock = nullptr;
+    std::atomic<SemaphoreHandle_t> lock{nullptr};
     int refcount = 0;
     bool host_installed = false;
+    bool teardown_pending = false;
+    bool free_requested = false;
     bool external_host = false; /* app called usb_host_install */
     volatile bool bringing_up = false;
-    volatile bool host_task_run = false;
+    std::atomic<bool> host_task_run{false};
+    std::atomic<bool> host_task_exited{true};
+    std::atomic<bool> all_devices_free{false};
     TaskHandle_t host_task = nullptr;
-    TaskHandle_t host_join_waiter = nullptr;
     RtlClaimTable claims{};
     bool slot_used[ESP_RTL_SDR_MAX_DEVICES]{};
     uint32_t new_dev_events = 0;
@@ -232,20 +237,22 @@ static UsbSession s_usb_session;
 
 static bool session_lock(void)
 {
-    if (s_usb_session.lock == nullptr) {
-        s_usb_session.lock = xSemaphoreCreateMutex();
-        if (s_usb_session.lock == nullptr) {
-            return false;
+    auto lock = s_usb_session.lock.load(std::memory_order_acquire);
+    if (lock == nullptr) {
+        auto candidate = xSemaphoreCreateMutex();
+        if (candidate == nullptr) return false;
+        if (s_usb_session.lock.compare_exchange_strong(lock, candidate, std::memory_order_acq_rel)) {
+            lock = candidate;
+        } else {
+            vSemaphoreDelete(candidate);
         }
     }
-    return xSemaphoreTake(s_usb_session.lock, portMAX_DELAY) == pdTRUE;
+    return xSemaphoreTake(lock, portMAX_DELAY) == pdTRUE;
 }
 
 static void session_unlock(void)
 {
-    if (s_usb_session.lock != nullptr) {
-        xSemaphoreGive(s_usb_session.lock);
-    }
+    xSemaphoreGive(s_usb_session.lock.load(std::memory_order_acquire));
 }
 
 static void session_fill_hub_stats(esp_rtl_sdr_hub_stats_t *out)
@@ -331,10 +338,10 @@ struct esp_rtl_sdr_handle {
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
-    /** Set during uninstall; worker tasks notify this task before vTaskDelete. */
-    TaskHandle_t join_waiter = nullptr;
     uint8_t worker_task_count = 0;
-    volatile bool tasks_run = false;
+    std::atomic<unsigned> workers_exited{0};
+    bool uninstall_active = false;
+    std::atomic<bool> tasks_run{false};
 
     SemaphoreHandle_t ctrl_sem = nullptr;
     SemaphoreHandle_t ctrl_mutex = nullptr;
@@ -606,9 +613,8 @@ static void emit_after_unlock(esp_rtl_sdr_handle *h,
 
 static void worker_task_exit(esp_rtl_sdr_handle *h)
 {
-    if (h != nullptr && h->join_waiter != nullptr) {
-        xTaskNotifyGive(h->join_waiter);
-    }
+    // Last access to handle memory; the owner polls an acquire load before freeing.
+    if (h != nullptr) h->workers_exited.fetch_add(1, std::memory_order_release);
     vTaskDelete(nullptr);
 }
 
@@ -2337,9 +2343,8 @@ static void destroy_pull_ring_unlocked(esp_rtl_sdr_handle *h)
     }
 }
 
-static constexpr size_t kPullRingAutoMin = 64u * 1024u;  /* Tab5 no-PSRAM L4 */
 static constexpr size_t kPullRingAutoMax = 512u * 1024u;
-static constexpr size_t kPullRingAutoFloor = 96000u * 2u; /* ~0.2 s @ 960 kS/s CU8 */
+static constexpr size_t kPullRingAutoFloor = 96000u * 2u; /* ~0.1 s @ 960 kS/s CU8 */
 
 static size_t pull_ring_auto_prefer(const esp_rtl_sdr_handle *h)
 {
@@ -2353,16 +2358,19 @@ static size_t pull_ring_auto_prefer(const esp_rtl_sdr_handle *h)
     return need & ~size_t{1};
 }
 
-static uint8_t *malloc_pull_buf(size_t need)
-{
-    uint8_t *buf = static_cast<uint8_t *>(
-        heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (buf == nullptr) {
-        buf = static_cast<uint8_t *>(
-            heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+struct PullHeap {
+    uint8_t *psram(size_t n) { return static_cast<uint8_t *>(heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)); }
+    uint8_t *internal(size_t n) { return static_cast<uint8_t *>(heap_caps_malloc(n, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)); }
+    size_t internal_budget() {
+        // Existing 32 KiB reserve now applies before any internal auto allocation:
+        // delivery stack (6 KiB), synchronization objects and application headroom.
+        const size_t reserve = 32u * 1024u;
+        size_t n = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        const size_t total = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (n > total) n = total;
+        return n > reserve ? n - reserve : 0;
     }
-    return buf;
-}
+};
 
 /**
  * Lazy pull-ring init. Serialized on the handle API lock so delivery_task and
@@ -2401,46 +2409,17 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
     }
 
     const size_t prefer = need;
-    uint8_t *buf = malloc_pull_buf(need);
-    if (buf == nullptr && auto_size) {
-        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL |
-                                                          MALLOC_CAP_8BIT);
-        const size_t slack = 32u * 1024u;
-        if (largest > slack) {
-            largest -= slack;
-        } else {
-            largest = 0;
-        }
-        largest &= ~size_t{1};
-        static const size_t kLadder[] = {128u * 1024u, 96u * 1024u, kPullRingAutoMin};
-        size_t try_sz = largest;
-        if (try_sz > prefer) {
-            try_sz = prefer;
-        }
-        if (try_sz < kPullRingAutoMin) {
-            try_sz = kPullRingAutoMin;
-        }
-        buf = malloc_pull_buf(try_sz);
-        if (buf == nullptr) {
-            for (size_t i = 0; i < sizeof(kLadder) / sizeof(kLadder[0]); ++i) {
-                if (kLadder[i] >= try_sz && try_sz != kPullRingAutoMin) {
-                    continue;
-                }
-                buf = malloc_pull_buf(kLadder[i]);
-                if (buf != nullptr) {
-                    try_sz = kLadder[i];
-                    break;
-                }
-            }
-        }
-        if (buf != nullptr) {
-            ESP_LOGW(TAG, "pull ring auto shrunk %u -> %u (heap)",
-                     static_cast<unsigned>(prefer), static_cast<unsigned>(try_sz));
-            need = try_sz;
-        }
-    }
+    PullHeap heap;
+    uint8_t *buf = rtl_usb::allocate_pull(heap, prefer, auto_size, need);
     if (buf == nullptr) {
+        RTL_LOGE(h, "pull ring alloc failed requested=%u auto=%d internal_budget=%u",
+                 static_cast<unsigned>(prefer), auto_size, static_cast<unsigned>(heap.internal_budget()));
         return ESP_ERR_NO_MEM;
+    }
+    if (need != prefer) {
+        RTL_LOGW(h, "pull ring auto shrunk %u -> %u bytes; buffering=%u ms at preferred rate",
+                 static_cast<unsigned>(prefer), static_cast<unsigned>(need),
+                 static_cast<unsigned>(h->preferred_sample_rate_sps ? need * 500u / h->preferred_sample_rate_sps : 0));
     }
     ESP_LOGI(TAG, "pull ring %u bytes auto=%d", static_cast<unsigned>(need),
              auto_size ? 1 : 0);
@@ -2633,6 +2612,10 @@ static esp_err_t alloc_bulk_pool(esp_rtl_sdr_handle *h, uint32_t num, uint32_t l
     for (uint32_t i = 0; i < num; ++i) {
         esp_err_t ret = usb_host_transfer_alloc(len, 0, &h->bulk[i]);
         if (ret != ESP_OK) {
+            RTL_LOGE(h, "USB transfer alloc failed at %u/%u, bytes=%u internal=%u largest_dma=%u: %s",
+                     static_cast<unsigned>(i), static_cast<unsigned>(num), static_cast<unsigned>(len),
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DMA)), esp_err_to_name(ret));
             free_bulk_pool(h);
             return ret;
         }
@@ -3113,10 +3096,11 @@ static void host_lib_task_fn(void *arg)
         uint32_t flags = 0;
         /* 50 ms: faster join on uninstall than 100 ms. */
         usb_host_lib_handle_events(pdMS_TO_TICKS(50), &flags);
+        if (flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) {
+            s_usb_session.all_devices_free.store(true, std::memory_order_release);
+        }
     }
-    if (s_usb_session.host_join_waiter != nullptr) {
-        xTaskNotifyGive(s_usb_session.host_join_waiter);
-    }
+    s_usb_session.host_task_exited.store(true, std::memory_order_release);
     vTaskDelete(nullptr);
 }
 
@@ -3324,12 +3308,24 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
     std::snprintf(h->log_id, sizeof(h->log_id), "RTL%u",
                   static_cast<unsigned>(slot) % ESP_RTL_SDR_MAX_DEVICES);
 
+    const TickType_t acquire_at = xTaskGetTickCount();
     while (s_usb_session.bringing_up) {
         session_unlock();
         vTaskDelay(pdMS_TO_TICKS(5));
-        if (!session_lock()) {
-            return ESP_ERR_NO_MEM;
+        if (!session_lock()) return ESP_ERR_NO_MEM;
+        if (xTaskGetTickCount() - acquire_at >= pdMS_TO_TICKS(2000)) {
+            session_free_slot(slot);
+            h->logical_index = 0xFF;
+            session_unlock();
+            return ESP_RTL_SDR_ERR_TIMEOUT;
         }
+    }
+    // A failed final teardown retains its session; do not resurrect a stopped host.
+    if (s_usb_session.teardown_pending || (s_usb_session.host_installed && !s_usb_session.host_task_run)) {
+        session_free_slot(slot);
+        h->logical_index = 0xFF;
+        session_unlock();
+        return ESP_ERR_INVALID_STATE;
     }
     const bool first = (s_usb_session.refcount == 0);
     if (first) {
@@ -3352,6 +3348,7 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
     if (need_install) {
         usb_host_config_t hc{};
         hc.intr_flags = ESP_INTR_FLAG_LEVEL1;
+        hc.root_port_unpowered = true;
         /*
          * Do not set peripheral_map here: field is not present on all IDF 5.3/5.4
          * headers. Default install selects the primary HS host on ESP32-P4.
@@ -3371,26 +3368,37 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
         if (session_lock()) {
             s_usb_session.host_installed = true;
             s_usb_session.host_task_run = true;
+            s_usb_session.host_task_exited = false;
+            s_usb_session.all_devices_free = false;
             session_unlock();
         }
         if (xTaskCreatePinnedToCore(host_lib_task_fn, "rtl_usb_lib", 4096, nullptr, kUsbPrio,
                                     &s_usb_session.host_task, kUsbCore) != pdPASS) {
-            (void)usb_host_uninstall();
+            const esp_err_t cleanup = usb_host_uninstall();
             if (session_lock()) {
-                s_usb_session.host_installed = false;
                 s_usb_session.host_task_run = false;
+                s_usb_session.host_task_exited = true; // no task was created
                 s_usb_session.bringing_up = false;
-                s_usb_session.refcount--;
-                session_free_slot(slot);
+                if (cleanup == ESP_OK) {
+                    s_usb_session.host_installed = false;
+                    s_usb_session.refcount--;
+                    session_free_slot(slot);
+                    h->logical_index = 0xFF;
+                } else {
+                    s_usb_session.teardown_pending = true;
+                    ESP_LOGE(TAG, "host task creation rollback retained USB host: %s", esp_err_to_name(cleanup));
+                }
                 session_unlock();
             }
-            h->logical_index = 0xFF;
             return ESP_ERR_NO_MEM;
         }
+        ret = usb_host_lib_set_root_port_power(true);
         if (session_lock()) {
+            s_usb_session.teardown_pending = ret != ESP_OK;
             s_usb_session.bringing_up = false;
             session_unlock();
         }
+        if (ret != ESP_OK) return ret;
         RTL_LOGI(h, "USB host session started (shared)");
     } else {
         RTL_LOGI(h, "USB host session joined refcount now includes this handle");
@@ -3398,46 +3406,64 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
     return ESP_OK;
 }
 
-static void session_release(esp_rtl_sdr_handle *h)
+struct SessionShutdown {
+    esp_err_t free_devices() {
+        if (!s_usb_session.host_task_run) return ESP_OK; // retry after a failed join/uninstall
+        if (s_usb_session.free_requested && s_usb_session.all_devices_free.load(std::memory_order_acquire)) return ESP_OK;
+        s_usb_session.all_devices_free = false;
+        s_usb_session.free_requested = true;
+        const esp_err_t err = usb_host_device_free_all();
+        if (err == ESP_OK) {
+            // No enumerated devices does not prove the enumeration EP0 pipe is gone.
+            // IDF exposes no public enumeration-idle query; retain the host safely.
+            ESP_LOGE(TAG, "uninstall: empty device list cannot prove enumeration idle; host retained");
+            return ESP_ERR_INVALID_STATE;
+        }
+        if (err != ESP_ERR_NOT_FINISHED) return err;
+        const TickType_t start = xTaskGetTickCount();
+        while (!s_usb_session.all_devices_free.load(std::memory_order_acquire)) {
+            if (xTaskGetTickCount() - start >= pdMS_TO_TICKS(2000)) return ESP_RTL_SDR_ERR_TIMEOUT;
+            vTaskDelay(1);
+        }
+        return ESP_OK;
+    }
+    void stop_events() { s_usb_session.host_task_run = false; }
+    esp_err_t join_events() {
+        const TickType_t start = xTaskGetTickCount();
+        while (!s_usb_session.host_task_exited.load(std::memory_order_acquire)) {
+            if (xTaskGetTickCount() - start >= pdMS_TO_TICKS(500)) return ESP_RTL_SDR_ERR_TIMEOUT;
+            vTaskDelay(1);
+        }
+        return ESP_OK;
+    }
+    esp_err_t uninstall() { return usb_host_uninstall(); }
+};
+
+static esp_err_t session_release(esp_rtl_sdr_handle *h)
 {
-    if (h == nullptr) {
-        return;
-    }
-    const int slot = (h->logical_index < ESP_RTL_SDR_MAX_DEVICES) ? h->logical_index : -1;
-    bool last = false;
-    bool we_installed = false;
-    if (session_lock()) {
-        if (slot >= 0) {
-            session_free_slot(slot);
+    if (h == nullptr || h->logical_index >= ESP_RTL_SDR_MAX_DEVICES) return ESP_OK;
+    if (!session_lock()) return ESP_ERR_NO_MEM;
+    // Serialize the final release with acquire and other releases. The host task
+    // does not take this mutex, so it can finish device cleanup while we wait.
+    if (s_usb_session.refcount == 1 && s_usb_session.host_installed && !s_usb_session.external_host) {
+        s_usb_session.teardown_pending = true;
+        SessionShutdown host;
+        const esp_err_t err = rtl_usb::shutdown_host(host);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "USB session retained after teardown failure: %s", esp_err_to_name(err));
+            session_unlock();
+            return err;
         }
-        if (slot >= 0 && s_usb_session.refcount > 0) {
-            s_usb_session.refcount--;
-        }
-        last = (s_usb_session.refcount == 0);
-        we_installed = last && s_usb_session.host_installed && !s_usb_session.external_host;
-        session_unlock();
-    }
-    h->logical_index = 0xFF;
-    std::snprintf(h->log_id, sizeof(h->log_id), "RTL?");
-
-    if (!we_installed) {
-        return;
-    }
-
-    s_usb_session.host_join_waiter = xTaskGetCurrentTaskHandle();
-    s_usb_session.host_task_run = false;
-    (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(500));
-    s_usb_session.host_join_waiter = nullptr;
-    s_usb_session.host_task = nullptr;
-
-    const esp_err_t uerr = usb_host_uninstall();
-    if (uerr != ESP_OK) {
-        ESP_LOGE(TAG, "usb_host_uninstall failed (%s)", esp_err_to_name(uerr));
-    }
-    if (session_lock()) {
         s_usb_session.host_installed = false;
-        session_unlock();
+        s_usb_session.teardown_pending = false;
+        s_usb_session.free_requested = false;
+        s_usb_session.host_task = nullptr;
     }
+    session_free_slot(h->logical_index);
+    --s_usb_session.refcount;
+    h->logical_index = 0xFF;
+    session_unlock();
+    return ESP_OK;
 }
 
 static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
@@ -3566,7 +3592,12 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
         /* Failed for a reason unrelated to a crash (e.g. ENOMEM) — don't
          * hold the guard armed across a boot where nothing will run. */
         usb_fault_guard_disarm();
-        esp_rtl_sdr_uninstall(h);
+        const esp_err_t cleanup = esp_rtl_sdr_uninstall(h);
+        if (cleanup != ESP_OK) {
+            *out_handle = h;
+            RTL_LOGE(h, "install failed; cleanup handle returned, uninstall retry required: %s",
+                     esp_err_to_name(cleanup));
+        }
         return ret;
     }
 
@@ -3595,47 +3626,57 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         if (!lk.ok()) {
             return ESP_RTL_SDR_ERR_TIMEOUT;
         }
-        if (handle->destroying) {
-            return ESP_RTL_SDR_ERR_BUSY;
-        }
+        if (handle->uninstall_active) return ESP_RTL_SDR_ERR_BUSY;
         const uint32_t depth = __atomic_load_n(&handle->in_callback_depth, __ATOMIC_SEQ_CST);
         const TaskHandle_t cb = __atomic_load_n(&handle->callback_task, __ATOMIC_SEQ_CST);
         if (esp_rtl_sdr_caller_is_event_callback(depth, cb, xTaskGetCurrentTaskHandle())) {
             return ESP_RTL_SDR_ERR_REENTRANT;
         }
+        handle->uninstall_active = true;
         handle->destroying = true;
     }
 
+    auto retain = [&](esp_err_t err) {
+        HandleLock lk(handle);
+        handle->uninstall_active = false;
+        set_error_unlocked(handle, err);
+        RTL_LOGE(handle, "uninstall incomplete; handle retained, retry uninstall: %s", esp_err_to_name(err));
+        return err;
+    };
     usb_fault_guard_disarm();
-    (void)stop_stream_internal(handle, ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS);
-
-    /* Deterministic worker join (no fixed 50 ms hope). */
-    handle->join_waiter = xTaskGetCurrentTaskHandle();
-    const uint8_t expect = handle->worker_task_count;
-    handle->tasks_run = false;
-    for (uint8_t i = 0; i < expect; ++i) {
-        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(500));
+    // Workers must remain alive to deliver pending USB completions on a failed drain.
+    if (handle->tasks_run) {
+        const esp_err_t stopped = stop_stream_internal(handle, ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS);
+        if (stopped != ESP_OK) return retain(stopped);
     }
-    handle->join_waiter = nullptr;
-    handle->host_task = nullptr;
+    handle->tasks_run = false;
+    const TickType_t joined_at = xTaskGetTickCount();
+    while (handle->workers_exited.load(std::memory_order_acquire) < handle->worker_task_count) {
+        if (xTaskGetTickCount() - joined_at >= pdMS_TO_TICKS(2000)) return retain(ESP_RTL_SDR_ERR_TIMEOUT);
+        vTaskDelay(1);
+    }
     handle->client_task = nullptr;
     handle->delivery_task = nullptr;
-    handle->worker_task_count = 0;
-
-    close_opened_device(handle);
-    retry_deferred_closes(handle);  // workers are joined: last chance before deregister
     if (handle->client_registered) {
-        usb_host_client_deregister(handle->client);
+        // A previous join timeout may have left completions pending without a worker.
+        (void)usb_host_client_handle_events(handle->client, 0);
+    }
+    if (handle->live_urbs != 0 || handle->ctrl_inflight.load(std::memory_order_acquire)) {
+        return retain(ESP_RTL_SDR_ERR_TIMEOUT);
+    }
+    close_opened_device(handle);
+    retry_deferred_closes(handle);
+    for (auto dev : handle->deferred_close) {
+        if (dev != nullptr) return retain(ESP_ERR_INVALID_STATE);
+    }
+    if (handle->client_registered) {
+        const esp_err_t err = usb_host_client_deregister(handle->client);
+        if (err != ESP_OK) return retain(err);
         handle->client_registered = false;
     }
-    session_release(handle);
+    const esp_err_t released = session_release(handle);
+    if (released != ESP_OK) return retain(released);
 
-    /* Host/HCD torn down (or never owned) - safe to clear stuck live_urbs. */
-    if (handle->live_urbs > 0) {
-        ESP_LOGW(TAG, "uninstall: clearing stuck live_urbs=%u after host teardown",
-                 static_cast<unsigned>(handle->live_urbs));
-        handle->live_urbs = 0;
-    }
     free_bulk_pool(handle);
     if (handle->ctrl_xfer) {
         usb_host_transfer_free(handle->ctrl_xfer);
@@ -4178,6 +4219,12 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             break;
         }
 
+        ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
+                              static_cast<uint32_t>(handle->cfg.transfer_bytes));
+        if (ret != ESP_OK) {
+            break;
+        }
+
         ret = ensure_ring(handle, handle->cfg.transfer_bytes);
         if (ret != ESP_OK) {
             break;
@@ -4206,11 +4253,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             }
             pull_ring_reset(handle);
         }
-        ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
-                              static_cast<uint32_t>(handle->cfg.transfer_bytes));
-        if (ret != ESP_OK) {
-            break;
-        }
+
 
         if (handle->delivery_task == nullptr) {
             handle->tasks_run = true;

@@ -1,0 +1,116 @@
+#include <atomic>
+#include <cstdio>
+#include <cstring>
+#include <cstdint>
+#include "esp_err.h"
+#ifdef _MSC_VER
+// Platform atomic read shim; concurrency is not simulated by this harness.
+#define __ATOMIC_SEQ_CST 0
+#define __atomic_load_n(p, order) (*(p))
+#endif
+#define ESP_RTL_SDR_ERR_TIMEOUT ESP_ERR_TIMEOUT
+#define ESP_RTL_SDR_ERR_BUSY 10
+#define ESP_RTL_SDR_ERR_STALE_HANDLE 11
+#define ESP_RTL_SDR_ERR_REENTRANT 12
+#define ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS 1000
+#define ESP_RTL_SDR_STATE_UNINSTALLED 0
+#define RTL_LOGE(...) ((void)0)
+#define pdMS_TO_TICKS(x) (x)
+#define pdTRUE 1
+using TickType_t = unsigned;
+using TaskHandle_t = void *;
+using SemaphoreHandle_t = void *;
+static constexpr unsigned kHandleMagic = 123, kUninstallLockTicks = 2000;
+static int destroyed, deregistered, released, freed;
+static int stop_result, deregister_result, release_result;
+static bool stall_workers, lock_ok = true;
+static unsigned ticks;
+struct esp_rtl_sdr_handle {
+    unsigned magic = kHandleMagic;
+    void *lock = reinterpret_cast<void *>(1);
+    bool destroying = false, uninstall_active = false, tasks_run = true, client_registered = true;
+    unsigned in_callback_depth = 0;
+    TaskHandle_t callback_task = nullptr, client_task = nullptr, delivery_task = nullptr;
+    unsigned worker_task_count = 2, live_urbs = 0;
+    std::atomic<unsigned> workers_exited{0};
+    std::atomic<bool> ctrl_inflight{false};
+    void *client = reinterpret_cast<void *>(2), *ctrl_xfer = nullptr, *probe_q = nullptr;
+    void *ctrl_sem = nullptr, *ctrl_mutex = nullptr, *bulk_done_sem = nullptr;
+    void *deferred_close[2]{};
+    int state = 1, last_error = 0;
+    ~esp_rtl_sdr_handle() { ++destroyed; }
+};
+using esp_rtl_sdr_handle_t = esp_rtl_sdr_handle *;
+static esp_rtl_sdr_handle *active;
+struct HandleLock {
+    HandleLock(esp_rtl_sdr_handle *, unsigned = 0) {}
+    bool ok() { return lock_ok; }
+    void release() {}
+};
+static TickType_t xTaskGetTickCount() { return ticks; }
+static void vTaskDelay(int) {
+    ++ticks;
+    if (active && !active->tasks_run && !stall_workers) active->workers_exited = active->worker_task_count;
+}
+static TaskHandle_t xTaskGetCurrentTaskHandle() { return reinterpret_cast<void *>(3); }
+static bool esp_rtl_sdr_caller_is_event_callback(unsigned depth, TaskHandle_t cb, TaskHandle_t me) { return depth && cb == me; }
+static void set_error_unlocked(esp_rtl_sdr_handle *h, int err) { h->last_error = err; }
+static void usb_fault_guard_disarm() {}
+static int stop_stream_internal(esp_rtl_sdr_handle *, int) { return stop_result; }
+static void close_opened_device(esp_rtl_sdr_handle *) {}
+static void retry_deferred_closes(esp_rtl_sdr_handle *) {}
+static int usb_host_client_handle_events(void *, int) { return ESP_OK; }
+static int usb_host_client_deregister(void *) { ++deregistered; return deregister_result; }
+static int session_release(esp_rtl_sdr_handle *) { ++released; return release_result; }
+static void free_bulk_pool(esp_rtl_sdr_handle *) { ++freed; }
+static void usb_host_transfer_free(void *) { ++freed; }
+static void destroy_iq_ring(esp_rtl_sdr_handle *) { ++freed; }
+static void destroy_pull_ring_unlocked(esp_rtl_sdr_handle *) { ++freed; }
+static void vQueueDelete(void *) { ++freed; }
+static void vSemaphoreDelete(void *) {}
+static int xSemaphoreTake(void *, int) { return pdTRUE; }
+// ACTUAL_UNINSTALL
+static int checks;
+#define CHECK(x) do { ++checks; if (!(x)) { std::printf("FAIL %d: %s\n", __LINE__, #x); return 1; } } while (0)
+static esp_rtl_sdr_handle *reset() {
+    ticks = 0; destroyed = deregistered = released = freed = 0;
+    stop_result = deregister_result = release_result = ESP_OK;
+    stall_workers = false; lock_ok = true;
+    active = new esp_rtl_sdr_handle; return active;
+}
+int main() {
+    auto *h = reset();
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK && destroyed == 1 && deregistered == 1 && released == 1);
+    h = reset(); stop_result = ESP_ERR_TIMEOUT; h->live_urbs = 2;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_ERR_TIMEOUT);
+    CHECK(h->live_urbs == 2 && h->tasks_run && h->destroying && !h->uninstall_active);
+    CHECK(destroyed == 0 && deregistered == 0 && released == 0 && freed == 0);
+    stop_result = ESP_OK; h->live_urbs = 0;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK && destroyed == 1);
+    h = reset(); stall_workers = true;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_ERR_TIMEOUT && destroyed == 0 && deregistered == 0 && freed == 0);
+    stall_workers = false;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK && destroyed == 1);
+    h = reset(); h->ctrl_inflight = true;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_ERR_TIMEOUT && destroyed == 0 && released == 0);
+    h->ctrl_inflight = false;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK);
+    h = reset(); h->deferred_close[0] = reinterpret_cast<void *>(4);
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_ERR_INVALID_STATE && destroyed == 0 && deregistered == 0);
+    h->deferred_close[0] = nullptr;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK);
+    h = reset(); deregister_result = ESP_ERR_INVALID_STATE;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_ERR_INVALID_STATE && h->client_registered && released == 0 && freed == 0);
+    deregister_result = ESP_OK;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK);
+    h = reset(); release_result = ESP_ERR_TIMEOUT;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_ERR_TIMEOUT && destroyed == 0 && !h->client_registered && freed == 0);
+    release_result = ESP_OK;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK && destroyed == 1 && deregistered == 1);
+    CHECK(esp_rtl_sdr_uninstall(nullptr) == ESP_OK);
+    h = reset(); h->in_callback_depth = 1; h->callback_task = xTaskGetCurrentTaskHandle();
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_RTL_SDR_ERR_REENTRANT && !h->destroying);
+    h->in_callback_depth = 0;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK);
+    std::printf("actual uninstall checks=%d\n", checks); return 0;
+}

@@ -34,7 +34,7 @@ install → IDLE
 start   → STREAMING   (or error, stay IDLE / FAULT — never half-open)
 retune  → STREAMING   (queued; never EP0 while bulk outstanding)
 stop    → IDLE        (idempotent; emits EVT_STOPPED once when leaving stream)
-uninstall → destroyed (NULL-safe; always frees; second use → STALE_HANDLE)
+uninstall → destroyed on ESP_OK; failure retains cleanup-only handle for retry
 reset   → IDLE from FAULT if not streaming (clears metrics)
 ```
 
@@ -45,7 +45,7 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 | `stop` when IDLE | `ESP_OK` |
 | `stop(NULL)` | `ESP_OK` |
 | `uninstall(NULL)` | `ESP_OK` |
-| `uninstall` twice | second → `STALE_HANDLE` |
+| `uninstall` after success | Pointer is invalid; never reuse it |
 | `start` while STREAMING | `ERR_BUSY` |
 | `start` / `stop` / `reset` / `probe_rates` from event callback | `ERR_REENTRANT` |
 | `retune_hz` / `set_center_freq` from event callback | **Allowed** — queues async apply (0.7.3+); later `EVT_RETUNED` |
@@ -254,3 +254,20 @@ Hardware soak and recovery acceptance remain tracked in `PROJECT_TRUTH.md`.
 Bump `ESP_RTL_SDR_VERSION_*`, `ESP_RTL_SDR_VERSION_STRING` (via macros), and `idf_component.yml` together.
 
 Packed runtime version: `(major << 16) | (minor << 8) | patch` from `get_version()`.
+
+## Incomplete teardown (maintenance branch)
+
+`uninstall()` destroys the handle only on `ESP_OK`. A drain, worker join,
+device close, client deregistration or final host cleanup failure retains the
+handle and resources. Keep the pointer and retry `uninstall()` from its owner;
+other handle APIs are disabled during incomplete teardown. Do not clear the
+pointer on failure. If `install()` fails and cannot safely unwind, it returns a
+non-NULL cleanup-only handle through `out_handle`; the original install error is
+returned and a cleanup error is logged.
+
+An empty enumerated-device list cannot distinguish no dongle from incomplete
+USB enumeration through the current public IDF API. This branch conservatively
+returns `ESP_ERR_INVALID_STATE` on final owned-host teardown in that case and
+keeps the host resident. A reboot may be required. This is an explicit limitation,
+including the no-dongle case, rather than proof of clean teardown. See the
+[2026-10-29 investigation](reviews/EXTERNAL_DRIVER_FINDINGS_2026-10-29.md).

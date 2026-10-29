@@ -6,7 +6,7 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-30**
+Snapshot date: **2026-10-29**
 Version: **0.9.3** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, not Hardware-verified. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec ESP32-P4 RF acceptance remains pending. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
@@ -212,3 +212,23 @@ unless a task explicitly says otherwise.
 | [docs/TESTING.md](docs/TESTING.md) | Lab gear disclosure |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PR rules |
+
+## Unreleased external-findings maintenance branch (2026-10-29)
+
+**Implemented / host-verified:** USB teardown ordering/error retention, atomic
+worker-exit gates, shared-session cleanup and partial-init rollback checks,
+required transfer allocation before optional CPU rings, bounded internal auto
+pull allocation, and explicit smoke board PASS/FAIL/SKIP profiles. Host CTest:
+14/14 on Windows and Linux; existing Nooelec trace: 7990 checks. **Build-verified:**
+ESP-IDF 5.5.4 and 6.1 ESP32-P4 smoke; 6.1 uses managed USB 1.6.0. No driver version,
+tag, consumer pin or hardware evidence label was changed.
+
+**Release blocked:** ambiguous empty device lists retain the USB host and return
+an error, including no-dongle uninstall; enumeration-idle teardown, late attachment
+and physical single/multi-dongle acceptance remain open. Failed uninstall retains
+a cleanup-only handle; failed install can return one if rollback cannot complete.
+AUTO clipping is unverified; no gain tables/defaults changed. Findings reported by
+**Przemek Godek — https://github.com/pgodek**; fixes independently implemented,
+no external implementation code reused. Full evidence, compatibility changes,
+release-note draft and pending tests:
+[2026-10-29 investigation](docs/reviews/EXTERNAL_DRIVER_FINDINGS_2026-10-29.md).

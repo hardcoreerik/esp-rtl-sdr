@@ -15,3 +15,5 @@ CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024
 # Tab5-class boards. Newer P4 rev v3.x boards must not use these two lines.
 CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
 CONFIG_ESP32P4_REV_MIN_0=y
+# This existing default image targets Tab5; other boards must select a profile.
+CONFIG_ESP_RTL_SDR_SMOKE_BOARD_TAB5=y

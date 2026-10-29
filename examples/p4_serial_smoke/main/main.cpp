@@ -23,7 +23,9 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_TAB5
 #include "utility/PI4IOE5V6408_Class.hpp"
+#endif
 #include "esp_rtl_sdr.h"
 #include "smoke_soak_scope.h"
 
@@ -45,6 +47,7 @@ static const char *TAG = "esp_rtl_sdr_smoke";
 
 static int g_pass;
 static int g_fail;
+static int g_skip;
 static volatile bool g_drain;
 
 static void smoke_row(const char *name, bool ok)
@@ -77,6 +80,7 @@ static void settle_ms(int ms)
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_TAB5
 static bool enable_tab5_usb_power(void)
 {
     if (!m5::In_I2C.begin(I2C_NUM_1, GPIO_NUM_31, GPIO_NUM_32)) {
@@ -99,6 +103,22 @@ static bool enable_tab5_usb_power(void)
     const bool enabled = power_io.getWriteValue(3);
     ESP_LOGI(TAG, "Tab5 USB-A power %s and settled", enabled ? "enabled" : "failed");
     return enabled;
+}
+
+#endif
+
+static void check_usb_power(void)
+{
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_TAB5
+    smoke_row("tab5_usb_power", enable_tab5_usb_power());
+#else
+    ++g_skip;
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_GENERIC
+    printf("SMOKE tab5_usb_power SKIP reason=NOT_APPLICABLE board=generic\n");
+#else
+    printf("SMOKE tab5_usb_power SKIP reason=NOT_VERIFIED board=unknown\n");
+#endif
+#endif
 }
 
 static bool smoke_read(esp_rtl_sdr_handle_t sdr, const char *name)
@@ -349,7 +369,7 @@ extern "C" void app_main(void)
              esp_rtl_sdr_get_version_string(), SMOKE_SOAK_NAME,
              SMOKE_XFER_COUNT, SMOKE_XFER_BYTES);
     check_pure_helpers();
-    smoke_row("tab5_usb_power", enable_tab5_usb_power());
+    check_usb_power();
 
     esp_rtl_sdr_config_t cfg;
     esp_rtl_sdr_config_default(&cfg);
@@ -408,6 +428,6 @@ extern "C" void app_main(void)
     smoke_row("uninstall", esp_rtl_sdr_uninstall(sdr) == ESP_OK);
 
     const bool overall = (g_fail == 0);
-    printf("SMOKE OVERALL %s passed=%d failed=%d hardware=%s\n",
-           overall ? "PASS" : "FAIL", g_pass, g_fail, hw);
+    printf("SMOKE OVERALL %s passed=%d failed=%d skipped=%d hardware=%s\n",
+           overall ? "PASS" : "FAIL", g_pass, g_fail, g_skip, hw);
 }

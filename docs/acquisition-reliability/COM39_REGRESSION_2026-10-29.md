@@ -34,8 +34,9 @@ stop and uninstall. Acquisition adds configuration and byte-associated metadata
 invariants for reads and extended callbacks. Returned success does not measure
 actual RF gain/passbands or prove reception on the requested bands.
 
-No-PSRAM memory: default pull ring253,952bytes, acquisition245,760bytes plus
-11,424bytes internal metadata runtime. Eight-second performance was unchanged.
+No-PSRAM memory on IDF 5.5.4: default pull ring 253,952 bytes, acquisition
+245,760 bytes plus 11,424 bytes internal metadata runtime. IDF 6.1 allocated
+a smaller 139,264-byte acquisition ring, reducing buffering margin. Eight-second performance was unchanged.
 Later control steps intentionally leave data undrained and accumulate software
 drops, as in the baseline. Whole-run health warnings after those steps are not
 the quiet-window result; no whole-run lossless claim is made. Partial-read span

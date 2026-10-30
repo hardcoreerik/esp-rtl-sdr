@@ -144,7 +144,7 @@ Those stay manual / measured / Provenance until instrumented.
 
 The standalone host CMake project now requires Python 3 to extract actual driver
 session acquire/release, uninstall and startup allocation stages plus smoke
-reporting functions into platform-mocked C++ harnesses. It runs 14 CTest suites.
+reporting functions into platform-mocked C++ harnesses. It runs 19 CTest suites.
 Generated code stays in the build directory and is regenerated when the source
 or harness templates change. The session/worker/heap mocks test ordering and
 error retention; they do not model real enumeration, HCD timing or cross-core

@@ -4,6 +4,7 @@
  */
 
 #include "esp_rtl_sdr.h"
+#include "esp_rtl_sdr_acquisition.h"
 #include "resampler_ratio.hpp"
 #include "rtl_profile.hpp"
 
@@ -477,4 +478,13 @@ esp_err_t esp_rtl_sdr_health_from_window(const esp_rtl_sdr_metrics_t *before,
 
     *out_health = h;
     return ESP_OK;
+}
+
+void esp_rtl_sdr_acquisition_config_default(esp_rtl_sdr_acquisition_config_t *out)
+{
+    if (out) { std::memset(out, 0, sizeof(*out)); out->struct_size = sizeof(*out); }
+}
+void esp_rtl_sdr_sample_meta_default(esp_rtl_sdr_sample_meta_t *out)
+{
+    if (out) { std::memset(out, 0, sizeof(*out)); out->struct_size = sizeof(*out); }
 }

@@ -545,7 +545,7 @@ Payload of `EVT_ERROR`.
 | `usb_task_priority` | 0 = driver default | |
 | `usb_task_core_id` | 0xFF = no affinity | 0, 1, or 0xFF |
 | `delivery_mode` | `BOTH` | `BOTH` / `CALLBACK` / `READ` (0.7.4+) |
-| `pull_ring_bytes` | 0 = auto | Even, 1 KiB…1 MiB if set; lazy alloc when mode uses read |
+| `pull_ring_bytes` | 0 = auto | Even, 1 KiB…1 MiB if set; allocated before submissions when mode uses read |
 
 **Legacy `struct_size`:** If the app was compiled against a header that ends at
 `usb_task_core_id` (or any size that omits the new trailing fields),
@@ -778,7 +778,7 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
 | Param | Role |
 |---|---|
 | `config` | **Required** — prefer `config_default` + validate |
-| `out_handle` | **Required** — on success non-NULL; on failure **NULL** (cleared first) |
+| `out_handle` | **Required** — cleared first; non-NULL on success. On failure normally NULL; a non-NULL value is a retained cleanup-only handle requiring uninstall retry |
 
 | Returns | |
 |---|---|
@@ -797,7 +797,7 @@ cfg.event_ctx = app;
 esp_rtl_sdr_handle_t sdr = NULL;
 esp_err_t err = esp_rtl_sdr_install(&cfg, &sdr);
 if (err != ESP_OK) {
-    /* sdr is NULL */
+    /* If sdr != NULL, retain it and retry uninstall; partial cleanup failed. */
 }
 ```
 
@@ -810,13 +810,16 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle);
 | | |
 |---|---|
 | **NULL** | **Idempotent** → `ESP_OK` |
-| **Streaming** | Best-effort `stop` first |
-| **Second call** | `STALE_HANDLE` (do not retain the pointer) |
+| **Streaming** | Drain transfers, then join workers; failures retain resources |
+| **Success** | Destroys handle; never reuse its pointer |
+| **Failure** | Retains cleanup-only handle; keep pointer and retry uninstall; reboot may be required |
+| **Empty host device list** | Final owned-host teardown returns `ESP_ERR_INVALID_STATE`; enumeration idle is unproven |
 | **Ownership** | Single owner task; no concurrent API during uninstall |
 
 ```c
-(void)esp_rtl_sdr_uninstall(sdr);
-sdr = NULL;
+if (esp_rtl_sdr_uninstall(sdr) == ESP_OK) {
+    sdr = NULL;
+} /* Otherwise retain sdr for teardown retry; do not restart it. */
 ```
 
 ---
@@ -1477,3 +1480,17 @@ if (err == ESP_RTL_SDR_ERR_NO_DEVICE) {
 ---
 
 *If this reference disagrees with the header, the header wins for signatures; if it oversells hardware, PROJECT_TRUTH wins — open a `truth:` issue.*
+
+## Pull-ring allocation policy (maintenance branch)
+
+Startup allocates the required IDF USB transfer pool before CPU I/Q queues and
+the optional pull ring. Automatic pull capacity remains four times the URB
+payload, bounded to 192000…524288 bytes (default 6×16384 → 393216 bytes).
+PSRAM is preferred. Internal fallback budgets the largest available internal
+block with a 32 KiB reserve, then retries smaller even sizes down to 64 KiB.
+The reserve covers the 6 KiB delivery stack plus synchronization/application
+headroom; it is a heuristic, not a throughput or concurrent-allocation guarantee.
+The driver logs shrinkage and approximate buffering duration. Explicit sizes
+are tried unchanged and return `ESP_ERR_NO_MEM` on failure. CALLBACK does not
+allocate a pull ring; READ and BOTH do. USB DMA buffers still use IDF's allocator
+and capability/cache rules; this change does not move DMA memory into PSRAM.

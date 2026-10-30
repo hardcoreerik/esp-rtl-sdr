@@ -139,3 +139,16 @@ Log outcomes into PROJECT_TRUTH only with evidence labels (Hardware-verified vs 
 - Formal security audit  
 
 Those stay manual / measured / Provenance until instrumented.
+
+## External-findings lifecycle regression tests
+
+The standalone host CMake project now requires Python 3 to extract actual driver
+session acquire/release, uninstall and startup allocation stages plus smoke
+reporting functions into platform-mocked C++ harnesses. It runs 19 CTest suites.
+Generated code stays in the build directory and is regenerated when the source
+or harness templates change. The session/worker/heap mocks test ordering and
+error retention; they do not model real enumeration, HCD timing or cross-core
+scheduling. Existing Nooelec runtime trace remains a separate check.
+
+See [the investigation matrix](reviews/EXTERNAL_DRIVER_FINDINGS_2026-10-29.md)
+for exact commands, observed failures/results and physical release gates.

@@ -4,8 +4,9 @@
  *
  * Standalone ESP-IDF USB Host client for RTL2832U-class SDR dongles.
  * Blog V4 (R828D), Blog V4L (R828S) and Blog V3/V3c (R820T2, I2C 0x34 remap)
- * are hardware-verified streaming profiles. Nooelec NESDR SMArt v5 has a
- * first-party PC-captured profile (2026-09-30); ESP32-P4 acceptance is pending.
+ * are hardware-verified streaming profiles. Nooelec NESDR SMArt v5 is implemented
+ * from first-party captures and standalone Tab5 streaming/control verification;
+ * RF calibration is a separate acceptance gate.
  * Transfer sequences are
  * clean-room / measured where stated —
  * this is not a librtlsdr port.
@@ -308,6 +309,7 @@ typedef enum {
     ESP_RTL_SDR_EVT_RETUNED = 8,    /**< payload: uint32_t frequency_hz */
     ESP_RTL_SDR_EVT_HEALTH = 9,     /**< payload: health_info (snapshot) */
     ESP_RTL_SDR_EVT_PASSPORT_PROGRESS = 10, /**< payload: passport_entry */
+    ESP_RTL_SDR_EVT_IQ_BLOCK_EX = 12, /**< opt-in borrowed payload: see esp_rtl_sdr_acquisition.h */
     ESP_RTL_SDR_EVT_PASSPORT_DONE = 11,     /**< payload: rate_passport */
 } esp_rtl_sdr_event_t;
 
@@ -676,7 +678,7 @@ typedef struct {
     bool iq_acquire_mode;
     /** Task priority for USB owner (0 = driver default). */
     uint8_t usb_task_priority;
-    /** Core affinity: 0 or 1, or 0xFF = no affinity. */
+    /** Core affinity: 0 or 1, or 0xFF = driver default affinity. */
     uint8_t usb_task_core_id;
     /**
      * IQ delivery path (append-only field — older struct_size keeps BOTH).
@@ -823,8 +825,9 @@ bool esp_rtl_sdr_delivery_mode_uses_read(esp_rtl_sdr_delivery_mode_t mode);
 
 /**
  * Create handle and prepare USB client registration path.
- * On success *out_handle is non-NULL. On failure *out_handle is NULL
- * (always cleared first when out_handle is non-NULL).
+ * On success *out_handle is non-NULL. Cleared first on entry. On failure it
+ * normally remains NULL; if partial initialization cannot safely unwind,
+ * returns a non-NULL cleanup-only handle. Retain it and retry uninstall.
  *
  * Does not require a dongle present. Device attach is reported via events
  * as devices attach and detach.
@@ -838,9 +841,13 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
 
 /**
  * Destroy handle. Safe to call with NULL (returns ESP_OK).
- * If streaming, performs stop first (best effort).
- * Always releases resources. Second call on the same pointer after destroy
- * returns STALE_HANDLE (use-after-free is still undefined — do not retain).
+ * If streaming, drains transfers before joining workers and releasing USB.
+ * ESP_OK destroys the handle. On failure resources are retained; keep the
+ * pointer and retry uninstall from its owner task (other APIs are disabled).
+ * An empty host device list cannot prove enumeration idle; final uninstall
+ * returns ESP_ERR_INVALID_STATE and retains the host in that case. A reboot
+ * may be necessary. No repeated host-install support is implied.
+ * Never use the pointer after a successful destroy (use-after-free is undefined).
  */
 esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle);
 
@@ -1331,7 +1338,8 @@ esp_err_t esp_rtl_sdr_get_logical_index(esp_rtl_sdr_handle_t handle, uint8_t *ou
 
 /**
  * Snapshot capture metadata from live handle state (not a queued IQ block).
- * Combine with EVT_IQ_BLOCK sequence/timestamp for per-buffer records.
+ * Do not use this snapshot to label queued samples. For byte-associated records,
+ * use esp_rtl_sdr_acquisition.h (opt-in read_ex / EVT_IQ_BLOCK_EX).
  */
 esp_err_t esp_rtl_sdr_get_capture_meta(esp_rtl_sdr_handle_t handle,
                                        esp_rtl_sdr_capture_meta_t *out);

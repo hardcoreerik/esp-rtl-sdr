@@ -3,7 +3,7 @@
 ESP-IDF app that links **esp_rtl_sdr** and exercises the public 0.7.12 drop-in
 contract on ESP32-P4 / Tab5.
 
-The example uses M5Unified's Tab5 power-expander helper to enable the USB-A rail
+The explicitly selected Tab5 profile uses M5Unified's power-expander helper to enable the USB-A rail
 before installing the USB host, so cold boots do not depend on previously run
 firmware or initialize unrelated display/audio hardware.
 
@@ -32,12 +32,15 @@ IQ `EVT_IQ_BLOCK` logging is suppressed so serial cannot stall delivery.
 ## Rows
 
 ```text
-SMOKE <name> PASS|FAIL
+SMOKE <name> PASS|FAIL|SKIP
 SOAK <label> eff=<pct> sps=<n> bytes=<n> over=<n> drops=<n> short=<n> urbs=<c>x<b> advice=<s> window_ms=<ms>
-SMOKE OVERALL PASS|FAIL passed=<n> failed=<n> hardware=RUN|SKIP
+SMOKE OVERALL PASS|FAIL passed=<n> failed=<n> skipped=<n> hardware=RUN|SKIP
 ```
 
-No dongle: helpers + install/uninstall still pass (`hardware=SKIP`).
+No dongle: RF tests use `hardware=SKIP`. On this maintenance branch final
+owned-host uninstall returns an error and retains the host because enumeration
+idle cannot be proven from an empty device list. The uninstall row and overall
+result therefore FAIL; this is a cleanup limitation, not an RF failure.
 Attached Blog V4: soak + L4 (`hardware=RUN`).
 
 ## Tab5 / P4 silicon (IDF 5.5.4)
@@ -107,3 +110,38 @@ by this example's author flashing from a dirty tree.
 ## CI
 
 GitHub Actions job `idf-p4-build` compiles the default image (no hardware).
+
+## Explicit board profile
+
+Select `ESP_RTL_SDR_SMOKE_BOARD_TAB5`, `..._GENERIC`, or `..._UNKNOWN` in menuconfig.
+The existing `sdkconfig.defaults` explicitly selects Tab5 and pre-v3 silicon.
+For another board, replace that defaults file with `sdkconfig.generic.defaults`
+and verify the actual silicon revision before flashing. GENERIC means the board
+or application already supplies USB host power; this app does not configure it.
+UNKNOWN reports power as not verified. Neither profile probes Tab5 I2C hardware.
+
+Tab5 runs the power test and still FAILs on a broken expander path. GENERIC prints
+`SMOKE tab5_usb_power SKIP reason=NOT_APPLICABLE`; UNKNOWN uses
+`reason=NOT_VERIFIED`. The skipped counter is separate from passed/failed.
+`SMOKE OVERALL PASS` means no executed checks failed, not that skipped hardware
+was verified. The Tab5 helper verifies the expander output latch, not VBUS under
+load or the physical voltage.
+
+## ESP-IDF 6.1 development comparison
+
+This branch also builds with IDF 6.1 and `espressif/usb` **1.6.0**, selected only
+on IDF >=6.0 through component manifests. The driver is explicitly compiled as
+C++17. IDF 5.5.4 keeps its bundled USB component. Consumer pins are unchanged.
+Build success is not hardware acceptance; host re-entry remains unsupported.
+
+From the repository root, after exporting the chosen IDF environment:
+
+```powershell
+idf.py -C examples/p4_serial_smoke -B build/tab5-61 build
+idf.py -C examples/p4_serial_smoke -B build/generic-61 -D SDKCONFIG_DEFAULTS=sdkconfig.generic.defaults build
+```
+
+Each build uses its own `sdkconfig` under `-B`; do not pass a relative SDKCONFIG
+path intended to be relative to the repository root. IDF resolves that path
+relative to the application directory. Inspect the resulting sdkconfig before
+flashing. No board was flashed during this investigation.

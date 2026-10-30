@@ -1,5 +1,16 @@
 menu "esp_rtl_sdr p4_serial_smoke"
 
+choice ESP_RTL_SDR_SMOKE_BOARD
+    prompt "Board USB power profile (select explicitly)"
+    default ESP_RTL_SDR_SMOKE_BOARD_UNKNOWN
+    config ESP_RTL_SDR_SMOKE_BOARD_TAB5
+        bool "M5Stack Tab5 (verify the power expander)"
+    config ESP_RTL_SDR_SMOKE_BOARD_GENERIC
+        bool "Other board (USB host power supplied by the board/application)"
+    config ESP_RTL_SDR_SMOKE_BOARD_UNKNOWN
+        bool "Unknown (USB power not verified)"
+endchoice
+
 choice ESP_RTL_SDR_SMOKE_URB
     prompt "USB bulk URB layout for quiet soak"
     default ESP_RTL_SDR_SMOKE_URB_6X16K
@@ -12,6 +23,10 @@ choice ESP_RTL_SDR_SMOKE_URB
     config ESP_RTL_SDR_SMOKE_URB_3X32K
         bool "3 x 32 KiB (OrcSDR-like)"
 endchoice
+
+config ESP_RTL_SDR_SMOKE_ACQUISITION
+    bool "Validate opt-in acquisition metadata and sparse I/Q quality"
+    default n
 
 config ESP_RTL_SDR_SMOKE_SOAK_MS
     int "Quiet soak duration (ms)"

@@ -41,6 +41,9 @@
 #include "gain_r820t2.hpp"
 #include "r820t2_band.hpp"
 #include "rtl_usb_guard.hpp"
+#include "rtl_usb_shutdown.hpp"
+#include "rtl_pull_alloc.hpp"
+#include "rtl_acquisition.hpp"
 #include "reentrancy.hpp"
 #include "resampler_ratio.hpp"
 #include "rtl_multi.hpp"
@@ -64,7 +67,7 @@ static constexpr size_t kCtrlXferBytes = 64 + sizeof(usb_setup_packet_t);
 /* Named runtime constants — see docs/RUNTIME_CONSTANTS.md (not Kconfig yet). */
 static constexpr size_t kRingDepth = 6;       /* IQ free/filled queue depth */
 static constexpr int kUsbCore = 0;            /* default USB owner core (P4) */
-static constexpr int kDeliveryCore = 1;       /* IQ event delivery core */
+static constexpr int kDeliveryCore = portNUM_PROCESSORS > 1 ? 1 : 0;       /* IQ event delivery core */
 static constexpr UBaseType_t kUsbPrio = 20;
 static constexpr UBaseType_t kClientPrio = 19;
 /* Delivery only posts IQ; app audio task should be >= this and graphics much lower. */
@@ -211,14 +214,18 @@ esp_err_t esp_rtl_sdr_usb_fault_guard_reset(void)
 /* -------------------------------------------------------------------------- */
 
 struct UsbSession {
-    SemaphoreHandle_t lock = nullptr;
+    std::atomic<SemaphoreHandle_t> lock{nullptr};
+    uint64_t next_receiver_id = 0;
     int refcount = 0;
     bool host_installed = false;
+    bool teardown_pending = false;
+    bool free_requested = false;
     bool external_host = false; /* app called usb_host_install */
     volatile bool bringing_up = false;
-    volatile bool host_task_run = false;
+    std::atomic<bool> host_task_run{false};
+    std::atomic<bool> host_task_exited{true};
+    std::atomic<bool> all_devices_free{false};
     TaskHandle_t host_task = nullptr;
-    TaskHandle_t host_join_waiter = nullptr;
     RtlClaimTable claims{};
     bool slot_used[ESP_RTL_SDR_MAX_DEVICES]{};
     uint32_t new_dev_events = 0;
@@ -232,20 +239,22 @@ static UsbSession s_usb_session;
 
 static bool session_lock(void)
 {
-    if (s_usb_session.lock == nullptr) {
-        s_usb_session.lock = xSemaphoreCreateMutex();
-        if (s_usb_session.lock == nullptr) {
-            return false;
+    auto lock = s_usb_session.lock.load(std::memory_order_acquire);
+    if (lock == nullptr) {
+        auto candidate = xSemaphoreCreateMutex();
+        if (candidate == nullptr) return false;
+        if (s_usb_session.lock.compare_exchange_strong(lock, candidate, std::memory_order_acq_rel)) {
+            lock = candidate;
+        } else {
+            vSemaphoreDelete(candidate);
         }
     }
-    return xSemaphoreTake(s_usb_session.lock, portMAX_DELAY) == pdTRUE;
+    return xSemaphoreTake(lock, portMAX_DELAY) == pdTRUE;
 }
 
 static void session_unlock(void)
 {
-    if (s_usb_session.lock != nullptr) {
-        xSemaphoreGive(s_usb_session.lock);
-    }
+    xSemaphoreGive(s_usb_session.lock.load(std::memory_order_acquire));
 }
 
 static void session_fill_hub_stats(esp_rtl_sdr_hub_stats_t *out)
@@ -302,10 +311,26 @@ struct IqSlot {
     uint32_t flags = 0;
 };
 
+struct AcquisitionRuntime {
+    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+    rtl_acq::Timeline timeline;
+    rtl_acq::Cursor callback_cursor, read_cursor;
+    rtl_acq::Sidecar<64> sidecar;
+    esp_rtl_sdr_sample_meta_t slots[kRingDepth]{};
+    uint64_t receiver_id = 0;
+    uint32_t requested_rate = 0;
+    bool configuration_certain = true;
+    uint32_t pull_pending_causes = 0;
+    uint64_t metadata_drop_bytes = 0;
+};
+
 struct esp_rtl_sdr_handle {
     uint32_t magic = 0;
     SemaphoreHandle_t lock = nullptr;
     esp_rtl_sdr_config_t cfg{};
+    esp_rtl_sdr_acquisition_config_t acquisition_config{};
+    AcquisitionRuntime *acquisition = nullptr;
+    bool acquisition_configuration_locked = false;
     esp_rtl_sdr_device_info_t info{};
     RtlProfileId profile = RtlProfileId::Unknown;
     uint32_t device_caps = 0;
@@ -331,10 +356,10 @@ struct esp_rtl_sdr_handle {
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
-    /** Set during uninstall; worker tasks notify this task before vTaskDelete. */
-    TaskHandle_t join_waiter = nullptr;
     uint8_t worker_task_count = 0;
-    volatile bool tasks_run = false;
+    std::atomic<unsigned> workers_exited{0};
+    bool uninstall_active = false;
+    std::atomic<bool> tasks_run{false};
 
     SemaphoreHandle_t ctrl_sem = nullptr;
     SemaphoreHandle_t ctrl_mutex = nullptr;
@@ -402,6 +427,7 @@ struct esp_rtl_sdr_handle {
 
     /** Preferred LO/rate for desktop-shaped set_* APIs and start_hz(). */
     uint32_t preferred_frequency_hz = ESP_RTL_SDR_PRESET_KZEL_HZ;
+    uint32_t requested_sample_rate_sps = ESP_RTL_SDR_RATE_960K;
     uint32_t preferred_sample_rate_sps = ESP_RTL_SDR_RATE_960K;
 
     /** Software LO correction (ppm). Applied at tune time only. */
@@ -606,9 +632,8 @@ static void emit_after_unlock(esp_rtl_sdr_handle *h,
 
 static void worker_task_exit(esp_rtl_sdr_handle *h)
 {
-    if (h != nullptr && h->join_waiter != nullptr) {
-        xTaskNotifyGive(h->join_waiter);
-    }
+    // Last access to handle memory; the owner polls an acquire load before freeing.
+    if (h != nullptr) h->workers_exited.fetch_add(1, std::memory_order_release);
     vTaskDelete(nullptr);
 }
 
@@ -1772,8 +1797,73 @@ static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
 /* Bulk + ring                                                                */
 /* -------------------------------------------------------------------------- */
 
+static esp_err_t ensure_acquisition(esp_rtl_sdr_handle *h)
+{
+    if (!h->acquisition_config.enabled || h->acquisition != nullptr) return ESP_OK;
+    void *storage = heap_caps_malloc(sizeof(AcquisitionRuntime), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!storage) return ESP_ERR_NO_MEM;
+    auto *runtime = new (storage) AcquisitionRuntime();
+    if (!session_lock()) { runtime->~AcquisitionRuntime(); free(storage); return ESP_ERR_NO_MEM; }
+    if (s_usb_session.next_receiver_id == UINT64_MAX) {
+        session_unlock(); runtime->~AcquisitionRuntime(); free(storage); return ESP_ERR_INVALID_STATE;
+    }
+    runtime->receiver_id = ++s_usb_session.next_receiver_id;
+    session_unlock();
+    h->acquisition = runtime;
+    RTL_LOGI(h, "acquisition metadata reserved %u internal bytes, descriptors=64", static_cast<unsigned>(sizeof(*runtime)));
+    return ESP_OK;
+}
+
+static esp_err_t run_acquisition_fifo_reset(esp_rtl_sdr_handle *h)
+{
+    if (!h->acquisition) return ESP_OK;
+    // Reuse the final USB reset pair in our first-party initialization capture.
+    // This is per-dongle USB buffer control, not a new tuner register sequence.
+    constexpr size_t count = std::size(kRtlInitTransfers);
+    static_assert(kRtlInitTransfers[count-2].value == 0x2148 &&
+                  kRtlInitTransfers[count-2].data[0] == 0x10 && kRtlInitTransfers[count-2].data[1] == 0x02 &&
+                  kRtlInitTransfers[count-1].value == 0x2148 &&
+                  kRtlInitTransfers[count-1].data[0] == 0 && kRtlInitTransfers[count-1].data[1] == 0,
+                  "capture-derived USB reset pair changed; review epoch fencing");
+    return run_records(h, &kRtlInitTransfers[count-2], 2);
+}
+
+static bool acquisition_epoch(esp_rtl_sdr_handle *h, uint32_t reason, bool certain = true)
+{
+    auto *a = h->acquisition;
+    if (!a) return true;
+    portENTER_CRITICAL(&a->mux);
+    a->configuration_certain = certain;
+    if (!certain) reason |= ESP_RTL_SDR_ACQ_CONTROL_FAILED;
+    const bool ok = a->timeline.begin(a->receiver_id, certain ? h->frequency_hz : 0,
+                                     a->requested_rate, h->sample_rate_sps, h->freq_correction_ppm, reason);
+    portEXIT_CRITICAL(&a->mux);
+    if (!ok) { h->streaming = false; h->state = ESP_RTL_SDR_STATE_FAULT; }
+    return ok;
+}
+
+static void acquisition_interrupt(esp_rtl_sdr_handle *h, uint32_t reason)
+{
+    auto *a = h->acquisition;
+    if (!a) return;
+    portENTER_CRITICAL(&a->mux);
+    a->timeline.interrupt(reason);
+    portEXIT_CRITICAL(&a->mux);
+}
+
+static void acquisition_discard(esp_rtl_sdr_handle *h, uint32_t reason)
+{
+    auto *a = h->acquisition;
+    if (!a) return;
+    portENTER_CRITICAL(&a->mux);
+    a->timeline.discard(reason);
+    portEXIT_CRITICAL(&a->mux);
+}
+
+
 /* Defined below; bulk_cb's read-only fast path fills the ring directly. */
-static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t bytes);
+static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t bytes,
+                           const esp_rtl_sdr_sample_meta_t *metadata = nullptr);
 
 static void bulk_cb(usb_transfer_t *xfer)
 {
@@ -1782,6 +1872,31 @@ static void bulk_cb(usb_transfer_t *xfer)
         return;
     }
 
+    esp_rtl_sdr_sample_meta_t observed{};
+    if (h->acquisition) {
+        if ((xfer->status != USB_TRANSFER_STATUS_COMPLETED && xfer->status != USB_TRANSFER_STATUS_CANCELED) ||
+            (xfer->status == USB_TRANSFER_STATUS_CANCELED && h->streaming && !h->pause_resubmit && !h->device_gone))
+            acquisition_interrupt(h, ESP_RTL_SDR_ACQ_USB_ERROR);
+        if (xfer->status == USB_TRANSFER_STATUS_COMPLETED && xfer->actual_num_bytes > 0) {
+            auto *a = h->acquisition;
+            const size_t bytes = static_cast<size_t>(xfer->actual_num_bytes);
+            portENTER_CRITICAL(&a->mux);
+            if (bytes & 1) a->timeline.interrupt(ESP_RTL_SDR_ACQ_USB_ERROR);
+            observed = a->timeline.observe(bytes, esp_timer_get_time());
+            portEXIT_CRITICAL(&a->mux);
+            observed.quality = rtl_acq::quality(xfer->data_buffer, bytes, h->acquisition_config.quality_stride_pairs);
+            rtl_acq::clock_estimate(observed, h->acquisition_config);
+            observed.device_id = h->logical_index;
+            observed.usb_addr = h->open_addr;
+            if (bytes != h->bulk_len) observed.flags |= ESP_RTL_SDR_ACQ_SHORT_TRANSFER;
+            if ((bytes & 1) || observed.sample_count != bytes/2) {
+                h->streaming = false;
+                h->state = ESP_RTL_SDR_STATE_FAULT;
+                set_error_unlocked(h,ESP_RTL_SDR_ERR_USB);
+                RTL_LOGE(h,"acquisition rejected malformed or exhausted sample timeline; stop/restart required");
+            }
+        }
+    }
     h->usb_xfer_count++;
     if (xfer->status == USB_TRANSFER_STATUS_TIMED_OUT) {
         h->usb_timeouts++;
@@ -1815,7 +1930,7 @@ static void bulk_cb(usb_transfer_t *xfer)
             esp_rtl_sdr_delivery_mode_uses_read(h->cfg.delivery_mode) &&
             !esp_rtl_sdr_delivery_mode_uses_callback_iq(h->cfg.delivery_mode)) {
             const size_t n = static_cast<size_t>(xfer->actual_num_bytes);
-            pull_ring_push(h, xfer->data_buffer, n);
+            pull_ring_push(h, xfer->data_buffer, n, h->acquisition ? &observed : nullptr);
             h->metrics.bytes_total += n;
             h->metrics.blocks_total++;
             h->last_xfer_timestamp_us = esp_timer_get_time();
@@ -1846,6 +1961,7 @@ static void bulk_cb(usb_transfer_t *xfer)
             const size_t copy = (n <= slot->capacity) ? n : slot->capacity;
             std::memcpy(slot->data, xfer->data_buffer, copy);
             slot->bytes = copy;
+            if (h->acquisition) h->acquisition->slots[slot - h->ring] = observed;
             slot->sequence = ++h->iq_sequence;
             slot->frequency_hz = h->frequency_hz;
             slot->sample_rate_sps = h->sample_rate_sps;
@@ -1883,7 +1999,7 @@ static void bulk_cb(usb_transfer_t *xfer)
             if (esp_rtl_sdr_delivery_mode_uses_read(h->cfg.delivery_mode) &&
                 !esp_rtl_sdr_delivery_mode_uses_callback_iq(h->cfg.delivery_mode) &&
                 h->pull_buf != nullptr) {
-                pull_ring_push(h, slot->data, slot->bytes);
+                pull_ring_push(h, slot->data, slot->bytes, h->acquisition ? &h->acquisition->slots[slot - h->ring] : nullptr);
                 h->metrics.bytes_total += slot->bytes;
                 h->metrics.blocks_total++;
                 (void)xQueueSend(h->free_q, &slot, 0);
@@ -1913,6 +2029,7 @@ static void bulk_cb(usb_transfer_t *xfer)
             if (xQueueSend(h->filled_q, &slot, 0) != pdTRUE) {
                 (void)xQueueSend(h->free_q, &slot, 0);
                 h->metrics.overruns++;
+                acquisition_discard(h, ESP_RTL_SDR_ACQ_QUEUE_STARVE);
                 slot->flags |= ESP_RTL_SDR_IQ_FLAG_OVERRUN;
             } else {
                 h->metrics.bytes_total += copy;
@@ -1948,6 +2065,7 @@ static void bulk_cb(usb_transfer_t *xfer)
             h->metrics.overruns++;
             h->metrics.consumer_drops++;
             h->metrics.slot_starve_blocks++;
+            acquisition_discard(h, ESP_RTL_SDR_ACQ_QUEUE_STARVE);
         }
     } else if (xfer->status != USB_TRANSFER_STATUS_CANCELED &&
                xfer->status != USB_TRANSFER_STATUS_COMPLETED) {
@@ -2081,15 +2199,22 @@ static void bulk_recover_stall(esp_rtl_sdr_handle *h)
         return;
     }
     h->ep_stall_recover = false;
+    acquisition_interrupt(h, ESP_RTL_SDR_ACQ_USB_ERROR);
     if (h->ep_recoveries - h->ep_recoveries_at_data >= kEpRecoverAttempts) {
         RTL_LOGE(h, "bulk EP recovery failed %u times with no data; stopping",
                  static_cast<unsigned>(kEpRecoverAttempts));
         h->streaming = false;
+        h->state = ESP_RTL_SDR_STATE_FAULT;
         return;
     }
     h->ep_recoveries++;
     h->pause_resubmit = true;
-    (void)drain_live_urbs(h, 100, 100);
+    if (!drain_live_urbs(h, 100, 100)) {
+        RTL_LOGE(h, "bulk recovery drain timeout; retaining %u live URBs", static_cast<unsigned>(h->live_urbs));
+        h->streaming = false;
+        h->state = ESP_RTL_SDR_STATE_FAULT;
+        return;
+    }
     if (h->dev != nullptr) {
         usb_host_endpoint_halt(h->dev, ESP_RTL_SDR_BULK_EP_IN);
         usb_host_endpoint_flush(h->dev, ESP_RTL_SDR_BULK_EP_IN);
@@ -2170,6 +2295,10 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         err = run_profile_tune(h, tune_hz, h->frequency_hz);
         if (err == ESP_OK) err = run_band_frontend(h, tune_hz);
     }
+    if (err == ESP_OK) {
+        err = run_acquisition_fifo_reset(h);
+        if (err != ESP_OK) { h->streaming = false; h->state = ESP_RTL_SDR_STATE_FAULT; }
+    }
     t_tuned = esp_timer_get_time();
     t_frontend = esp_timer_get_time();
     if (err == ESP_OK) {
@@ -2210,6 +2339,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         }
     }
 
+    acquisition_epoch(h, err == ESP_OK ? ESP_RTL_SDR_ACQ_RETUNE : ESP_RTL_SDR_ACQ_CONTROL_FAILED, err == ESP_OK);
     if (h->state != ESP_RTL_SDR_STATE_FAULT) bulk_resume(h);
     const int64_t t_resumed = esp_timer_get_time();
     RTL_LOGD(h, "retune phases us: drain=%lld tune=%lld frontend=%lld resume=%lld total=%lld",
@@ -2244,7 +2374,8 @@ static size_t pull_ring_space(const esp_rtl_sdr_handle *h)
     return h->pull_cap - 1 - pull_ring_used(h);
 }
 
-static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t bytes)
+static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t bytes,
+                           const esp_rtl_sdr_sample_meta_t *metadata)
 {
     if (h == nullptr || h->pull_buf == nullptr || data == nullptr || bytes == 0) {
         return;
@@ -2264,10 +2395,22 @@ static void pull_ring_push(esp_rtl_sdr_handle *h, const uint8_t *data, size_t by
     const size_t space = pull_ring_space(h);
     size_t n = (bytes < space) ? bytes : space;
     n &= ~(size_t)1;                    /* keep CU8 I/Q pairs together */
-    if (n < bytes) {
-        const size_t lost = bytes - n;
-        h->metrics.consumer_drops += static_cast<uint32_t>(lost);
-        h->metrics.ring_overrun_bytes += lost;
+    const size_t ring_lost = bytes-n;
+    // Descriptor publication precedes byte publication; consumer still checks byte availability.
+    if (h->acquisition) {
+        auto &a = *h->acquisition;
+        esp_rtl_sdr_sample_meta_t tagged = metadata ? *metadata : esp_rtl_sdr_sample_meta_t{};
+        tagged.flags |= a.pull_pending_causes;
+        if (n && (!metadata || !a.sidecar.push(tagged,n))) {
+            a.metadata_drop_bytes += n;
+            a.pull_pending_causes |= ESP_RTL_SDR_ACQ_META_OVERRUN | (tagged.flags & rtl_acq::loss_causes);
+            n=0;
+        } else if (n) a.pull_pending_causes=0;
+        if (ring_lost) a.pull_pending_causes |= ESP_RTL_SDR_ACQ_PULL_OVERRUN | (tagged.flags & rtl_acq::loss_causes);
+    }
+    if (n < bytes) h->metrics.consumer_drops += static_cast<uint32_t>(bytes-n);
+    if (ring_lost) {
+        h->metrics.ring_overrun_bytes += ring_lost;
         h->metrics.ring_overrun_blocks++;
     }
     if (n == 0) {
@@ -2300,6 +2443,8 @@ static void pull_ring_reset(esp_rtl_sdr_handle *h)
     if (h == nullptr || h->pull_mux == nullptr) {
         return;
     }
+    // Opt-in descriptors retain old queued samples and their original epochs.
+    if (h->acquisition) return;
     if (xSemaphoreTake(h->pull_mux, pdMS_TO_TICKS(50)) == pdTRUE) {
         /* Callers must guarantee no producer is in flight: either before the
          * bulk pool is allocated, or after it has been freed. The mutex no
@@ -2337,9 +2482,8 @@ static void destroy_pull_ring_unlocked(esp_rtl_sdr_handle *h)
     }
 }
 
-static constexpr size_t kPullRingAutoMin = 64u * 1024u;  /* Tab5 no-PSRAM L4 */
 static constexpr size_t kPullRingAutoMax = 512u * 1024u;
-static constexpr size_t kPullRingAutoFloor = 96000u * 2u; /* ~0.2 s @ 960 kS/s CU8 */
+static constexpr size_t kPullRingAutoFloor = 96000u * 2u; /* ~0.1 s @ 960 kS/s CU8 */
 
 static size_t pull_ring_auto_prefer(const esp_rtl_sdr_handle *h)
 {
@@ -2353,16 +2497,19 @@ static size_t pull_ring_auto_prefer(const esp_rtl_sdr_handle *h)
     return need & ~size_t{1};
 }
 
-static uint8_t *malloc_pull_buf(size_t need)
-{
-    uint8_t *buf = static_cast<uint8_t *>(
-        heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (buf == nullptr) {
-        buf = static_cast<uint8_t *>(
-            heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+struct PullHeap {
+    uint8_t *psram(size_t n) { return static_cast<uint8_t *>(heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)); }
+    uint8_t *internal(size_t n) { return static_cast<uint8_t *>(heap_caps_malloc(n, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)); }
+    size_t internal_budget() {
+        // Existing 32 KiB reserve now applies before any internal auto allocation:
+        // delivery stack (6 KiB), synchronization objects and application headroom.
+        const size_t reserve = 32u * 1024u;
+        size_t n = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        const size_t total = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (n > total) n = total;
+        return n > reserve ? n - reserve : 0;
     }
-    return buf;
-}
+};
 
 /**
  * Lazy pull-ring init. Serialized on the handle API lock so delivery_task and
@@ -2401,46 +2548,17 @@ static esp_err_t ensure_pull_ring(esp_rtl_sdr_handle *h)
     }
 
     const size_t prefer = need;
-    uint8_t *buf = malloc_pull_buf(need);
-    if (buf == nullptr && auto_size) {
-        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL |
-                                                          MALLOC_CAP_8BIT);
-        const size_t slack = 32u * 1024u;
-        if (largest > slack) {
-            largest -= slack;
-        } else {
-            largest = 0;
-        }
-        largest &= ~size_t{1};
-        static const size_t kLadder[] = {128u * 1024u, 96u * 1024u, kPullRingAutoMin};
-        size_t try_sz = largest;
-        if (try_sz > prefer) {
-            try_sz = prefer;
-        }
-        if (try_sz < kPullRingAutoMin) {
-            try_sz = kPullRingAutoMin;
-        }
-        buf = malloc_pull_buf(try_sz);
-        if (buf == nullptr) {
-            for (size_t i = 0; i < sizeof(kLadder) / sizeof(kLadder[0]); ++i) {
-                if (kLadder[i] >= try_sz && try_sz != kPullRingAutoMin) {
-                    continue;
-                }
-                buf = malloc_pull_buf(kLadder[i]);
-                if (buf != nullptr) {
-                    try_sz = kLadder[i];
-                    break;
-                }
-            }
-        }
-        if (buf != nullptr) {
-            ESP_LOGW(TAG, "pull ring auto shrunk %u -> %u (heap)",
-                     static_cast<unsigned>(prefer), static_cast<unsigned>(try_sz));
-            need = try_sz;
-        }
-    }
+    PullHeap heap;
+    uint8_t *buf = rtl_usb::allocate_pull(heap, prefer, auto_size, need);
     if (buf == nullptr) {
+        RTL_LOGE(h, "pull ring alloc failed requested=%u auto=%d internal_budget=%u",
+                 static_cast<unsigned>(prefer), auto_size, static_cast<unsigned>(heap.internal_budget()));
         return ESP_ERR_NO_MEM;
+    }
+    if (need != prefer) {
+        RTL_LOGW(h, "pull ring auto shrunk %u -> %u bytes; buffering=%u ms at preferred rate",
+                 static_cast<unsigned>(prefer), static_cast<unsigned>(need),
+                 static_cast<unsigned>(h->preferred_sample_rate_sps ? need * 500u / h->preferred_sample_rate_sps : 0));
     }
     ESP_LOGI(TAG, "pull ring %u bytes auto=%d", static_cast<unsigned>(need),
              auto_size ? 1 : 0);
@@ -2497,6 +2615,11 @@ static void delivery_task_fn(void *arg)
             (void)apply_pending_sideband_ep0(h);
         }
 
+        if (h->filled_q == nullptr) {
+            // READ still needs this task for queued hardware controls/recovery.
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
         IqSlot *slot = nullptr;
         if (h->filled_q == nullptr) {
             vTaskDelay(pdMS_TO_TICKS(20));
@@ -2545,7 +2668,7 @@ static void delivery_task_fn(void *arg)
         /* Lazy pull ring: allocate only when mode uses read() and IQ arrives. */
         if (esp_rtl_sdr_delivery_mode_uses_read(mode)) {
             if (ensure_pull_ring(h) == ESP_OK) {
-                pull_ring_push(h, slot->data, slot->bytes);
+                pull_ring_push(h, slot->data, slot->bytes, h->acquisition ? &h->acquisition->slots[slot - h->ring] : nullptr);
             } else {
                 HandleLock lk(h, kQueryLockTicks);
                 if (lk.ok()) {
@@ -2558,6 +2681,12 @@ static void delivery_task_fn(void *arg)
         if (cb != nullptr) {
             if (esp_rtl_sdr_delivery_mode_uses_callback_iq(mode)) {
                 emit_after_unlock(h, ESP_RTL_SDR_EVT_IQ_BLOCK, &block, cb, ctx);
+                if (h->acquisition) {
+                    auto meta = h->acquisition->callback_cursor.deliver(
+                        h->acquisition->slots[slot - h->ring], static_cast<uint32_t>(slot->bytes/2));
+                    esp_rtl_sdr_iq_block_ex_t extended{slot->data, slot->bytes & ~size_t{1}, meta};
+                    emit_after_unlock(h, ESP_RTL_SDR_EVT_IQ_BLOCK_EX, &extended, cb, ctx);
+                }
             }
             if (emit_health) {
                 emit_after_unlock(h, ESP_RTL_SDR_EVT_HEALTH, &health, cb, ctx);
@@ -2633,6 +2762,10 @@ static esp_err_t alloc_bulk_pool(esp_rtl_sdr_handle *h, uint32_t num, uint32_t l
     for (uint32_t i = 0; i < num; ++i) {
         esp_err_t ret = usb_host_transfer_alloc(len, 0, &h->bulk[i]);
         if (ret != ESP_OK) {
+            RTL_LOGE(h, "USB transfer alloc failed at %u/%u, bytes=%u internal=%u largest_dma=%u: %s",
+                     static_cast<unsigned>(i), static_cast<unsigned>(num), static_cast<unsigned>(len),
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DMA)), esp_err_to_name(ret));
             free_bulk_pool(h);
             return ret;
         }
@@ -3102,6 +3235,7 @@ static void client_event_cb(const usb_host_client_event_msg_t *event, void *arg)
             s_usb_session.gone_events++;
             session_unlock();
         }
+        acquisition_interrupt(h, ESP_RTL_SDR_ACQ_DISCONNECTED);
         h->device_gone = true;
     }
 }
@@ -3113,10 +3247,11 @@ static void host_lib_task_fn(void *arg)
         uint32_t flags = 0;
         /* 50 ms: faster join on uninstall than 100 ms. */
         usb_host_lib_handle_events(pdMS_TO_TICKS(50), &flags);
+        if (flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) {
+            s_usb_session.all_devices_free.store(true, std::memory_order_release);
+        }
     }
-    if (s_usb_session.host_join_waiter != nullptr) {
-        xTaskNotifyGive(s_usb_session.host_join_waiter);
-    }
+    s_usb_session.host_task_exited.store(true, std::memory_order_release);
     vTaskDelete(nullptr);
 }
 
@@ -3324,12 +3459,24 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
     std::snprintf(h->log_id, sizeof(h->log_id), "RTL%u",
                   static_cast<unsigned>(slot) % ESP_RTL_SDR_MAX_DEVICES);
 
+    const TickType_t acquire_at = xTaskGetTickCount();
     while (s_usb_session.bringing_up) {
         session_unlock();
         vTaskDelay(pdMS_TO_TICKS(5));
-        if (!session_lock()) {
-            return ESP_ERR_NO_MEM;
+        if (!session_lock()) return ESP_ERR_NO_MEM;
+        if (xTaskGetTickCount() - acquire_at >= pdMS_TO_TICKS(2000)) {
+            session_free_slot(slot);
+            h->logical_index = 0xFF;
+            session_unlock();
+            return ESP_RTL_SDR_ERR_TIMEOUT;
         }
+    }
+    // A failed final teardown retains its session; do not resurrect a stopped host.
+    if (s_usb_session.teardown_pending || (s_usb_session.host_installed && !s_usb_session.host_task_run)) {
+        session_free_slot(slot);
+        h->logical_index = 0xFF;
+        session_unlock();
+        return ESP_ERR_INVALID_STATE;
     }
     const bool first = (s_usb_session.refcount == 0);
     if (first) {
@@ -3352,6 +3499,7 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
     if (need_install) {
         usb_host_config_t hc{};
         hc.intr_flags = ESP_INTR_FLAG_LEVEL1;
+        hc.root_port_unpowered = true;
         /*
          * Do not set peripheral_map here: field is not present on all IDF 5.3/5.4
          * headers. Default install selects the primary HS host on ESP32-P4.
@@ -3371,26 +3519,37 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
         if (session_lock()) {
             s_usb_session.host_installed = true;
             s_usb_session.host_task_run = true;
+            s_usb_session.host_task_exited = false;
+            s_usb_session.all_devices_free = false;
             session_unlock();
         }
         if (xTaskCreatePinnedToCore(host_lib_task_fn, "rtl_usb_lib", 4096, nullptr, kUsbPrio,
                                     &s_usb_session.host_task, kUsbCore) != pdPASS) {
-            (void)usb_host_uninstall();
+            const esp_err_t cleanup = usb_host_uninstall();
             if (session_lock()) {
-                s_usb_session.host_installed = false;
                 s_usb_session.host_task_run = false;
+                s_usb_session.host_task_exited = true; // no task was created
                 s_usb_session.bringing_up = false;
-                s_usb_session.refcount--;
-                session_free_slot(slot);
+                if (cleanup == ESP_OK) {
+                    s_usb_session.host_installed = false;
+                    s_usb_session.refcount--;
+                    session_free_slot(slot);
+                    h->logical_index = 0xFF;
+                } else {
+                    s_usb_session.teardown_pending = true;
+                    ESP_LOGE(TAG, "host task creation rollback retained USB host: %s", esp_err_to_name(cleanup));
+                }
                 session_unlock();
             }
-            h->logical_index = 0xFF;
             return ESP_ERR_NO_MEM;
         }
+        ret = usb_host_lib_set_root_port_power(true);
         if (session_lock()) {
+            s_usb_session.teardown_pending = ret != ESP_OK;
             s_usb_session.bringing_up = false;
             session_unlock();
         }
+        if (ret != ESP_OK) return ret;
         RTL_LOGI(h, "USB host session started (shared)");
     } else {
         RTL_LOGI(h, "USB host session joined refcount now includes this handle");
@@ -3398,46 +3557,64 @@ static esp_err_t session_acquire(esp_rtl_sdr_handle *h)
     return ESP_OK;
 }
 
-static void session_release(esp_rtl_sdr_handle *h)
+struct SessionShutdown {
+    esp_err_t free_devices() {
+        if (!s_usb_session.host_task_run) return ESP_OK; // retry after a failed join/uninstall
+        if (s_usb_session.free_requested && s_usb_session.all_devices_free.load(std::memory_order_acquire)) return ESP_OK;
+        s_usb_session.all_devices_free = false;
+        s_usb_session.free_requested = true;
+        const esp_err_t err = usb_host_device_free_all();
+        if (err == ESP_OK) {
+            // No enumerated devices does not prove the enumeration EP0 pipe is gone.
+            // IDF exposes no public enumeration-idle query; retain the host safely.
+            ESP_LOGE(TAG, "uninstall: empty device list cannot prove enumeration idle; host retained");
+            return ESP_ERR_INVALID_STATE;
+        }
+        if (err != ESP_ERR_NOT_FINISHED) return err;
+        const TickType_t start = xTaskGetTickCount();
+        while (!s_usb_session.all_devices_free.load(std::memory_order_acquire)) {
+            if (xTaskGetTickCount() - start >= pdMS_TO_TICKS(2000)) return ESP_RTL_SDR_ERR_TIMEOUT;
+            vTaskDelay(1);
+        }
+        return ESP_OK;
+    }
+    void stop_events() { s_usb_session.host_task_run = false; }
+    esp_err_t join_events() {
+        const TickType_t start = xTaskGetTickCount();
+        while (!s_usb_session.host_task_exited.load(std::memory_order_acquire)) {
+            if (xTaskGetTickCount() - start >= pdMS_TO_TICKS(500)) return ESP_RTL_SDR_ERR_TIMEOUT;
+            vTaskDelay(1);
+        }
+        return ESP_OK;
+    }
+    esp_err_t uninstall() { return usb_host_uninstall(); }
+};
+
+static esp_err_t session_release(esp_rtl_sdr_handle *h)
 {
-    if (h == nullptr) {
-        return;
-    }
-    const int slot = (h->logical_index < ESP_RTL_SDR_MAX_DEVICES) ? h->logical_index : -1;
-    bool last = false;
-    bool we_installed = false;
-    if (session_lock()) {
-        if (slot >= 0) {
-            session_free_slot(slot);
+    if (h == nullptr || h->logical_index >= ESP_RTL_SDR_MAX_DEVICES) return ESP_OK;
+    if (!session_lock()) return ESP_ERR_NO_MEM;
+    // Serialize the final release with acquire and other releases. The host task
+    // does not take this mutex, so it can finish device cleanup while we wait.
+    if (s_usb_session.refcount == 1 && s_usb_session.host_installed && !s_usb_session.external_host) {
+        s_usb_session.teardown_pending = true;
+        SessionShutdown host;
+        const esp_err_t err = rtl_usb::shutdown_host(host);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "USB session retained after teardown failure: %s", esp_err_to_name(err));
+            session_unlock();
+            return err;
         }
-        if (slot >= 0 && s_usb_session.refcount > 0) {
-            s_usb_session.refcount--;
-        }
-        last = (s_usb_session.refcount == 0);
-        we_installed = last && s_usb_session.host_installed && !s_usb_session.external_host;
-        session_unlock();
-    }
-    h->logical_index = 0xFF;
-    std::snprintf(h->log_id, sizeof(h->log_id), "RTL?");
-
-    if (!we_installed) {
-        return;
-    }
-
-    s_usb_session.host_join_waiter = xTaskGetCurrentTaskHandle();
-    s_usb_session.host_task_run = false;
-    (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(500));
-    s_usb_session.host_join_waiter = nullptr;
-    s_usb_session.host_task = nullptr;
-
-    const esp_err_t uerr = usb_host_uninstall();
-    if (uerr != ESP_OK) {
-        ESP_LOGE(TAG, "usb_host_uninstall failed (%s)", esp_err_to_name(uerr));
-    }
-    if (session_lock()) {
         s_usb_session.host_installed = false;
-        session_unlock();
+        s_usb_session.teardown_pending = false;
+        s_usb_session.free_requested = false;
+        s_usb_session.host_task = nullptr;
     }
+    session_free_slot(h->logical_index);
+    --s_usb_session.refcount;
+    h->logical_index = 0xFF;
+    session_unlock();
+    return ESP_OK;
 }
 
 static esp_err_t start_usb_stack(esp_rtl_sdr_handle *h)
@@ -3566,7 +3743,12 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
         /* Failed for a reason unrelated to a crash (e.g. ENOMEM) — don't
          * hold the guard armed across a boot where nothing will run. */
         usb_fault_guard_disarm();
-        esp_rtl_sdr_uninstall(h);
+        const esp_err_t cleanup = esp_rtl_sdr_uninstall(h);
+        if (cleanup != ESP_OK) {
+            *out_handle = h;
+            RTL_LOGE(h, "install failed; cleanup handle returned, uninstall retry required: %s",
+                     esp_err_to_name(cleanup));
+        }
         return ret;
     }
 
@@ -3595,47 +3777,57 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
         if (!lk.ok()) {
             return ESP_RTL_SDR_ERR_TIMEOUT;
         }
-        if (handle->destroying) {
-            return ESP_RTL_SDR_ERR_BUSY;
-        }
+        if (handle->uninstall_active) return ESP_RTL_SDR_ERR_BUSY;
         const uint32_t depth = __atomic_load_n(&handle->in_callback_depth, __ATOMIC_SEQ_CST);
         const TaskHandle_t cb = __atomic_load_n(&handle->callback_task, __ATOMIC_SEQ_CST);
         if (esp_rtl_sdr_caller_is_event_callback(depth, cb, xTaskGetCurrentTaskHandle())) {
             return ESP_RTL_SDR_ERR_REENTRANT;
         }
+        handle->uninstall_active = true;
         handle->destroying = true;
     }
 
+    auto retain = [&](esp_err_t err) {
+        HandleLock lk(handle);
+        handle->uninstall_active = false;
+        set_error_unlocked(handle, err);
+        RTL_LOGE(handle, "uninstall incomplete; handle retained, retry uninstall: %s", esp_err_to_name(err));
+        return err;
+    };
     usb_fault_guard_disarm();
-    (void)stop_stream_internal(handle, ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS);
-
-    /* Deterministic worker join (no fixed 50 ms hope). */
-    handle->join_waiter = xTaskGetCurrentTaskHandle();
-    const uint8_t expect = handle->worker_task_count;
-    handle->tasks_run = false;
-    for (uint8_t i = 0; i < expect; ++i) {
-        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(500));
+    // Workers must remain alive to deliver pending USB completions on a failed drain.
+    if (handle->tasks_run) {
+        const esp_err_t stopped = stop_stream_internal(handle, ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS);
+        if (stopped != ESP_OK) return retain(stopped);
     }
-    handle->join_waiter = nullptr;
-    handle->host_task = nullptr;
+    handle->tasks_run = false;
+    const TickType_t joined_at = xTaskGetTickCount();
+    while (handle->workers_exited.load(std::memory_order_acquire) < handle->worker_task_count) {
+        if (xTaskGetTickCount() - joined_at >= pdMS_TO_TICKS(2000)) return retain(ESP_RTL_SDR_ERR_TIMEOUT);
+        vTaskDelay(1);
+    }
     handle->client_task = nullptr;
     handle->delivery_task = nullptr;
-    handle->worker_task_count = 0;
-
-    close_opened_device(handle);
-    retry_deferred_closes(handle);  // workers are joined: last chance before deregister
     if (handle->client_registered) {
-        usb_host_client_deregister(handle->client);
+        // A previous join timeout may have left completions pending without a worker.
+        (void)usb_host_client_handle_events(handle->client, 0);
+    }
+    if (handle->live_urbs != 0 || handle->ctrl_inflight.load(std::memory_order_acquire)) {
+        return retain(ESP_RTL_SDR_ERR_TIMEOUT);
+    }
+    close_opened_device(handle);
+    retry_deferred_closes(handle);
+    for (auto dev : handle->deferred_close) {
+        if (dev != nullptr) return retain(ESP_ERR_INVALID_STATE);
+    }
+    if (handle->client_registered) {
+        const esp_err_t err = usb_host_client_deregister(handle->client);
+        if (err != ESP_OK) return retain(err);
         handle->client_registered = false;
     }
-    session_release(handle);
+    const esp_err_t released = session_release(handle);
+    if (released != ESP_OK) return retain(released);
 
-    /* Host/HCD torn down (or never owned) - safe to clear stuck live_urbs. */
-    if (handle->live_urbs > 0) {
-        ESP_LOGW(TAG, "uninstall: clearing stuck live_urbs=%u after host teardown",
-                 static_cast<unsigned>(handle->live_urbs));
-        handle->live_urbs = 0;
-    }
     free_bulk_pool(handle);
     if (handle->ctrl_xfer) {
         usb_host_transfer_free(handle->ctrl_xfer);
@@ -3643,6 +3835,13 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     }
     destroy_iq_ring(handle);
     destroy_pull_ring_unlocked(handle);
+    if (handle->acquisition) {
+        RTL_LOGI(handle, "acquisition metadata-pressure drops=%llu bytes",
+                 static_cast<unsigned long long>(handle->acquisition->metadata_drop_bytes));
+        handle->acquisition->~AcquisitionRuntime();
+        free(handle->acquisition);
+        handle->acquisition = nullptr;
+    }
     if (handle->probe_q) {
         vQueueDelete(handle->probe_q);
         handle->probe_q = nullptr;
@@ -4027,6 +4226,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         }
         return verr;
     }
+    const uint32_t requested_sps = stream->sample_rate_sps ? stream->sample_rate_sps : handle->requested_sample_rate_sps;
     uint32_t exact_sps = 0;
     if (!esp_rtl_sdr_quantize_sample_rate(local.sample_rate_sps, &exact_sps)) {
         HandleLock lk(handle, kQueryLockTicks);
@@ -4094,7 +4294,8 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (rtl_profile_uses_r820t2_i2c_remap(handle->profile)) {
             /* Shared R820-family addressing, independently captured board
              * differences. Nooelec's 2026-09-30 PC captures cover Q mode,
-             * gain and bandwidth; ESP32-P4 acceptance remains open.
+             * gain and bandwidth. The implemented Nooelec profile also passed
+             * standalone Tab5 streaming/control checks; RF calibration is separate.
              *
              * Blog V3 is soak-verified as of 2026-09-21: 1.62 GB at
              * 1.024 MS/s over 787 s, concurrently with a Blog V4 at
@@ -4115,9 +4316,9 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                          "(I2C 0x34 remap); measured HF upconverter route",
                          rtl_profile_name(handle->profile));
             } else {
-                ESP_LOGW(TAG,
-                         "%s: PC-captured 2026-09-30 (I2C 0x34, direct Q); "
-                         "ESP32-P4 acceptance pending",
+                ESP_LOGI(TAG,
+                         "%s: implemented profile (first-party capture 2026-09-30, I2C 0x34, direct Q); "
+                         "RF calibration is a separate acceptance gate",
                          rtl_profile_name(handle->profile));
             }
         }
@@ -4178,9 +4379,18 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             break;
         }
 
-        ret = ensure_ring(handle, handle->cfg.transfer_bytes);
+        ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
+                              static_cast<uint32_t>(handle->cfg.transfer_bytes));
         if (ret != ESP_OK) {
             break;
+        }
+
+        ret = ensure_acquisition(handle);
+        if (ret != ESP_OK) { RTL_LOGE(handle, "acquisition metadata alloc failed"); break; }
+        // READ copies URBs directly into the pull ring; CPU callback slots are unused.
+        if (esp_rtl_sdr_delivery_mode_uses_callback_iq(handle->cfg.delivery_mode)) {
+            ret = ensure_ring(handle, handle->cfg.transfer_bytes);
+            if (ret != ESP_OK) break;
         }
         /* Allocate the pull ring before the first URB is submitted.
          *
@@ -4206,11 +4416,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             }
             pull_ring_reset(handle);
         }
-        ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
-                              static_cast<uint32_t>(handle->cfg.transfer_bytes));
-        if (ret != ESP_OK) {
-            break;
-        }
+
 
         if (handle->delivery_task == nullptr) {
             handle->tasks_run = true;
@@ -4230,6 +4436,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->sample_rate_sps = local.sample_rate_sps;
         handle->preferred_frequency_hz = freq;
         handle->preferred_sample_rate_sps = local.sample_rate_sps;
+        handle->requested_sample_rate_sps = requested_sps;
         handle->metrics.frequency_hz = freq;
         handle->metrics.sample_rate_sps = local.sample_rate_sps;
         handle->metrics.bytes_total = 0;
@@ -4261,6 +4468,11 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         handle->live_urbs = 0;
         handle->health_emit_blocks = 0;
         handle->last_emitted_health = ESP_RTL_SDR_HEALTH_UNKNOWN;
+        ret = run_acquisition_fifo_reset(handle);
+        if (ret != ESP_OK) break;
+        handle->acquisition_configuration_locked = true;
+        if (handle->acquisition) handle->acquisition->requested_rate = requested_sps;
+        if (!acquisition_epoch(handle, ESP_RTL_SDR_ACQ_START)) { ret = ESP_ERR_INVALID_STATE; break; }
         handle->streaming = true;
 
         for (uint32_t i = 0; i < handle->bulk_num; ++i) {
@@ -4510,6 +4722,7 @@ esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t samp
         return ESP_RTL_SDR_ERR_BUSY;
     }
     handle->preferred_sample_rate_sps = exact;
+    handle->requested_sample_rate_sps = sample_rate_sps;
     handle->sample_rate_sps = exact;
     handle->metrics.sample_rate_sps = exact;
     set_error_unlocked(handle, ESP_OK);
@@ -4531,6 +4744,70 @@ esp_err_t esp_rtl_sdr_get_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t *out
     *out_sps =
         handle->sample_rate_sps != 0 ? handle->sample_rate_sps : handle->preferred_sample_rate_sps;
     return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_configure_acquisition(esp_rtl_sdr_handle_t handle,
+                                         const esp_rtl_sdr_acquisition_config_t *config)
+{
+    if (!config || config->struct_size != sizeof(*config) || config->quality_stride_pairs > 256 ||
+        config->sample_clock_error_ppb < -1000000 || config->sample_clock_error_ppb > 1000000)
+        return ESP_ERR_INVALID_ARG;
+    if (!handle_ok(handle)) return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    HandleLock lk(handle);
+    if (!lk.ok()) return ESP_RTL_SDR_ERR_TIMEOUT;
+    const esp_err_t reentrant = check_not_reentrant(handle);
+    if (reentrant != ESP_OK) return reentrant;
+    if (handle->state != ESP_RTL_SDR_STATE_IDLE || handle->acquisition_configuration_locked || handle->acquisition) return ESP_ERR_INVALID_STATE;
+    handle->acquisition_config = *config;
+    return ESP_OK;
+}
+
+static esp_err_t acquisition_read(esp_rtl_sdr_handle *h, uint8_t *out, size_t capacity,
+                                  uint32_t timeout_ms, size_t *out_bytes,
+                                  esp_rtl_sdr_sample_meta_t *metadata)
+{
+    if (!h->acquisition || !h->pull_buf || !h->pull_mux ||
+        !esp_rtl_sdr_delivery_mode_uses_read(h->cfg.delivery_mode)) return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    if (timeout_ms > ESP_RTL_SDR_MAX_TIMEOUT_MS) return ESP_ERR_INVALID_ARG;
+    const TickType_t started = xTaskGetTickCount();
+    const TickType_t budget = pdMS_TO_TICKS(timeout_ms);
+    if (xSemaphoreTake(h->pull_mux, budget) != pdTRUE) return ESP_RTL_SDR_ERR_TIMEOUT;
+    struct Unlock { SemaphoreHandle_t lock; ~Unlock() { xSemaphoreGive(lock); } } unlock{h->pull_mux};
+    for (;;) {
+        const size_t r = h->pull_r.load(std::memory_order_relaxed);
+        const size_t w = h->pull_w.load(std::memory_order_acquire);
+        const size_t used = w >= r ? w-r : h->pull_cap-r+w;
+        esp_rtl_sdr_sample_meta_t span{};
+        size_t bytes = 0;
+        if (used && h->acquisition->sidecar.peek(capacity < used ? capacity : used, span, bytes)) {
+            const size_t first = bytes < h->pull_cap-r ? bytes : h->pull_cap-r;
+            std::memcpy(out, h->pull_buf+r, first);
+            if (bytes > first) std::memcpy(out+first, h->pull_buf, bytes-first);
+            const auto delivered = h->acquisition->read_cursor.deliver(span, static_cast<uint32_t>(bytes/2));
+            h->acquisition->sidecar.consume(bytes);
+            h->pull_r.store((r+bytes)%h->pull_cap, std::memory_order_release);
+            h->metrics.bytes_consumed += bytes;
+            if (metadata) *metadata = delivered;
+            *out_bytes = bytes;
+            return ESP_OK;
+        }
+        if (!h->streaming) return ESP_RTL_SDR_ERR_NOT_STREAMING;
+        const TickType_t elapsed = xTaskGetTickCount()-started;
+        if (elapsed >= budget) return ESP_RTL_SDR_ERR_TIMEOUT;
+        const TickType_t wait = budget-elapsed < pdMS_TO_TICKS(20) ? budget-elapsed : pdMS_TO_TICKS(20);
+        if (h->pull_sem) (void)xSemaphoreTake(h->pull_sem, wait);
+        else vTaskDelay(wait);
+    }
+}
+
+esp_err_t esp_rtl_sdr_read_ex(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t max_bytes,
+                            uint32_t timeout_ms, size_t *out_bytes, esp_rtl_sdr_sample_meta_t *metadata)
+{
+    if (out_bytes) *out_bytes = 0;
+    if (!out_buf || !out_bytes || !metadata || metadata->struct_size != sizeof(*metadata) || max_bytes < 2)
+        return ESP_ERR_INVALID_ARG;
+    if (!handle_ok(handle)) return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    return acquisition_read(handle, out_buf, max_bytes & ~size_t{1}, timeout_ms, out_bytes, metadata);
 }
 
 esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t max_bytes,
@@ -4562,6 +4839,8 @@ esp_err_t esp_rtl_sdr_read(esp_rtl_sdr_handle_t handle, uint8_t *out_buf, size_t
             return ESP_RTL_SDR_ERR_UNSUPPORTED;
         }
     }
+
+    if (handle->acquisition) return acquisition_read(handle, out_buf, max_bytes, timeout_ms, out_bytes, nullptr);
 
     /* Lazy allocate pull ring on first read if IQ has not filled it yet. */
     {
@@ -5178,6 +5457,7 @@ esp_err_t esp_rtl_sdr_apply_need(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_need_t
         handle->preferred_frequency_hz = q;
     }
     handle->preferred_sample_rate_sps = exact;
+    handle->requested_sample_rate_sps = exact;
     handle->sample_rate_sps = exact;
     handle->metrics.sample_rate_sps = exact;
     handle->metrics.frequency_hz = handle->preferred_frequency_hz;
@@ -5695,6 +5975,12 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
         if (berr != ESP_OK && err == ESP_OK) err = berr;
     }
 
+    if (err == ESP_OK) {
+        err = run_acquisition_fifo_reset(h);
+        if (err != ESP_OK) { h->streaming = false; h->state = ESP_RTL_SDR_STATE_FAULT; }
+    }
+    acquisition_epoch(h, err == ESP_OK ? ESP_RTL_SDR_ACQ_CONTROL : ESP_RTL_SDR_ACQ_CONTROL_FAILED,
+                      err == ESP_OK && (!h->acquisition || h->acquisition->configuration_certain));
     if (h->state != ESP_RTL_SDR_STATE_FAULT) bulk_resume(h);
     h->ep0_sideband_busy = false;
 

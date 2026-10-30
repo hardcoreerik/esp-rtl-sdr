@@ -10,6 +10,7 @@ repository: https://github.com/hardcoreerik/esp-rtl-sdr.git
 license: "AGPL-3.0-only"
 targets:
   - esp32p4
+  - esp32s31
 tags:
   - sdr
   - rtl-sdr
@@ -19,3 +20,8 @@ tags:
 dependencies:
   idf:
     version: ">=5.5.0"
+
+  espressif/usb:
+    version: "1.6.0"
+    rules:
+      - if: "idf_version >=6.0"

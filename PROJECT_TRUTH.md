@@ -6,8 +6,8 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-09-30**
-Version: **0.9.3** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, not Hardware-verified. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec ESP32-P4 RF acceptance remains pending. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
+Snapshot date: **2026-10-29**
+Version: **0.9.3** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, plus bounded standalone Waveshare V4+V3/R820T2 hardware verification on 2026-10-29; universal reentry/hotplug qualification remains open. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec is implemented, not experimental; standalone Tab5 streaming/control checks passed on 2026-10-29. Per-band RF/calibration qualification remains separate. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
 Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DISCLOSURE.md) ·
@@ -69,7 +69,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Area | State | Boundary |
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
-| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 PC capture includes long IQ runs, while ESP32-P4 streaming/soak remains pending; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional** |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 is implemented and passed standalone Tab5 streaming/control smoke on 2026-10-29; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional** |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225001–300000 ∪ 900001–3.2M. quantize mirrors resampler bit 27 into bit 28 before reporting Hz (low band was ~2×; #24) |
@@ -94,9 +94,9 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Concurrent multi-handle USB session | **Implemented; four-device application provenance** | Exclusive USB-address claims; shared host lifetime; identity/stats APIs. [OrcSDR Headless one-hour run](docs/Test_reports/FOUR_DONGLE_2560K_EXTERNAL_POWER.md): four devices at 2.56 MS/s, zero new observed IQ drops/USB errors. Network-only evidence; watchdog, RF/audio and replug acceptance remain open. Standalone driver-example re-soak remains separate. |
 | Multi-rtl hardware harness | **Implemented** | `examples/multi_rtlsdr_test/` — Gates 1–6 procedure; no soak log in tree |
 | Blog V4 filter `0bda:2838` | **Implemented** | Exact `RTLSDRBlog` / `Blog V4` only — never bare VID/PID |
-| Nooelec NESDR SMArt v5 `0bda:2838` | **Implemented from first-party PC captures; P4 acceptance pending** | Exact `Nooelec` + product contains `NESDR SMArt v5`; serial is evidence, not a whitelist. I2C `0x34`; model bounds 100 kHz–1750 MHz; Q below captured 24 MHz cutoff. [Capture record](docs/captures/nooelec_v5_2026-09-30.md), [merge/acceptance notes](docs/nooelec_v5_merge_notes.md). |
+| Nooelec NESDR SMArt v5 `0bda:2838` | **Implemented** | Exact `Nooelec` + product contains `NESDR SMArt v5`; serial is evidence, not a whitelist. I2C `0x34`; model bounds 100 kHz–1750 MHz; Q below captured 24 MHz cutoff. [Capture record](docs/captures/nooelec_v5_2026-09-30.md), [merge/acceptance notes](docs/nooelec_v5_merge_notes.md). |
 | Nooelec cold tuning / variable IF | **Implemented; host profile verified and P4 source compiled** | Cold/reinitialized filter `d3/6b` with matching PLL/demod IF 3.570 MHz; explicit native bandwidth AUTO uses `c3/8f`, 1.815 MHz. v0.9.1 left the demod at 1.815 MHz while calculating the Nooelec PLL with 3.570 MHz; its +1.755 MHz effective RF shift is consistent with the user receiving 99.1 at dial 97.3. Physical before/after acceptance remains open. |
-| Nooelec gain / AGC / bandwidth | **Implemented from PC controls; P4 acceptance pending** | All 29 nominal native/FM gain pairs captured; AUTO preserves gain nibbles; RTL AGC includes settle read. Seven native bandwidth choices at 2.4 MS/s keep PLL/demod IF paired. No effective tuner gain or bandwidth claim in Q mode; setters reject it. No bias tee or HF upconverter capability. |
+| Nooelec gain / AGC / bandwidth | **Implemented** | All 29 nominal native/FM gain pairs captured; AUTO preserves gain nibbles; RTL AGC includes settle read. Seven native bandwidth choices at 2.4 MS/s keep PLL/demod IF paired. No effective tuner gain or bandwidth claim in Q mode; setters reject it. No bias tee or HF upconverter capability. |
 | Nooelec Q-route RF evidence | **PC-measured; P4 RF acceptance pending** | Exact NCO points, Q enable/disable and FM↔HF restoration captured. FM dipole runs and independently powered MLA-30+ AM1280/AM1600 IQ/WAV recorded, including the user-confirmed 10-second AM1600 WAV. Captured PC native route starts at 24 MHz, with a PLL-not-locked warning there; manufacturer rates native operation from 25 MHz. |
 | Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |
 | Blog V3 IQ streaming (device up, no crash) | **Hardware-verified** (2026-09-11) | Streams without crash across repeated V4↔V3-family hot-swap and cold-boot testing on a real V3c unit |
@@ -212,3 +212,40 @@ unless a task explicitly says otherwise.
 | [docs/TESTING.md](docs/TESTING.md) | Lab gear disclosure |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PR rules |
+
+## Unreleased external-findings maintenance branch (2026-10-29)
+
+**Implemented / host-verified:** USB teardown ordering/error retention, atomic
+worker-exit gates, shared-session cleanup and partial-init rollback checks,
+required transfer allocation before optional CPU rings, bounded internal auto
+pull allocation, and explicit smoke board PASS/FAIL/SKIP profiles. Host CTest:
+14/14 on Windows and Linux; existing Nooelec trace: 7990 checks. **Build-verified:**
+ESP-IDF 5.5.4 and 6.1 ESP32-P4 smoke; 6.1 uses managed USB 1.6.0. No driver version,
+tag, consumer pin or hardware evidence label was changed.
+
+**Release blocked:** ambiguous empty device lists retain the USB host and return
+an error, including no-dongle uninstall; enumeration-idle teardown, late attachment
+and physical single/multi-dongle acceptance remain open. Failed uninstall retains
+a cleanup-only handle; failed install can return one if rollback cannot complete.
+AUTO clipping is unverified; no gain tables/defaults changed. Findings reported by
+**Przemek Godek — https://github.com/pgodek**; fixes independently implemented,
+no external implementation code reused. Full evidence, compatibility changes,
+release-note draft and pending tests:
+[2026-10-29 investigation](docs/reviews/EXTERNAL_DRIVER_FINDINGS_2026-10-29.md).
+
+Nooelec NESDR SMArt v5 status: **Implemented**, per maintainer direction on
+2026-10-29; not experimental/provisional. Evidence now includes the standalone
+Tab5 smoke (45 baseline and 48 opt-in checks) on Nooelec. Separately, a Waveshare shared-host run used V4 plus a
+V3/R820T2-profile receiver with independent rates, epochs, retune/restart/release
+and zero reported metadata errors, known loss, USB errors or ring loss over
+60 seconds; that shared run is not Nooelec evidence.
+This does not claim calibrated gain, every RF band or every host configuration.
+See `docs/acquisition-reliability/IMPLEMENTATION_REPORT.md` for exact scope.
+
+Standalone acquisition refinement: Waveshare V4 + V3/R820T2 completed 900003ms with zero metadata/USB errors and successful final cleanup. The continuous 2.4-MS/s receiver crossed 4GiB (4320247806 delivered bytes); one known lost pair was reported. Retune/restart/peer-release passed. No lossless or physical RF clock/coherence claim. Details: [implementation report](docs/acquisition-reliability/IMPLEMENTATION_REPORT.md).
+
+Subsequent reauthorized Tab5/Nooelec regression check: latest IDF5.5.4 default
+46/46 and acquisition48/48; IDF6.1 acquisition48/48. All reproduced baseline
+960kS/s quiet-window throughput with zero drops/overruns. IDF6.1's auto ring was
+smaller (139264 versus245760bytes), so buffering-margin qualification remains.
+[Exact regression evidence](docs/acquisition-reliability/COM39_REGRESSION_2026-10-29.md).

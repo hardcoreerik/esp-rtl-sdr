@@ -13,3 +13,6 @@ idf_component_register(
 )
 
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
+
+# IDF 6.x defaults to a newer dialect; this component targets C++17.
+target_compile_options(${COMPONENT_LIB} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-std=gnu++17>")

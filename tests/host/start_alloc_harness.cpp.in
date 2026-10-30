@@ -1,0 +1,70 @@
+#include <cstdio>
+#include "esp_rtl_sdr.h"
+#include "rtl_pull_alloc.hpp"
+#define RTL_LOGE(...) ((void)0)
+struct esp_rtl_sdr_handle { esp_rtl_sdr_config_t cfg{}; };
+static size_t internal_free, external_free;
+static int pool_calls, iq_calls, pull_calls;
+static unsigned char byte;
+struct Heap {
+    unsigned char *psram(size_t n) {
+        if (n > external_free) return nullptr;
+        external_free -= n; return &byte;
+    }
+    size_t internal_budget() { return internal_free > 32768 ? internal_free - 32768 : 0; }
+    unsigned char *internal(size_t n) {
+        if (n > internal_free) return nullptr;
+        internal_free -= n; return &byte;
+    }
+};
+static int alloc_bulk_pool(esp_rtl_sdr_handle *, uint32_t num, uint32_t len) {
+    ++pool_calls;
+    const size_t bytes = size_t(num) * len;
+    if (bytes > internal_free) return ESP_ERR_NO_MEM;
+    internal_free -= bytes; return ESP_OK;
+}
+static int ensure_acquisition(esp_rtl_sdr_handle *) { return ESP_OK; }
+static int ensure_ring(esp_rtl_sdr_handle *, size_t len) {
+    ++iq_calls; Heap heap;
+    return heap.psram(6*len) || heap.internal(6*len) ? ESP_OK : ESP_ERR_NO_MEM;
+}
+static int ensure_pull_ring(esp_rtl_sdr_handle *h) {
+    ++pull_calls; Heap heap; size_t actual;
+    return rtl_usb::allocate_pull(heap, h->cfg.pull_ring_bytes ? h->cfg.pull_ring_bytes : 393216,
+        h->cfg.pull_ring_bytes == 0, actual) ? ESP_OK : ESP_ERR_NO_MEM;
+}
+static void pull_ring_reset(esp_rtl_sdr_handle *) {}
+static int allocate_start(esp_rtl_sdr_handle *handle) {
+    int ret = ESP_OK;
+    do {
+        // ACTUAL_START_ALLOCATIONS
+    } while (0);
+    return ret;
+}
+static int checks;
+#define CHECK(x) do { ++checks; if (!(x)) { std::printf("FAIL %d: %s\n", __LINE__, #x); return 1; } } while(0)
+static void reset(size_t internal, size_t external) {
+    internal_free = internal; external_free = external;
+    pool_calls = iq_calls = pull_calls = 0;
+}
+int main() {
+    esp_rtl_sdr_handle h;
+    h.cfg.transfer_count = 6; h.cfg.transfer_bytes = 16384;
+    h.cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_BOTH;
+    reset(300*1024, 0);
+    CHECK(allocate_start(&h) == ESP_OK && pool_calls == 1 && iq_calls == 1 && pull_calls == 1);
+    CHECK(internal_free >= 32768);
+    h.cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_READ;
+    reset(220*1024, 0); CHECK(allocate_start(&h) == ESP_OK && iq_calls == 0 && pull_calls == 1);
+    h.cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_CALLBACK;
+    reset(200*1024, 0); CHECK(allocate_start(&h) == ESP_OK && pull_calls == 0);
+    h.cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_BOTH;
+    reset(120*1024, 1024*1024); CHECK(allocate_start(&h) == ESP_OK && internal_free == 24*1024);
+    reset(48*1024, 0);
+    CHECK(allocate_start(&h) == ESP_ERR_NO_MEM && pool_calls == 1 && iq_calls == 0 && pull_calls == 0);
+    h.cfg.pull_ring_bytes = 1024;
+    reset(300*1024, 0); CHECK(allocate_start(&h) == ESP_OK);
+    h.cfg.pull_ring_bytes = 1024*1024;
+    reset(300*1024, 0); CHECK(allocate_start(&h) == ESP_ERR_NO_MEM);
+    std::printf("actual startup allocation checks=%d\n", checks); return 0;
+}

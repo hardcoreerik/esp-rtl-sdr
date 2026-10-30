@@ -6,7 +6,7 @@
  * Provisional, non-invasive R820T2 identity trace (register 0 chip-id).
  *
  * Blog V3/V3c streaming reuses the evidence-backed R820T2 USB IR value remap
- * (0x74→0x34) that the provisional Nooelec profile also uses for the same
+ * (0x74→0x34) that the implemented Nooelec profile also uses for the same
  * tuner-address template — not invented V3-unique silicon init tables. V3c is
  * hardware-verified: 2026-09-21 soak (1.62 GB, 0 USB errors), the 2026-09-25
  * PC vendor-driver captures, and OrcSDR Tab5 hotplug/AM/CB use (0.9.0).

@@ -1,0 +1,10 @@
+menu "Customer-neutral acquisition probe"
+config ESP_RTL_SDR_PROBE_RECEIVERS
+    int "Receivers (built-in Waveshare hub supports up to three)"
+    default 1
+    range 1 3
+config ESP_RTL_SDR_PROBE_DURATION_MS
+    int "Acquisition validation duration (ms)"
+    default 60000
+    range 10000 1200000
+endmenu

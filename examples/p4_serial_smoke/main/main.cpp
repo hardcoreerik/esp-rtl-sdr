@@ -17,13 +17,17 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <atomic>
+#include "esp_rtl_sdr_acquisition.h"
 
 #include "sdkconfig.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_TAB5
 #include "utility/PI4IOE5V6408_Class.hpp"
+#endif
 #include "esp_rtl_sdr.h"
 #include "smoke_soak_scope.h"
 
@@ -45,7 +49,25 @@ static const char *TAG = "esp_rtl_sdr_smoke";
 
 static int g_pass;
 static int g_fail;
-static volatile bool g_drain;
+static int g_skip;
+static std::atomic<bool> g_drain{false}, g_drain_done{false};
+#if CONFIG_ESP_RTL_SDR_SMOKE_ACQUISITION
+static uint32_t g_meta_blocks, g_meta_errors;
+static uint64_t g_meta_epoch, g_meta_end, g_meta_known_loss;
+static std::atomic<uint32_t> g_ex_callbacks{0}, g_ex_callback_errors{0};
+static uint64_t g_cb_epoch, g_cb_end;
+static void record_metadata(const esp_rtl_sdr_sample_meta_t &meta, size_t bytes)
+{
+    ++g_meta_blocks;
+    if (!meta.receiver_id || !meta.epoch || meta.sample_count != bytes/2 || !meta.host_timestamp_us ||
+        !meta.quality.inspected_pairs || meta.programmed_rate_sps == 0) ++g_meta_errors;
+    if (meta.epoch < g_meta_epoch) ++g_meta_errors;
+    if (g_meta_epoch == meta.epoch &&
+        (meta.sample_index < g_meta_end || meta.known_lost_samples != meta.sample_index-g_meta_end)) ++g_meta_errors;
+    g_meta_known_loss += meta.known_lost_samples;
+    g_meta_epoch=meta.epoch;g_meta_end=meta.sample_index+meta.sample_count;
+}
+#endif
 
 static void smoke_row(const char *name, bool ok)
 {
@@ -62,6 +84,18 @@ static void smoke_row(const char *name, bool ok)
 static void on_event(esp_rtl_sdr_event_t event, const void *payload, void *ctx)
 {
     (void)ctx;
+#if CONFIG_ESP_RTL_SDR_SMOKE_ACQUISITION
+    if (event == ESP_RTL_SDR_EVT_IQ_BLOCK_EX && payload) {
+        const auto *block = static_cast<const esp_rtl_sdr_iq_block_ex_t *>(payload);
+        const auto &meta = block->metadata;
+        ++g_ex_callbacks;
+        if (meta.sample_count != block->bytes/2 || !meta.receiver_id ||
+            (g_cb_epoch == meta.epoch && (meta.sample_index < g_cb_end || meta.known_lost_samples != meta.sample_index-g_cb_end)))
+            ++g_ex_callback_errors;
+        g_cb_epoch=meta.epoch;g_cb_end=meta.sample_index+meta.sample_count;
+        return;
+    }
+#endif
     if (event == ESP_RTL_SDR_EVT_IQ_BLOCK) {
         return;
     }
@@ -77,6 +111,7 @@ static void settle_ms(int ms)
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_TAB5
 static bool enable_tab5_usb_power(void)
 {
     if (!m5::In_I2C.begin(I2C_NUM_1, GPIO_NUM_31, GPIO_NUM_32)) {
@@ -101,12 +136,42 @@ static bool enable_tab5_usb_power(void)
     return enabled;
 }
 
+#endif
+
+static void check_usb_power(void)
+{
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_TAB5
+    smoke_row("tab5_usb_power", enable_tab5_usb_power());
+#else
+    ++g_skip;
+#if CONFIG_ESP_RTL_SDR_SMOKE_BOARD_GENERIC
+    printf("SMOKE tab5_usb_power SKIP reason=NOT_APPLICABLE board=generic\n");
+#else
+    printf("SMOKE tab5_usb_power SKIP reason=NOT_VERIFIED board=unknown\n");
+#endif
+#endif
+}
+
 static bool smoke_read(esp_rtl_sdr_handle_t sdr, const char *name)
 {
     uint8_t iq[4096];
     size_t n = 0;
+#if CONFIG_ESP_RTL_SDR_SMOKE_ACQUISITION
+    esp_rtl_sdr_sample_meta_t meta;
+    esp_rtl_sdr_sample_meta_default(&meta);
+    const esp_err_t err = esp_rtl_sdr_read_ex(sdr, iq, sizeof(iq), 1000, &n, &meta);
+    if (err == ESP_OK) {
+        record_metadata(meta,n);
+        printf("ACQ %s epoch=%llu index=%llu samples=%u rf=%u requested=%u programmed=%u flags=%u lost=%llu\n",
+               name,(unsigned long long)meta.epoch,(unsigned long long)meta.sample_index,(unsigned)meta.sample_count,
+               (unsigned)meta.center_frequency_hz,(unsigned)meta.requested_rate_sps,(unsigned)meta.programmed_rate_sps,(unsigned)meta.flags,
+               (unsigned long long)meta.known_lost_samples);
+    }
+    const bool ok = (err == ESP_OK && n > 0 && !(n & 1));
+#else
     const esp_err_t err = esp_rtl_sdr_read(sdr, iq, sizeof(iq), 1000, &n);
     const bool ok = (err == ESP_OK && n == sizeof(iq));
+#endif
     smoke_row(name, ok);
     ESP_LOGI(TAG, "%s -> %s bytes=%u", name, esp_rtl_sdr_err_to_name(err), (unsigned)n);
     return ok;
@@ -137,8 +202,16 @@ static void drain_task(void *arg)
     esp_rtl_sdr_handle_t sdr = (esp_rtl_sdr_handle_t)arg;
     while (g_drain) {
         size_t n = 0;
+#if CONFIG_ESP_RTL_SDR_SMOKE_ACQUISITION
+        esp_rtl_sdr_sample_meta_t meta;
+        esp_rtl_sdr_sample_meta_default(&meta);
+        if (esp_rtl_sdr_read_ex(sdr, s_drain_buf, sizeof(s_drain_buf), 50, &n, &meta) == ESP_OK)
+            record_metadata(meta,n);
+#else
         (void)esp_rtl_sdr_read(sdr, s_drain_buf, sizeof(s_drain_buf), 50, &n);
+#endif
     }
+    g_drain_done.store(true,std::memory_order_release);
     vTaskDelete(NULL);
 }
 
@@ -268,7 +341,14 @@ static void run_lf_matrix(esp_rtl_sdr_handle_t sdr, uint32_t caps)
         settle_ms(250);
         esp_rtl_sdr_metrics_t metrics = {};
         size_t n = 0;
+#if CONFIG_ESP_RTL_SDR_SMOKE_ACQUISITION
+        esp_rtl_sdr_sample_meta_t meta;
+        esp_rtl_sdr_sample_meta_default(&meta);
+        const esp_err_t read_err = esp_rtl_sdr_read_ex(sdr, s_drain_buf, 4096, 500, &n, &meta);
+        if (read_err == ESP_OK) record_metadata(meta,n);
+#else
         const esp_err_t read_err = esp_rtl_sdr_read(sdr, s_drain_buf, 4096, 500, &n);
+#endif
         const bool ok = err == ESP_OK && read_err == ESP_OK && n != 0 &&
                         esp_rtl_sdr_get_metrics(sdr, &metrics) == ESP_OK &&
                         metrics.frequency_hz == step.hz;
@@ -305,6 +385,7 @@ static void run_quiet_soak(esp_rtl_sdr_handle_t sdr,
         return;
     }
 
+    g_drain_done = false;
     g_drain = true;
     if (xTaskCreate(drain_task, "soak_drain", 4096, sdr, 5, NULL) != pdPASS) {
         g_drain = false;
@@ -322,7 +403,8 @@ static void run_quiet_soak(esp_rtl_sdr_handle_t sdr,
     memset(&after, 0, sizeof(after));
     (void)esp_rtl_sdr_get_metrics(sdr, &after);
     g_drain = false;
-    settle_ms(80);
+    for (int waited=0; !g_drain_done.load(std::memory_order_acquire) && waited<1000; waited+=10) settle_ms(10);
+    smoke_row("drain_join",g_drain_done.load(std::memory_order_acquire));
 
     smoke_soak_scope_t scope;
     memset(&scope, 0, sizeof(scope));
@@ -349,7 +431,7 @@ extern "C" void app_main(void)
              esp_rtl_sdr_get_version_string(), SMOKE_SOAK_NAME,
              SMOKE_XFER_COUNT, SMOKE_XFER_BYTES);
     check_pure_helpers();
-    smoke_row("tab5_usb_power", enable_tab5_usb_power());
+    check_usb_power();
 
     esp_rtl_sdr_config_t cfg;
     esp_rtl_sdr_config_default(&cfg);
@@ -365,6 +447,13 @@ extern "C" void app_main(void)
     esp_rtl_sdr_handle_t sdr = NULL;
     ESP_ERROR_CHECK(esp_rtl_sdr_install(&cfg, &sdr));
 
+#if CONFIG_ESP_RTL_SDR_SMOKE_ACQUISITION
+    esp_rtl_sdr_acquisition_config_t acquisition;
+    esp_rtl_sdr_acquisition_config_default(&acquisition);
+    acquisition.enabled=true;
+    acquisition.quality_stride_pairs=64;
+    smoke_row("configure_acquisition",esp_rtl_sdr_configure_acquisition(sdr,&acquisition)==ESP_OK);
+#endif
     const char *hw = "SKIP";
     const size_t dev_count = wait_devices(sdr, 3000);
     ESP_LOGI(TAG, "candidates=%u", (unsigned)dev_count);
@@ -404,10 +493,16 @@ extern "C" void app_main(void)
         }
     }
 
+#if CONFIG_ESP_RTL_SDR_SMOKE_ACQUISITION
+    printf("ACQ SUMMARY read_blocks=%u read_errors=%u known_lost=%llu callbacks=%u callback_errors=%u metadata_bytes=%u\n",
+           (unsigned)g_meta_blocks,(unsigned)g_meta_errors,(unsigned long long)g_meta_known_loss,
+           (unsigned)g_ex_callbacks.load(),(unsigned)g_ex_callback_errors.load(),(unsigned)sizeof(esp_rtl_sdr_sample_meta_t));
+    smoke_row("metadata_invariants",g_meta_blocks>0 && g_meta_errors==0 && g_ex_callbacks.load()>0 && g_ex_callback_errors.load()==0);
+#endif
     smoke_row("stop", esp_rtl_sdr_stop(sdr, 1000) == ESP_OK);
     smoke_row("uninstall", esp_rtl_sdr_uninstall(sdr) == ESP_OK);
 
     const bool overall = (g_fail == 0);
-    printf("SMOKE OVERALL %s passed=%d failed=%d hardware=%s\n",
-           overall ? "PASS" : "FAIL", g_pass, g_fail, hw);
+    printf("SMOKE OVERALL %s passed=%d failed=%d skipped=%d hardware=%s\n",
+           overall ? "PASS" : "FAIL", g_pass, g_fail, g_skip, hw);
 }

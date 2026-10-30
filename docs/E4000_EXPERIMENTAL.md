@@ -51,3 +51,21 @@ every E4000-branded receiver has identical RF routing or clocking.
 The tuner math and register meanings are based on the public
 [Elonics E4000 datasheet](https://www.nooelec.com/store/downloads/dl/file/id/14/product/264/e4000_datasheet.pdf).
 This implementation is independent of third-party tuner-driver source.
+
+## RTL2832U zero-IF composition (experimental)
+
+The E4000-only setup enables zero-IF with page-1 B1=1B, enables both ADCs
+with page-0 08=CD, then clears the digital IF offset. Each write has a settle
+read, and a failed transfer aborts the sequence. Existing tuner setup is unchanged.
+
+Derivation: first-party Nooelec controls capture frames 215, 247 and 251 show
+B1=1B followed by the low-IF B1=1A / 08=4D state. The proposed dual-ADC value
+preserves the captured 08 lower bits and enables bit 7 alongside bit 6.
+The Realtek-authored RTL2832U rev. 1.4, sections 9.1-9.3, corroborates these
+ADC/baseband bits. [Document mirror](https://homepages.uni-regensburg.de/~erc24492/SDR/Data_rtl2832u.pdf).
+That document is marked confidential and copyright Realtek; it is not bundled
+or reproduced here. No foreign driver source was imported.
+
+This is a documentation-derived experimental composition, not a measured XTR
+sequence. First-party E4000 PC capture and physical I/Q reception remain required.
+Host tests verify ordered writes and early failure at each transfer, not RF operation.

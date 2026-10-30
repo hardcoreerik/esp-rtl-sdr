@@ -78,13 +78,14 @@ struct esp_rtl_sdr_handle {
 // registry empty here so the captured Nooelec path remains the subject tested.
 const RtlTunerDriver *rtl_tuner_driver_for_profile(RtlProfileId) { return nullptr; }
 static std::vector<RtlControlRecord> wire;
+static size_t fail_transfer = 0;
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool) {
     CHECK(length <= 8);
     RtlControlRecord r{value, index, type, length, {}};
     if (length) std::memcpy(r.data, data, length);
     wire.push_back(r);
-    return ESP_OK;
+    return fail_transfer == wire.size() ? ESP_FAIL : ESP_OK;
 }
 static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t) {
     CHECK(h->profile == RtlProfileId::NooelecSmartV5); return false;
@@ -212,6 +213,25 @@ int main() {
         if (r.request_type == 0x40 && r.index == 0x0610 && r.length == 2 && r.data[0] == 0x1a && r.data[1] == 0x61)
             pll_1a_seen = true;
     CHECK(pll_1a_seen);
+    // E4000 alone enables both ADCs and zero-IF before clearing the NCO.
+    h = {}; h.profile = RtlProfileId::E4000; wire.clear();
+    CHECK(run_e4000_set_zero_if(&h) == ESP_OK);
+    const uint16_t zero_if_regs[] = {0xb120, 0x0820, 0x1920, 0x1a20, 0x1b20};
+    const uint16_t zero_if_pages[] = {0x0011, 0x0010, 0x0011, 0x0011, 0x0011};
+    const uint8_t zero_if_values[] = {0x1b, 0xcd, 0, 0, 0};
+    CHECK(wire.size() == 10);
+    for (size_t i = 0; i < 5; ++i) {
+        CHECK(wire[2*i].value == zero_if_regs[i]);
+        CHECK(wire[2*i].index == zero_if_pages[i]);
+        CHECK(wire[2*i].data[0] == zero_if_values[i]);
+        CHECK(wire[2*i+1].value == 0x0120 && wire[2*i+1].request_type == 0xc0);
+    }
+    for (size_t i = 1; i <= 10; ++i) {
+        wire.clear(); fail_transfer = i;
+        CHECK(run_e4000_set_zero_if(&h) == ESP_FAIL);
+        CHECK(wire.size() == i);
+    }
+    fail_transfer = 0;
     std::printf("RESULT nooelec_runtime_trace passed=%u failed=0\n", checks);
 }
 '''

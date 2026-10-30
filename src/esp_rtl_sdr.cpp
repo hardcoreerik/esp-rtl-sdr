@@ -1484,8 +1484,12 @@ static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t rf_hz)
 
 static esp_err_t run_e4000_set_zero_if(esp_rtl_sdr_handle *h)
 {
-    // The E4000 is a zero-IF tuner; do not inherit the R828D/V3 IF settings.
+    // Experimental dual-ADC composition; provenance and hardware gate: docs/E4000_EXPERIMENTAL.md.
     const RtlControlRecord records[] = {
+        {0xb120, 0x0011, 0x40, 1, {0x1b, 0, 0, 0, 0, 0, 0, 0}},
+        {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
+        {0x0820, 0x0010, 0x40, 1, {0xcd, 0, 0, 0, 0, 0, 0, 0}},
+        {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
         {0x1920, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},
         {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
         {0x1a20, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},

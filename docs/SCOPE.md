@@ -26,6 +26,7 @@ Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 |---|---|---|
 | ESP32-S2/S3 Full-Speed USB Host | **Deferred** | FS bulk economics differ; lower continuous SPS; needs separate URB + soak story |
 | Generic RTL2832U / R820T sticks | **Deferred** | Identity + EP0 sequences not measured in *this* clean-room profile |
+| E4000 / Nooelec SMArTee XTR v5 | **Experimental; not hardware-verified** | Separate E4000 profile is implemented for 64 MHz–1.7 GHz tuning/streaming; 28.8 MHz reference is assumed; gain/bias/HF features are not exposed |
 | librtlsdr ABI drop-in | **Deferred** | Never a goal — different API and license gravity |
 | Production warranty | **None** | 0.x |
 

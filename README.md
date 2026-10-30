@@ -69,11 +69,11 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | Item | Notes |
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.9.x** also supports the **Blog V4L** (R828S; 28.8 MHz HF upconverter, optional direct route for 24-28.8 MHz) and **Blog V3/V3c** (R820T2 `0x34` remap; direct-Q HF). This branch implements **Nooelec NESDR SMArt v5** from [first-party 2026-09-30 captures](docs/captures/nooelec_v5_2026-09-30.md), with standalone Tab5 streaming/control verification. RF calibration remains a separate gate. Bare `0bda:2838` is never assumed V4. |
+| **Dongle** | **RTL-SDR Blog V4** (primary) — `RTLSDRBlog` / `Blog V4`. **0.9.x** also supports the **Blog V4L** (R828S; 28.8 MHz HF upconverter, optional direct route for 24-28.8 MHz) and **Blog V3/V3c** (R820T2 `0x34` remap; direct-Q HF). This branch implements **Nooelec NESDR SMArt v5** from [first-party 2026-09-30 captures](docs/captures/nooelec_v5_2026-09-30.md), with standalone Tab5 streaming/control verification. RF calibration remains a separate gate. An **experimental E4000 profile** targets the Nooelec SMArTee XTR v5; hardware acceptance remains pending. Bare `0bda:2838` is never assumed V4. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
-**Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, random eBay RTL sticks, production warranty.
+**Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, generic/random RTL dongles, E4000 hardware reception until validated, production warranty.
 **Why that is intentional:** [`docs/SCOPE.md`](docs/SCOPE.md).
 
 ---
@@ -249,7 +249,7 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `set_tuner_gain_mode(MANUAL\|AUTO)` | MANUAL ladder; AUTO measured R828D AGC (`CAP_GAIN_AUTO`, 0.7.8+). Streaming = async EP0. |
 | `set/get_rtl_agc` | RTL2832 digital AGC (`CAP_RTL_AGC`); not tuner AUTO. **get** = requested shadow, not readback. |
 | `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
-| HF/LF (unreleased) | Blog V4 accepts **24 kHz…1766 MHz** with exact-Hz requests; RF&lt;28.8 MHz uses +28.8 MHz LO and Cable-2 (`CAP_HF_UPCONVERTER`). Blog V3/V3c uses capture-derived Q-branch direct sampling below 24 MHz (`CAP_DIRECT_SAMPLING`); its tuner gain is bypassed there. Nooelec independently uses Q below the captured 24 MHz cutoff, accepts **100 kHz…1750 MHz**, and has no bias tee or upconverter; the 24 MHz PC native-boundary tune warned of no PLL lock (rated native floor 25 MHz). Nooelec P4 RF acceptance remains open. |
+| HF/LF (unreleased) | Blog V4 accepts **24 kHz…1766 MHz** with exact-Hz requests; RF&lt;28.8 MHz uses +28.8 MHz LO and Cable-2 (`CAP_HF_UPCONVERTER`). Blog V3/V3c uses capture-derived Q-branch direct sampling below 24 MHz (`CAP_DIRECT_SAMPLING`); its tuner gain is bypassed there. Nooelec SMArt v5 independently uses Q below the captured 24 MHz cutoff and accepts **100 kHz…1750 MHz**; P4 RF acceptance remains open. E4000 is a separate experimental zero-IF profile for **64 MHz…1.7 GHz** with no tuner gain/bias/HF capabilities exposed; hardware acceptance is pending. |
 
 Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md), and the checked-in clean-room transfer table. The 0.7.15 routing composition is host/build verified only; P4 GPIO and RF acceptance remain open.
 

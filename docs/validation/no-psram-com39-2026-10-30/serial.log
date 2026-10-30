@@ -1,0 +1,120 @@
+I (124) esp_rtl_sdr_smoke: helpers version=0.9.3 caps=0x001fff7f urbs=6x16384 soak_ms=8000
+I (477) esp_rtl_sdr_smoke: Tab5 USB-A power enabled and settled
+SMOKE tab5_usb_power PASS
+SMOKE default_auto_ring PASS
+SMOKE urb_layout_applied PASS
+I (508) esp_rtl_sdr: [RTL0] USB host session started (shared)
+I (508) esp_rtl_sdr: [RTL0] install v0.9.3 caps=0x001fff7f xfer=6x16384 bind=any
+I (508) esp_rtl_sdr: device list count=0
+I (528) esp_rtl_sdr: [RTL0] usb probe_rescan
+I (708) esp_rtl_sdr: device list count=0
+I (908) esp_rtl_sdr: device list count=0
+I (910) esp_rtl_sdr: [RTL0] usb new_device addr=1 queued=1
+I (910) esp_rtl_sdr: [RTL0] usb probe_begin addr=1
+I (911) esp_rtl_sdr: [RTL0] USB device opened addr=1 path=root serial=36309640 hs=1
+I (911) esp_rtl_sdr: [RTL0] tuner=nooelec_smart_v5_r820t2 caps=0x001dff5f
+I (1108) esp_rtl_sdr: device list count=1
+I (1108) esp_rtl_sdr_smoke: candidates=1
+I (1108) esp_rtl_sdr: nooelec_smart_v5_r820t2: implemented profile (first-party capture 2026-09-30, I2C 0x34, direct Q); RF calibration is a separate acceptance gate
+I (1108) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+I (2181) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+I (2232) esp_rtl_sdr: [RTL0] rate readback sps=960000 expected=0x07800000 actual=0x07800000 match=1
+I (2282) esp_rtl_sdr: nooelec_smart_v5_r820t2 direct tune rf=147300 Hz ppm=0 nco=3fac34 input=Q
+I (2302) esp_rtl_sdr: nooelec_smart_v5_r820t2 RF mode NORMAL_TUNER -> DIRECT_SAMPLING_Q
+W (2303) esp_rtl_sdr: [RTL0] pull ring auto shrunk 393216 -> 253952 bytes; buffering=132 ms at preferred rate
+I (2303) esp_rtl_sdr: pull ring 253952 bytes auto=1
+I (2303) esp_rtl_sdr: [RTL0] stream start freq=147300 sps=960000 urbs=6x16384
+I (2304) esp_rtl_sdr: stream start freq=147300 exact_rate=960000 urbs=6x16384
+SMOKE start PASS
+SMOKE first_read PASS
+I (2704) esp_rtl_sdr_smoke: first_read -> ESP_OK bytes=4096
+I (2756) esp_rtl_sdr: nooelec_smart_v5_r820t2: implemented profile (first-party capture 2026-09-30, I2C 0x34, direct Q); RF calibration is a separate acceptance gate
+I (2756) esp_rtl_sdr: init begin profile=nooelec_smart_v5_r820t2 records=515
+I (3828) esp_rtl_sdr: init complete profile=nooelec_smart_v5_r820t2 skipped_v4_board=12
+I (3879) esp_rtl_sdr: [RTL0] rate readback sps=960000 expected=0x07800000 actual=0x07800000 match=1
+I (3929) esp_rtl_sdr: nooelec_smart_v5_r820t2 direct tune rf=147300 Hz ppm=0 nco=3fac34 input=Q
+I (3949) esp_rtl_sdr: nooelec_smart_v5_r820t2 RF mode NORMAL_TUNER -> DIRECT_SAMPLING_Q
+I (3950) esp_rtl_sdr: [RTL0] stream start freq=147300 sps=960000 urbs=6x16384
+I (3950) esp_rtl_sdr: stream start freq=147300 exact_rate=960000 urbs=6x16384
+SMOKE drain_join PASS
+SOAK usb_soak_960k_6x16k eff=99 sps=959488 bytes=15351808 over=0 drops=0 short=0 urbs=6x16384 advice=ok window_ms=8000
+I (11960) esp_rtl_sdr_smoke: soak scoped eff=0.999 delta_bytes=15351808 cum_drops=0->0
+SMOKE usb_soak_960k_6x16k PASS
+SMOKE direct_tuner_gain_unsupported PASS
+I (12147) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+I (12162) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+I (12194) esp_rtl_sdr: nooelec_smart_v5_r820t2 RF mode DIRECT_SAMPLING_Q -> NORMAL_TUNER
+I (12194) esp_rtl_sdr: hot retune applied rf=96100000 Hz tuner=96100000 Hz direct=0
+SMOKE lf_to_fm PASS
+I (12445) esp_rtl_sdr_smoke: lf_to_fm rf=96100000 bytes=4096 over=0 drops=221186
+I (12543) esp_rtl_sdr: nooelec_smart_v5_r820t2 direct tune rf=10000000 Hz ppm=0 nco=29c71d input=Q
+I (12563) esp_rtl_sdr: nooelec_smart_v5_r820t2 RF mode NORMAL_TUNER -> DIRECT_SAMPLING_Q
+I (12564) esp_rtl_sdr: hot retune applied rf=10000000 Hz tuner=0 Hz direct=1
+SMOKE fm_to_10m PASS
+I (12814) esp_rtl_sdr_smoke: fm_to_10m rf=10000000 bytes=4096 over=0 drops=692226
+I (12862) esp_rtl_sdr: nooelec_smart_v5_r820t2 direct tune rf=147300 Hz ppm=0 nco=3fac34 input=Q
+I (12882) esp_rtl_sdr: hot retune applied rf=147300 Hz tuner=0 Hz direct=1
+SMOKE 10m_to_147300 PASS
+I (13132) esp_rtl_sdr_smoke: 10m_to_147300 rf=147300 bytes=4096 over=0 drops=1163266
+I (13322) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+I (13337) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+I (13369) esp_rtl_sdr: nooelec_smart_v5_r820t2 RF mode DIRECT_SAMPLING_Q -> NORMAL_TUNER
+I (13369) esp_rtl_sdr: hot retune applied rf=96100000 Hz tuner=96100000 Hz direct=0
+SMOKE lf_back_to_fm PASS
+I (13619) esp_rtl_sdr_smoke: lf_back_to_fm rf=96100000 bytes=4096 over=0 drops=1634306
+I (13717) esp_rtl_sdr: nooelec_smart_v5_r820t2 direct tune rf=147300 Hz ppm=0 nco=3fac34 input=Q
+I (13737) esp_rtl_sdr: nooelec_smart_v5_r820t2 RF mode NORMAL_TUNER -> DIRECT_SAMPLING_Q
+I (13738) esp_rtl_sdr: hot retune applied rf=147300 Hz tuner=0 Hz direct=1
+SMOKE fm_back_to_147300 PASS
+I (13988) esp_rtl_sdr_smoke: fm_back_to_147300 rf=147300 bytes=4096 over=0 drops=2105346
+I (14178) esp_rtl_sdr: demod IF restore profile=nooelec_smart_v5_r820t2 pll_if_hz=3570000 demod_if_hz=3570000 applied=1 records=6
+I (14193) esp_rtl_sdr: tune rf=96100000 Hz tuner=96100000 Hz ppm=0 hf_upconv=0 r16=a4/84 r20=8a r21=4a r22=5f pll_if_hz=3570000
+I (14225) esp_rtl_sdr: nooelec_smart_v5_r820t2 RF mode DIRECT_SAMPLING_Q -> NORMAL_TUNER
+I (14225) esp_rtl_sdr: hot retune applied rf=96100000 Hz tuner=96100000 Hz direct=0
+SMOKE lf_finish_fm PASS
+I (14475) esp_rtl_sdr_smoke: lf_finish_fm rf=96100000 bytes=4096 over=0 drops=2576386
+I (14475) esp_rtl_sdr: tuner gain applied 0 (0.1 dB) [profile table]
+I (14538) esp_rtl_sdr: tuner gain applied 0 (0.1 dB) [async]
+SMOKE manual_gain_0 PASS
+SMOKE manual_gain_0_read PASS
+I (14725) esp_rtl_sdr_smoke: manual_gain_0_read -> ESP_OK bytes=4096
+I (14725) esp_rtl_sdr: tuner gain applied 297 (0.1 dB) [profile table]
+I (14791) esp_rtl_sdr: tuner gain applied 297 (0.1 dB) [async]
+SMOKE manual_gain_297 PASS
+I (14975) esp_rtl_sdr: tuner gain applied 402 (0.1 dB) [profile table]
+I (15035) esp_rtl_sdr: tuner gain applied 402 (0.1 dB) [async]
+SMOKE manual_gain_400_nearest_402 PASS
+I (15225) esp_rtl_sdr: tuner gain mode AUTO
+I (15288) esp_rtl_sdr: tuner AGC AUTO [profile, async]
+SMOKE tuner_auto_set_get PASS
+SMOKE tuner_auto_idempotent PASS
+SMOKE tuner_auto_read PASS
+I (15475) esp_rtl_sdr_smoke: tuner_auto_read -> ESP_OK bytes=4096
+I (15475) esp_rtl_sdr: tuner gain applied 297 (0.1 dB) [profile table]
+I (15541) esp_rtl_sdr: tuner gain applied 297 (0.1 dB) [async]
+SMOKE gain_forces_manual PASS
+I (15725) esp_rtl_sdr: tuner gain mode AUTO
+I (15785) esp_rtl_sdr: tuner AGC AUTO [profile, async]
+SMOKE tuner_auto_restore PASS
+I (16037) esp_rtl_sdr: RTL AGC ON [measured demod 0x19, async]
+SMOKE rtl_agc_on PASS
+SMOKE rtl_agc_independent PASS
+I (16289) esp_rtl_sdr: RTL AGC OFF [measured demod 0x19, async]
+SMOKE rtl_agc_off PASS
+SMOKE rtl_agc_read PASS
+I (16475) esp_rtl_sdr_smoke: rtl_agc_read -> ESP_OK bytes=4096
+I (16475) esp_rtl_sdr: tuner gain mode MANUAL
+I (16533) esp_rtl_sdr: tuner gain applied 297 (0.1 dB) [async]
+SMOKE manual_restore_mode PASS
+I (16725) esp_rtl_sdr: tuner gain applied 297 (0.1 dB) [profile table]
+I (16786) esp_rtl_sdr: tuner gain applied 297 (0.1 dB) [async]
+SMOKE manual_restore_gain PASS
+SMOKE manual_restore_read PASS
+I (16975) esp_rtl_sdr_smoke: manual_restore_read -> ESP_OK bytes=4096
+SMOKE metrics_after PASS
+SMOKE health_after PASS
+I (16975) esp_rtl_sdr_smoke: metrics bytes=21938176 overruns=0 drops=6279170 sps=842156
+I (16975) esp_rtl_sdr_smoke: health overall=2 advice=USB starving (88% eff) - lower rate or grow URBs
+SMOKE stop PASS
+SMOKE uninstall PASS
+SMOKE OVERALL PASS passed=46 failed=0 skipped=0 hardware=RUN

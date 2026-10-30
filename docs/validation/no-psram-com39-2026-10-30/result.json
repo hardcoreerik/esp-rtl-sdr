@@ -1,0 +1,25 @@
+{
+  "driver": "f14c8565e274bc7a5a68523fd1f0e9b7879a3d85",
+  "port": "COM39",
+  "dongle_remained_attached": true,
+  "psram_enabled": false,
+  "smoke_image_sha256": "eca1d2dae010dba98958f0e2b7bd6dc3902c4f6f922d4d1616e845fca0c4f00f",
+  "restored": true,
+  "overall_seen": true,
+  "overall_line": "SMOKE OVERALL PASS passed=46 failed=0 skipped=0 hardware=RUN",
+  "sdkconfig_sha256": "528aabb8e729796225c103569b975c0b22b4a207d035a8f6b4263026496178f4",
+  "serial_sha256": "b28d5a197e8a0b2daeedd53347bc8db3230f99b5a54d454fec5a264dae85154d",
+  "quiet_window": {
+    "duration_ms": 8000,
+    "sample_rate_requested": 960000,
+    "effective_sps": 959488,
+    "bytes": 15351808,
+    "overruns": 0,
+    "drops": 0,
+    "short_transfers": 0,
+    "urbs": 6,
+    "urb_bytes": 16384
+  },
+  "pull_ring_bytes": 253952,
+  "original_auto_target_bytes": 393216
+}

@@ -1544,17 +1544,17 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     h->last_pll_if_hz = 0;
     h->last_lo_hz = corrected_hz;
     if (!plan.vco_in_nominal_range) {
-        RTL_LOGW(h, "E4000 RF=%u Hz uses provisional VCO=%u Hz outside nominal 2.6-3.9 GHz window",
-                 static_cast<unsigned>(frequency_hz), static_cast<unsigned>(plan.vco_hz));
+        RTL_LOGW(h, "E4000 RF=%u Hz uses provisional VCO=%llu Hz outside nominal 2.6-3.9 GHz window",
+                 static_cast<unsigned>(frequency_hz), static_cast<unsigned long long>(plan.vco_hz));
     }
     RTL_LOGI(h, "E4000 tune rf=%u corrected=%u band=%u div=%u phase3=%u "
-                "z=%u x=%u rf_filter=%u vco=%u nominal=%u",
+                "z=%u x=%u rf_filter=%u vco=%llu nominal=%u",
              static_cast<unsigned>(frequency_hz), static_cast<unsigned>(corrected_hz),
              static_cast<unsigned>(plan.band), static_cast<unsigned>(plan.divider_code),
              plan.three_phase_mixing ? 1u : 0u,
              static_cast<unsigned>(plan.integer_divider),
              static_cast<unsigned>(plan.fractional_divider),
-             static_cast<unsigned>(plan.rf_filter_code), static_cast<unsigned>(plan.vco_hz),
+             static_cast<unsigned>(plan.rf_filter_code), static_cast<unsigned long long>(plan.vco_hz),
              plan.vco_in_nominal_range ? 1u : 0u);
     return ESP_OK;
 }

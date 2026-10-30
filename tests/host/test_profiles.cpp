@@ -870,6 +870,8 @@ static void test_nooelec_captured_programming(void)
 static void test_e4000_pll_policy(void)
 {
     e4000::PllPlan p{};
+    EXPECT_TRUE(e4000::make_pll_plan(1135000000u, e4000::kReferenceXtalHz, &p));
+    EXPECT_TRUE(p.vco_hz == 4540000000ull);
     EXPECT_TRUE(!e4000::make_pll_plan(63999999u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(e4000::make_pll_plan(64000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.valid);

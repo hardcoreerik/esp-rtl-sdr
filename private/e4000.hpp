@@ -34,7 +34,7 @@ struct PllPlan {
     uint8_t rf_filter_code = 0;
     uint8_t bias_register = 0x0f;
     bool three_phase_mixing = false;
-    uint32_t vco_hz = 0;
+    uint64_t vco_hz = 0;
     bool vco_in_nominal_range = false;
 };
 
@@ -152,7 +152,7 @@ inline bool make_pll_plan(uint32_t frequency_hz, uint32_t xtal_hz, PllPlan *out)
     out->rf_filter_code = rf_filter_code(band, frequency_hz);
     out->bias_register = band == Band::L ? 0x0c : 0x0f;
     out->three_phase_mixing = three_phase;
-    out->vco_hz = static_cast<uint32_t>(vco_hz);
+    out->vco_hz = vco_hz;
     out->vco_in_nominal_range = found_nominal;
     return true;
 }

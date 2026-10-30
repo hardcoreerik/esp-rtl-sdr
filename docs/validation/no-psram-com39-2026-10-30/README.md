@@ -35,3 +35,11 @@ This adds bounded physical evidence for the two original bug classes. It does
 not close incomplete-enumeration, late-attachment, repeated reentry, no-dongle,
 other-dongle/board or extended-acquisition no-PSRAM qualification. Existing
 fail-closed teardown and hardware-acceptance caveats remain.
+
+
+After image restoration, the app was on Home and capture had not resumed.
+The fixture explicitly sent RTL_TUNE LORA 906875000 and RTL_UI OPEN LORA.
+Fresh status then verified STREAMING, 959520 samples/second, AUTO gain,
+manual shadow 0, RTL AGC off, guard on, zero drops/overruns and the LoRa screen.
+The filtered restoration evidence is in restored-status.txt. A build/flash
+pass alone must not be used as evidence that reception resumed.

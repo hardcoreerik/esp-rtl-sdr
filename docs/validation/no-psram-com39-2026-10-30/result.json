@@ -21,5 +21,17 @@
     "urb_bytes": 16384
   },
   "pull_ring_bytes": 253952,
-  "original_auto_target_bytes": 393216
+  "original_auto_target_bytes": 393216,
+  "restored_application_status": {
+    "state": "STREAMING",
+    "frequency_hz": 906875000,
+    "effective_sps": 959520,
+    "gain_mode": "AUTO",
+    "manual_gain_shadow": 0,
+    "rtl_agc": 0,
+    "gain_guard": "on",
+    "screen": "lora",
+    "drops": 0,
+    "overruns": 0
+  }
 }

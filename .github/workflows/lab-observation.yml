@@ -1,7 +1,12 @@
-name: Lab OrcSDR integration observation
+name: Lab driver and OrcSDR regression
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Observation only, or standalone COM39 test with application flash and recovery
+        type: choice
+        options: [observe, standalone-com39]
+        default: observe
       seconds:
         description: Observation duration per board (20-300 seconds)
         type: number
@@ -13,6 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   observe:
+    if: inputs.mode == 'observe'
     runs-on: [self-hosted, Windows, esp-rtl-sdr-lab]
     environment: orcsdr-lab
     timeout-minutes: 15
@@ -44,4 +50,54 @@ jobs:
         with:
           name: orcsdr-lab-observation
           path: ${{ runner.temp }}/orcsdr-${{ github.run_id }}-${{ github.run_attempt }}/*.json
+          if-no-files-found: warn
+  standalone:
+    if: inputs.mode == 'standalone-com39'
+    runs-on: [self-hosted, Windows, esp-rtl-sdr-lab]
+    environment: orcsdr-lab
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build PSRAM-disabled standalone firmware from this checkout
+        shell: pwsh
+        env:
+          LAB_IDF_PATH: ${{ vars.LAB_IDF_554_PATH }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (!(Test-Path -LiteralPath "$env:LAB_IDF_PATH/export.ps1")) { throw 'Configure LAB_IDF_554_PATH' }
+          . "$env:LAB_IDF_PATH/export.ps1"
+          $build = Join-Path $env:RUNNER_TEMP "fixture-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $build -ErrorAction Stop | Out-Null
+          'CONFIG_SPIRAM=n' | Set-Content -LiteralPath "$build/no-psram.defaults"
+          $project = Join-Path $env:GITHUB_WORKSPACE 'examples/p4_serial_smoke'
+          Push-Location $project
+          try {
+            idf.py -B "$build" -D "SDKCONFIG=$build/sdkconfig" -D "SDKCONFIG_DEFAULTS=$project/sdkconfig.defaults;$build/no-psram.defaults" build *> "$build/build.log"
+            if ($LASTEXITCODE -ne 0) { throw 'Standalone build failed' }
+          } finally { Pop-Location }
+      - name: Flash enrolled COM39, test and restore OrcSDR
+        shell: pwsh
+        env:
+          LAB_RESTORE_IMAGE: ${{ vars.LAB_TAB5_RESTORE_IMAGE }}
+          LAB_RESTORE_SHA: ${{ vars.LAB_TAB5_RESTORE_SHA256 }}
+          LAB_ESPTOOL_PYTHON: ${{ vars.LAB_ESPTOOL_PYTHON }}
+          LAB_APP_ROOT: ${{ vars.LAB_ORCSDR_ROOT }}
+          LAB_PAIRING_KEY: ${{ vars.LAB_PAIRING_KEY_PATH }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $build = Join-Path $env:RUNNER_TEMP "fixture-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $output = Join-Path $env:RUNNER_TEMP "fixture-result-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $image = Join-Path $build 'esp_rtl_sdr_p4_smoke.bin'
+          $hash = (Get-FileHash -LiteralPath $image -Algorithm SHA256).Hash
+          python tools/lab/run_standalone_fixture.py --allow-flash --smoke-image "$image" --smoke-sha256 "$hash" --sdkconfig "$build/sdkconfig" --restore-image "$env:LAB_RESTORE_IMAGE" --restore-sha256 "$env:LAB_RESTORE_SHA" --esptool-python "$env:LAB_ESPTOOL_PYTHON" --app-root "$env:LAB_APP_ROOT" --pairing-key "$env:LAB_PAIRING_KEY" --output "$output"
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone hardware test or recovery failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: standalone-com39-results
+          path: |
+            ${{ runner.temp }}/fixture-${{ github.run_id }}-${{ github.run_attempt }}/build.log
+            ${{ runner.temp }}/fixture-result-${{ github.run_id }}-${{ github.run_attempt }}/result.json
+            ${{ runner.temp }}/fixture-result-${{ github.run_id }}-${{ github.run_attempt }}/smoke-serial.log
+            ${{ runner.temp }}/fixture-result-${{ github.run_id }}-${{ github.run_attempt }}/*-flash.log
           if-no-files-found: warn

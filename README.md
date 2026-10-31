@@ -354,3 +354,9 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 
 **Try it. Break it. Open a `truth:` issue if we oversold something.**
 https://github.com/hardcoreerik/esp-rtl-sdr
+
+## Support development
+
+If this project is useful to you, consider supporting its development. Across ORC projects, support helps fund development time, hardware testing, receiver compatibility, and decoder work.
+
+[GitHub Sponsors](https://github.com/sponsors/hardcoreerik) · [Ko-fi](https://ko-fi.com/hardcoreerik) · [PayPal](https://paypal.me/hardcoreerik)

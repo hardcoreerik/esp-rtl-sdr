@@ -157,7 +157,7 @@ inline uint16_t rtl_profile_tuner_i2c_value(RtlProfileId profile)
     case RtlProfileId::BlogV4:
         return kBlogV4TunerI2cValue;
     case RtlProfileId::E4000:
-        return 0x0064; // E4000 7-bit I2C address in RTL2832U control encoding.
+        return 0x00c8; // Captured RTL2832U control encoding: 7-bit 0x64 shifted left.
     default:
         return 0;
     }

@@ -1190,8 +1190,9 @@ static bool probe_e4000_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
                               RtlProfileProbeResult *out_probe)
 {
     if (out_probe == nullptr) return false;
+    const uint16_t tuner_address = rtl_profile_tuner_i2c_value(RtlProfileId::E4000);
     const RtlControlRecord select = {
-        0x0064, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
+        tuner_address, 0x0610, 0x40, 1, {0x02, 0, 0, 0, 0, 0, 0, 0}};
     // The E4000 datasheet specifies one unacknowledged dummy I2C command
     // after power-on/reset. Accept that first NACK, then retry the ID pointer.
     if (ctrl_submit_device(h, dev, select.request_type, 0, select.value, select.index,
@@ -1201,7 +1202,7 @@ static bool probe_e4000_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
         return false;
     }
     uint8_t chip_id = 0;
-    if (ctrl_submit_device(h, dev, 0xc0, 0, 0x0064, 0x0600, nullptr, 1, false,
+    if (ctrl_submit_device(h, dev, 0xc0, 0, tuner_address, 0x0600, nullptr, 1, false,
                            &chip_id, sizeof(chip_id)) != ESP_OK) {
         return false;
     }
@@ -1572,7 +1573,7 @@ const RtlTunerDriver *rtl_tuner_driver_for_profile(RtlProfileId profile)
 {
     static const RtlTunerDriver e4000_driver = {
         "E4000",
-        0x0064,
+        rtl_profile_tuner_i2c_value(RtlProfileId::E4000),
         e4000::kMinFrequencyHz,
         e4000::kMaxFrequencyHz,
         run_e4000_initialize_tuner,

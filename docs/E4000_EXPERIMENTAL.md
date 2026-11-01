@@ -39,6 +39,14 @@ every E4000-branded receiver has identical RF routing or clocking.
 
 ## Validation required
 
+October 31 first-party PC controls establish RTL2832U I2C control address
+`0x00c8` for E4000 (seven-bit `0x64` shifted left). In the verified controls
+trace, frame 703 selects ID register 02 and frame 705 returns 40 with status
+zero. Probe, registry and initialization/tuning use the same profile address.
+The previous unshifted `0x0064` value was incorrect. Host profile and actual
+initializer/tune trace regressions cover the corrected address; ESP hardware
+acceptance remains a separate gate.
+
 1. Confirm `rtl_test -t` reports E4000 on the XTR v5 and save the full output.
 2. Confirm the USB descriptors with `rtl_eeprom`; do not write to the EEPROM.
 3. On ESP32-P4, capture cold boot, first tune, retunes across VHF/UHF/L-band,

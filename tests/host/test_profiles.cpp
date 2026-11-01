@@ -130,7 +130,8 @@ static void test_tuner_isolation(void)
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::BlogV4), 0x0074);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::BlogV3), 0x0034);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::NooelecSmartV5), 0x0034);
-    EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::E4000), 0x0064);
+    // First-party PC ID read, controls-verified frame 705: wValue=00c8, ID=40.
+    EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::E4000), 0x00c8);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::Unknown), 0);
     EXPECT_TRUE(!rtl_profile_allows_init_record(RtlProfileId::E4000, kRtlInitTransfers[0]));
 

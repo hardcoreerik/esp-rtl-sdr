@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FUNCTIONS = """apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
 map_tuner_record_for_profile run_record run_records run_profile_demod_if_restore
 run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_nooelec_gain_restore run_v3_leave_direct
-run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
+run_e4000_initialize_tuner run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
 apply_tuner_agc_auto_records apply_rtl_agc_records run_bandwidth_program""".split()
 
 
@@ -232,6 +232,27 @@ int main() {
         CHECK(wire.size() == i);
     }
     fail_transfer = 0;
+    // Captured E4000 bridge address is the shifted address 00c8, not 0064.
+    wire.clear();
+    CHECK(run_e4000_initialize_tuner(&h) == ESP_OK);
+    size_t tuner_writes = 0;
+    for (const auto &r : wire) {
+        if (r.index == 0x0610 || r.index == 0x0600) {
+            CHECK(r.value == 0x00c8);
+            ++tuner_writes;
+        }
+    }
+    CHECK(tuner_writes >= 10);
+    wire.clear();
+    CHECK(run_e4000_tune(&h, 100000000) == ESP_OK);
+    tuner_writes = 0;
+    for (const auto &r : wire) {
+        if (r.index == 0x0610 || r.index == 0x0600) {
+            CHECK(r.value == 0x00c8);
+            ++tuner_writes;
+        }
+    }
+    CHECK(tuner_writes == 9);
     std::printf("RESULT nooelec_runtime_trace passed=%u failed=0\n", checks);
 }
 '''

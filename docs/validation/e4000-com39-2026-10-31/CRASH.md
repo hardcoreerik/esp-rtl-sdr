@@ -76,3 +76,32 @@ After reboot, serial and a hash-verified PNG confirm stable 126.600 MHz tuning
 with AM demodulation on Home. The user reports hearing the local 1600 kHz
 station through the converter. This later positive observation does not prove
 that the preceding USB error or panic is resolved.
+
+## Bounded host verification of upstream fix
+
+The upstream patch was fetched directly from Espressif and adapted only to
+ESP-IDF 5.5.4's older `components/hal/usb_dwc_hal.c` path/context. Authorship
+and commit provenance are preserved in
+`../../patches/esp-idf-5.5.4-usb-error-before-halt.patch`. `git apply --check`
+passed against the installed SDK; no shared SDK file was changed.
+
+`tools/lab/check_usb_hal_error_order.py` extracts the installed SDK's actual
+interrupt-decoder function and generates stock and one-line-patched variants.
+Mock register cases reproduce the stock assertion for all 15 nonempty error
+combinations without CHHLTD, and verify error precedence/classification with
+and without halt, unchanged halted-error classification, requested halt,
+completion and short-packet halt behavior. The compiled harness passed 202
+checks. Numeric bit positions are symbolic mocks; physical register reads,
+interrupt timing and host recovery are not simulated.
+
+```powershell
+python tools/lab/check_usb_hal_error_order.py C:/Espressif/frameworks/esp-idf-v5.5.4 tests/host/build/usb-hal-error-order
+cmake -S tests/host/build/usb-hal-error-order -B tests/host/build/usb-hal-error-order/build
+cmake --build tests/host/build/usb-hal-error-order/build --config Debug
+./tests/host/build/usb-hal-error-order/build/Debug/usb_hal_error_order.exe
+```
+
+Result: `PASS actual SDK decoder stock assertion reproduced; upstream correction checks=202`.
+Source SHA-256 and test scope are recorded in `usb-hal-host-check.json`.
+An isolated patched firmware build and physical recovery tests remain pending;
+this host result does not close the crash release gate.

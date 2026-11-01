@@ -1521,8 +1521,11 @@ static esp_err_t run_e4000_gain(esp_rtl_sdr_handle *h, int requested, bool autom
         err=run_record(h,record,false);
         if (err!=ESP_OK) break;
     }
-    if (err==ESP_OK) err=run_e4000_masked_write(h,0x1a,0x0f,automatic ? 0x09 : 0x00);
+    // Restore the first-party PC IF baseline, not inherited AGC/retune state.
+    if (err==ESP_OK) err=run_e4000_masked_write(h,0x1a,0x1f,automatic ? 0x19 : 0x10);
     if (err==ESP_OK) err=run_e4000_masked_write(h,0x20,0x01,automatic ? 0x01 : 0x00);
+    if (err==ESP_OK) err=run_e4000_masked_write(h,0x16,0x7f,0x01);
+    if (err==ESP_OK) err=run_e4000_masked_write(h,0x17,0x3f,0x12);
     const auto &step=e4000::kGainSteps[e4000::nearest_gain_index(requested)];
     if (!automatic) {
         if (err==ESP_OK) err=run_e4000_masked_write(h,0x14,0x0f,step.lna);

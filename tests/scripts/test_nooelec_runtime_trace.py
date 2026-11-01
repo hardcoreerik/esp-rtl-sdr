@@ -246,13 +246,15 @@ int main() {
             pll_1a_seen = true;
     CHECK(pll_1a_seen);
     h = {}; h.profile=RtlProfileId::E4000; wire.clear();
-    e4000_registers[0x1a]=0x59; e4000_registers[0x20]=0xa1;
+    e4000_registers[0x1a]=0x49; e4000_registers[0x20]=0xa1;
+    e4000_registers[0x16]=0xff; e4000_registers[0x17]=0xff;
     e4000_registers[0x14]=0xb0; e4000_registers[0x15]=0xc0;
     int actual=-999;
     CHECK(run_e4000_gain(&h, 420, false, &actual)==ESP_OK);
     CHECK(actual==420);
     CHECK(e4000_registers[0x1a]==0x50 && e4000_registers[0x20]==0xa0);
     CHECK(e4000_registers[0x14]==0xbe && e4000_registers[0x15]==0xc1);
+    CHECK(e4000_registers[0x16]==0x81 && e4000_registers[0x17]==0xd2);
     const size_t gain_transfers=wire.size();
     size_t gain_count=0; int gains[14]{};
     h.device_caps=ESP_RTL_SDR_CAP_GAIN;
@@ -263,8 +265,14 @@ int main() {
     const uint8_t expected_lna[]={0,1,4,5,6,7,8,9,10,11,12,13,14,14};
     for (size_t i=0;i<14;++i) {
         wire.clear();e4000_registers[0x14]=0xb0;e4000_registers[0x15]=0xc0;
+        e4000_registers[0x16]=static_cast<uint8_t>(i*17);
+        e4000_registers[0x17]=static_cast<uint8_t>(255-i*11);
+        const uint8_t reserved16=e4000_registers[0x16]&0x80;
+        const uint8_t reserved17=e4000_registers[0x17]&0xc0;
         CHECK(run_e4000_gain(&h,gains[i],false,&actual)==ESP_OK);
         CHECK(actual==gains[i]);
+        CHECK(e4000_registers[0x16]==(reserved16|0x01));
+        CHECK(e4000_registers[0x17]==(reserved17|0x12));
         CHECK(e4000_registers[0x14]==(0xb0|expected_lna[i]));
         CHECK(e4000_registers[0x15]==(0xc0|(i==13?1:0)));
     }
@@ -277,7 +285,9 @@ int main() {
         CHECK(!h.streaming && h.pause_resubmit && h.state==ESP_RTL_SDR_STATE_FAULT);
     }
     fail_transfer=0;h.streaming=false;wire.clear();
+    e4000_registers[0x16]=0xfe;e4000_registers[0x17]=0xff;
     CHECK(run_e4000_gain(&h,0,true,nullptr)==ESP_OK);
+    CHECK(e4000_registers[0x16]==0x81 && e4000_registers[0x17]==0xd2);
     CHECK(e4000_registers[0x1a]==0x59 && e4000_registers[0x20]==0xa1);
     // E4000 alone enables both ADCs and zero-IF before clearing the NCO.
     h = {}; h.profile = RtlProfileId::E4000; wire.clear();
@@ -318,7 +328,7 @@ int main() {
             ++tuner_writes;
         }
     }
-    CHECK(tuner_writes == 15);
+    CHECK(tuner_writes == 21);
     const RtlControlRecord captured_vhf_bias = {0x00c8, 0x0610, 0x40, 2, {0x78, 0x03}};
     records_seen(&captured_vhf_bias, 1);
     // Enabled offset uses hardware IF once, preserving the requested IQ center.

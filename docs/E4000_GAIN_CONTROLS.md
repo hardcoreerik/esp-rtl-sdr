@@ -28,8 +28,24 @@ Cold start and retune restore the stored manual setting or AUTO mode after
 tuning. Streaming requests reuse the existing deferred control transaction.
 Each write failure stops a live stream in FAULT; no IQ resumes with uncertain
 gain state. Idle failures return an error, and the next start reapplies state.
-No additional IF-stage initialization is inferred here: captured tuner writes
-0x16/0x17 exist, but matching total gain requires a separate RF comparison.
+The 2026-11-01 candidate additionally restores the first-party PC IF baseline
+on every gain-mode application (including startup/retune): 0x16[6:0]=0x01,
+0x17[5:0]=0x12 and sensitivity mode 0x1a[4]=1. Reserved bits are preserved.
+Previously these fields were inherited, so the same reported LNA/mixer setting
+could coexist with different IF gain. The PC USB trace records the final
+0x16=01/0x17=12 state; the Nooelec-hosted E4000 datasheet sections 1.17.1/2
+corroborate field meanings. No vendor source was imported.
+
+RF acceptance of this candidate is PENDING. Prior tests showed stable PC
+same-gain returns within 0.014 dB and V5 control within 0.10 dB, but ESP XTR
+returned to 14 dB about 1.9 dB weaker. That narrows the investigation but does
+not prove these IF fields caused the physical variation. Build/flash and repeat
+the same cabled matrix before claiming the reception issue fixed. AUTO now
+uses the same fixed serial IF baseline with autonomous LNA/mixer; its response
+and overload behavior also require checking. Other tuner paths are untouched.
+
+Primary field reference:
+https://www.nooelec.com/store/downloads/dl/file/id/14/product/264/e4000_datasheet.pdf
 
 Focused checks run on Windows/MSVC:
 

@@ -79,3 +79,15 @@ A 60.71-second authenticated observation collected 60 samples at the same
 frequency. Byte counts advanced from 2,472,542,208 to 2,759,131,136 with
 unchanged zero drop/overrun counters. The compact soak summary includes the
 first/last state and hashes of the retained full observation.
+
+## External-converter AM observation
+
+The subsequent 068efab candidate has a separately powered Ham It Up Plus v2
+in upconvert mode and the user's outside 20 m telescopic antenna. Both driver
+status and PNG show 126.600 MHz with AM demodulation and a 10 kHz filter.
+Subtracting the nominal 125 MHz LO gives 1600 kHz. The user confirms hearing
+the local station. The Home label AIRBAND follows the translated tuning
+frequency; no native external-converter configuration is implemented. This
+is external-converter reception, not native HF capability or calibrated RF
+acceptance. Status, image hash and exact limits are in ham-it-up-am.json.
+The USB host crash recorded in CRASH.md remains a separate unresolved gate.

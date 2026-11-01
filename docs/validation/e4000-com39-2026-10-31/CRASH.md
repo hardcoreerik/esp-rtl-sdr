@@ -2,7 +2,8 @@
 
 October 31, 2026. User reported the Tab5 COM39 blue-screen crash after
 connecting the Ham It Up Plus v2 in upconvert mode. Exact trigger action and
-converter USB-power topology are awaiting clarification. Do not infer that
+last UI action remains unconfirmed. The user subsequently confirmed that the
+converter uses a separate power supply. Do not infer that
 the converter, AM decoder or a frequency request caused the crash.
 
 ## Confirmed dump evidence
@@ -70,3 +71,8 @@ Windows GDB integration did not produce the full stack. Direct batch GDB
 17.1 against the extracted core ELF recovered it. Use forward-slash paths
 inside GDB `-ex` commands; unescaped Windows backslashes were consumed as
 command escapes. No device-memory writes were used for decoding.
+
+After reboot, serial and a hash-verified PNG confirm stable 126.600 MHz tuning
+with AM demodulation on Home. The user reports hearing the local 1600 kHz
+station through the converter. This later positive observation does not prove
+that the preceding USB error or panic is resolved.

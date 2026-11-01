@@ -1,0 +1,22 @@
+{
+  "driver_revision": "068efab99615fead03e8dd56239ff0f12a9ccdaf",
+  "app_image_sha256": "09b98810135ab15ffbe08fd0256ab76b34f38416d4cdf8f61e860558577bd5ac",
+  "antenna": "outside telescopic antenna set for 20 m; user reported",
+  "converter": "Nooelec Ham It Up Plus v2",
+  "converter_mode": "upconvert",
+  "converter_nominal_LO_hz": 125000000,
+  "converter_power": "separate supply; user confirmed",
+  "driver_frequency_hz": 126600000,
+  "nominal_input_hz": 1600000,
+  "mode": "AM",
+  "app_band_label": "AIRBAND (translated RF, external converter not configured)",
+  "filter_hz": 10000,
+  "user_audio_confirmed": true,
+  "station_identity": "user identifies local 1600 kHz station; no independent call-sign recording",
+  "effective_sps": 2398926,
+  "drops": 0,
+  "overruns": 0,
+  "clipping_percent": 0.002,
+  "screenshot_sha256": "738e958a85d751dd6d54bfdfd90fd2429cd2d0e36897f60b79d6e0be7c560196",
+  "scope": "external converter AM reception; not native E4000 HF support or crash resolution"
+}

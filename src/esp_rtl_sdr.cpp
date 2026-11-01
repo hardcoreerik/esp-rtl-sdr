@@ -1272,7 +1272,11 @@ static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
         // The shared prefix holds the USB FIFO in reset. Release it even when
         // acquisition metadata is disabled; E4000 PC capture frames 1887/1889.
         constexpr size_t count = std::size(kRtlInitTransfers);
-        return run_records(h, &kRtlInitTransfers[count - 2], 2);
+        for (size_t i = count - 2; i < count; ++i) {
+            const esp_err_t e = run_record(h, kRtlInitTransfers[i], false);
+            if (e != ESP_OK) return e;
+        }
+        return ESP_OK;
     }
     size_t skipped = 0;
     for (size_t i = 0; i < std::size(kRtlInitTransfers); ++i) {

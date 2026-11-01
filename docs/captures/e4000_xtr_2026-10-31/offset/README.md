@@ -46,6 +46,38 @@ Record physical setup, DLL hash, return codes, offset readback, center getter,
 IQ hashes, control status and failures. Antenna observations do not establish
 calibrated sensitivity, filter response or preservation of a particular station.
 
+## Controlled-tone follow-up
+
+The antenna and converter were removed. Fixture: tinySA RF output → 30 dB
+attenuator → XTR on PC USB. The source was nominally -40 dBm at 100.1 MHz,
+receiver center 100 MHz, manual gain 19 dB, RTL AGC OFF. Absolute RF power was
+not independently calibrated. `pc_offset_tone.py` records source OFF/ON at
+each offset OFF/ON/OFF state. All nine source-on checks exceeded their paired
+source-off tone measurement by 15 dB, with no rail clipping and the tone at
+the expected +100 kHz within FFT resolution. All 981 paired controls succeeded.
+
+| Rate | Source-off center peak reduction | Source-on tone level change | Observed tone offset |
+|---|---:|---:|---:|
+| 960 kS/s | 18.57 dB | -0.92 dB | +99,990 Hz |
+| 2.4 MS/s | 19.13 dB | -1.16 dB | +99,976 Hz |
+| 3.2 MS/s | 15.49 dB | -1.55 dB | +100,000 Hz |
+
+Reduction/change compares ON with the mean of the two surrounding OFF states
+at the same rate. Center peak uses averaged 2048-point Hann FFTs after removing
+each window's complex mean, matching the application's existing preprocessing;
+it is the strongest bin within ±5 kHz. Tone level uses a 65,536-point Hann FFT.
+Offset also changes filter response/noise floor, so the peak reduction is not
+entirely an isolated DC improvement. Raw bytes, SHA-256 inventory, per-capture
+measurements and settings are in `tone-results.json`; the spectrum comparison
+is `tone-center-comparison.png`.
+
+This establishes a controlled **PC reference**, not ESP-driver acceptance or
+performance beyond the reference driver. The roughly 11 dB lower tone level
+at 3.2 MS/s versus the other rates is retained as an unexplained rate-dependent
+observation; do not interpret cross-rate amplitude as calibrated gain.
+The source was acknowledged OFF and paused at completion. The XTR's USB was
+then moved to COM39 with the RF fixture unchanged for the ESP comparison.
+
 ## Driver contract and open gates
 
 New API requires a MINOR release. Offset tuning is opt-in, E4000-only, configured

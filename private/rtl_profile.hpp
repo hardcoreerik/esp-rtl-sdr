@@ -221,11 +221,12 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
                ESP_RTL_SDR_CAP_RTL_AGC | ESP_RTL_SDR_CAP_DIRECT_SAMPLING |
                ESP_RTL_SDR_CAP_TUNER_BANDWIDTH;
     case RtlProfileId::E4000:
-        /* Experimental: tuning/stream path only; gain, AGC, bandwidth, HF and
-         * board controls remain unavailable until separately implemented. */
+        /* Experimental E4000: captured manual/automatic tuner gain. RTL AGC,
+         * bandwidth selection, HF and board controls remain separate. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
                ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
-               ESP_RTL_SDR_CAP_OFFSET_TUNING;
+               ESP_RTL_SDR_CAP_OFFSET_TUNING | ESP_RTL_SDR_CAP_GAIN |
+               ESP_RTL_SDR_CAP_GAIN_AUTO;
     default:
         return 0;
     }

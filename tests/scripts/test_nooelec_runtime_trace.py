@@ -11,10 +11,10 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-FUNCTIONS = """esp_rtl_sdr_set_offset_tuning esp_rtl_sdr_get_offset_tuning_state apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
+FUNCTIONS = """esp_rtl_sdr_get_tuner_gains esp_rtl_sdr_set_offset_tuning esp_rtl_sdr_get_offset_tuning_state apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
 map_tuner_record_for_profile run_record run_records run_profile_demod_if_restore
 run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_nooelec_gain_restore run_v3_leave_direct
-run_e4000_initialize_tuner run_init_table e4000_sample_rate_record_allowed rtl_tuner_driver_for_profile run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
+run_e4000_masked_write run_e4000_gain run_e4000_initialize_tuner run_init_table e4000_sample_rate_record_allowed rtl_tuner_driver_for_profile run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
 apply_tuner_agc_auto_records apply_rtl_agc_records run_bandwidth_program""".split()
 
 
@@ -66,6 +66,7 @@ static unsigned checks = 0;
 static int64_t esp_timer_get_time() { return 0; }
 static void vTaskDelay(int) {}
 struct esp_rtl_sdr_handle {
+    void *dev = nullptr;
     RtlProfileId profile = RtlProfileId::NooelecSmartV5;
     esp_rtl_sdr_state_t state = ESP_RTL_SDR_STATE_IDLE;
     uint32_t device_caps = 0;
@@ -95,12 +96,19 @@ static esp_err_t check_not_reentrant(esp_rtl_sdr_handle *) { return api_reentran
 constexpr size_t kDemodBringupRecordCount = 86;
 static std::vector<RtlControlRecord> wire;
 static size_t fail_transfer = 0;
+static uint8_t e4000_registers[256] = {};
+static uint8_t e4000_pointer = 0;
+
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool) {
     CHECK(length <= 8);
     RtlControlRecord r{value, index, type, length, {}};
     if (length) std::memcpy(r.data, data, length);
     wire.push_back(r);
+    if (value==0x00c8 && index==0x0610 && length) {
+        e4000_pointer=data[0];
+        if (length==2) e4000_registers[data[0]]=data[1];
+    }
     return fail_transfer == wire.size() ? ESP_FAIL : ESP_OK;
 }
 static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t) {
@@ -109,6 +117,14 @@ static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t) {
 template <typename... Args>
 static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t, Args...) {
     CHECK(h->profile == RtlProfileId::NooelecSmartV5); return ESP_OK;
+}
+static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *, void *, uint8_t, uint8_t,
+    uint16_t value, uint16_t index, const uint8_t *, uint16_t length, bool,
+    uint8_t *response, size_t capacity) {
+    CHECK(value == 0x00c8 && index == 0x0600 && length == 1 && capacity == 1);
+    RtlControlRecord r{value,index,0xc0,1,{}};wire.push_back(r);
+    if (fail_transfer==wire.size()) return ESP_FAIL;
+    *response=e4000_registers[e4000_pointer]; return ESP_OK;
 }
 // ACTUAL_DRIVER_FUNCTIONS
 static int last_tuner(uint8_t reg) {
@@ -229,6 +245,40 @@ int main() {
         if (r.request_type == 0x40 && r.index == 0x0610 && r.length == 2 && r.data[0] == 0x1a && r.data[1] == 0x61)
             pll_1a_seen = true;
     CHECK(pll_1a_seen);
+    h = {}; h.profile=RtlProfileId::E4000; wire.clear();
+    e4000_registers[0x1a]=0x59; e4000_registers[0x20]=0xa1;
+    e4000_registers[0x14]=0xb0; e4000_registers[0x15]=0xc0;
+    int actual=-999;
+    CHECK(run_e4000_gain(&h, 420, false, &actual)==ESP_OK);
+    CHECK(actual==420);
+    CHECK(e4000_registers[0x1a]==0x50 && e4000_registers[0x20]==0xa0);
+    CHECK(e4000_registers[0x14]==0xbe && e4000_registers[0x15]==0xc1);
+    const size_t gain_transfers=wire.size();
+    size_t gain_count=0; int gains[14]{};
+    h.device_caps=ESP_RTL_SDR_CAP_GAIN;
+    CHECK(esp_rtl_sdr_get_tuner_gains(&h,nullptr,0,&gain_count)==ESP_OK);
+    CHECK(gain_count==14);
+    CHECK(esp_rtl_sdr_get_tuner_gains(&h,gains,14,&gain_count)==ESP_OK);
+    CHECK(gain_count==14 && gains[0]==-10 && gains[13]==420);
+    const uint8_t expected_lna[]={0,1,4,5,6,7,8,9,10,11,12,13,14,14};
+    for (size_t i=0;i<14;++i) {
+        wire.clear();e4000_registers[0x14]=0xb0;e4000_registers[0x15]=0xc0;
+        CHECK(run_e4000_gain(&h,gains[i],false,&actual)==ESP_OK);
+        CHECK(actual==gains[i]);
+        CHECK(e4000_registers[0x14]==(0xb0|expected_lna[i]));
+        CHECK(e4000_registers[0x15]==(0xc0|(i==13?1:0)));
+    }
+
+    for (size_t i=1;i<=gain_transfers;++i) {
+        wire.clear();fail_transfer=i;actual=-999;h.streaming=true;h.pause_resubmit=false;
+        h.state=ESP_RTL_SDR_STATE_STREAMING;
+        CHECK(run_e4000_gain(&h,190,false,&actual)==ESP_FAIL);
+        CHECK(actual==-999 && wire.size()==i);
+        CHECK(!h.streaming && h.pause_resubmit && h.state==ESP_RTL_SDR_STATE_FAULT);
+    }
+    fail_transfer=0;h.streaming=false;wire.clear();
+    CHECK(run_e4000_gain(&h,0,true,nullptr)==ESP_OK);
+    CHECK(e4000_registers[0x1a]==0x59 && e4000_registers[0x20]==0xa1);
     // E4000 alone enables both ADCs and zero-IF before clearing the NCO.
     h = {}; h.profile = RtlProfileId::E4000; wire.clear();
     CHECK(run_e4000_set_zero_if(&h) == ESP_OK);
@@ -268,7 +318,7 @@ int main() {
             ++tuner_writes;
         }
     }
-    CHECK(tuner_writes == 9);
+    CHECK(tuner_writes == 15);
     const RtlControlRecord captured_vhf_bias = {0x00c8, 0x0610, 0x40, 2, {0x78, 0x03}};
     records_seen(&captured_vhf_bias, 1);
     // Enabled offset uses hardware IF once, preserving the requested IQ center.

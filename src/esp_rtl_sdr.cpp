@@ -1497,6 +1497,47 @@ static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t rf_hz)
            rf_hz < ESP_RTL_SDR_XTAL_HZ;
 }
 
+static esp_err_t run_e4000_masked_write(esp_rtl_sdr_handle *h, uint8_t reg,
+                                       uint8_t mask, uint8_t bits)
+{
+    const uint16_t address = tuner_i2c_value_for_handle(h);
+    const RtlControlRecord pointer{address,0x0610,0x40,1,{reg}};
+    esp_err_t err=run_record(h,pointer,false);
+    if (err!=ESP_OK) return err;
+    uint8_t previous=0;
+    err=ctrl_submit_device(h,h->dev,0xc0,0,address,0x0600,nullptr,1,false,&previous,1);
+    if (err!=ESP_OK) return err;
+    const RtlControlRecord write{address,0x0610,0x40,2,
+        {reg,static_cast<uint8_t>((previous & ~mask) | (bits & mask))}};
+    return run_record(h,write,false);
+}
+
+static esp_err_t run_e4000_gain(esp_rtl_sdr_handle *h, int requested, bool automatic,
+                               int *applied)
+{
+    // First-party captured mode fields; preserve every unrelated register bit.
+    esp_err_t err=ESP_OK;
+    for (const auto &record : kBlogV3TunerRepeaterOn) {
+        err=run_record(h,record,false);
+        if (err!=ESP_OK) break;
+    }
+    if (err==ESP_OK) err=run_e4000_masked_write(h,0x1a,0x0f,automatic ? 0x09 : 0x00);
+    if (err==ESP_OK) err=run_e4000_masked_write(h,0x20,0x01,automatic ? 0x01 : 0x00);
+    const auto &step=e4000::kGainSteps[e4000::nearest_gain_index(requested)];
+    if (!automatic) {
+        if (err==ESP_OK) err=run_e4000_masked_write(h,0x14,0x0f,step.lna);
+        if (err==ESP_OK) err=run_e4000_masked_write(h,0x15,0x01,step.mixer);
+    }
+    if (err!=ESP_OK && h->streaming) {
+        h->streaming=false;
+        h->pause_resubmit=true;
+        h->state=ESP_RTL_SDR_STATE_FAULT;
+        set_error_unlocked(h,ESP_RTL_SDR_ERR_FAULT);
+    }
+    if (err==ESP_OK && applied && !automatic) *applied=step.tenth_db;
+    return err;
+}
+
 static esp_err_t run_e4000_set_zero_if(esp_rtl_sdr_handle *h, uint32_t nco_word = 0)
 {
     // Experimental dual-ADC composition; provenance and hardware gate: docs/E4000_EXPERIMENTAL.md.
@@ -1594,6 +1635,12 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         if (err != ESP_OK) return err;
     }
 
+    int applied_gain=h->gain_tenth_db;
+    err=run_e4000_gain(h,h->gain_tenth_db,
+                      h->gain_mode==ESP_RTL_SDR_GAIN_MODE_AUTO,&applied_gain);
+    if (err!=ESP_OK) return err;
+    h->gain_tenth_db=applied_gain;
+    h->tuner_auto_applied=h->gain_mode==ESP_RTL_SDR_GAIN_MODE_AUTO;
     h->last_pll_if_hz = offset.offset_hz;
     h->last_lo_hz = corrected_hz;
     h->e4000_offset_applied_hz = offset.offset_hz;
@@ -6012,6 +6059,8 @@ static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
 /** Apply manual gain and the current route together (caller owns bulk pause). */
 static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *applied_tenth)
 {
+    if (h->profile==RtlProfileId::E4000)
+        return run_e4000_gain(h,tenth_db,false,applied_tenth);
     if (rtl_profile_uses_r820t2_i2c_remap(h->profile)) {
         return apply_r820t2_gain_records(h, tenth_db, applied_tenth);
     }
@@ -6043,6 +6092,8 @@ static esp_err_t apply_gain_records(esp_rtl_sdr_handle *h, int tenth_db, int *ap
 /** Apply tuner AUTO and the current route together (caller owns bulk pause). */
 static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h)
 {
+    if (h->profile==RtlProfileId::E4000)
+        return run_e4000_gain(h,0,true,nullptr);
     esp_err_t err = ESP_FAIL;
     const uint32_t rf_hz = frontend_rf_hz(h);
     for (int pass = 0; pass < 3; ++pass) {
@@ -6257,7 +6308,9 @@ static esp_err_t apply_profile_gain(esp_rtl_sdr_handle *h, int tenth_db, int *ap
         h->pending_gain_tenth = tenth_db;
         h->pending_gain = true;
         if (applied_tenth != nullptr) {
-            *applied_tenth = rtl_profile_uses_r820t2_i2c_remap(h->profile)
+            *applied_tenth = h->profile==RtlProfileId::E4000
+                                 ? e4000::kGainSteps[e4000::nearest_gain_index(tenth_db)].tenth_db
+                                 : rtl_profile_uses_r820t2_i2c_remap(h->profile)
                                  ? kR820T2GainSteps[r820t2_nearest_gain_index(tenth_db)].tenth_db
                                  : kMeasuredV4GainSteps[measured_v4_nearest_gain_index(tenth_db)]
                                        .tenth_db;
@@ -6464,14 +6517,15 @@ esp_err_t esp_rtl_sdr_get_tuner_gains(esp_rtl_sdr_handle_t handle, int *out_gain
         return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
     const bool r820 = rtl_profile_uses_r820t2_i2c_remap(handle->profile);
-    const size_t count = r820 ? kR820T2GainStepCount : kMeasuredV4GainStepCount;
+    const bool e4=handle->profile==RtlProfileId::E4000;
+    const size_t count = e4 ? e4000::kGainStepCount : r820 ? kR820T2GainStepCount : kMeasuredV4GainStepCount;
     *out_count = count;
     if (out_gains_tenth_db == nullptr || max_count == 0) {
         return ESP_OK; /* size query */
     }
     const size_t n = (max_count < count) ? max_count : count;
     for (size_t i = 0; i < n; ++i) {
-        out_gains_tenth_db[i] = r820 ? kR820T2GainSteps[i].tenth_db
+        out_gains_tenth_db[i] = e4 ? e4000::kGainSteps[i].tenth_db : r820 ? kR820T2GainSteps[i].tenth_db
                                        : kMeasuredV4GainSteps[i].tenth_db;
     }
     *out_count = n;

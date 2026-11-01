@@ -30,13 +30,16 @@ every E4000-branded receiver has identical RF routing or clocking.
   RF tracking-filter selection, zero-IF setup and a conservative fixed IF
   filter configuration.
 - Reuse of the shared RTL2832U USB, sample-rate and IQ streaming path.
+- Captured 14-step manual tuner gain and tuner AUTO controls, using the existing
+  public gain APIs. See [gain controls](E4000_GAIN_CONTROLS.md) for evidence and
+  the still-open physical acceptance gate.
 
 ## Limits
 
 - RF tuning range: **64 MHz–1.7 GHz**, from the E4000 datasheet.
 - Tuner crystal: currently assumed to be **28.8 MHz** for this profile; confirm
   this on the target board before promoting the profile.
-- Tuner gain, tuner AGC, RTL AGC, tuner bandwidth, direct sampling, HF
+- RTL AGC, tuner bandwidth, direct sampling, HF
   upconversion and bias tee are **not exposed** by this profile.
 - The E4000's nominal VCO range is 2.6–3.9 GHz. Some edge frequencies require
   a provisional divider fallback outside that nominal window; these are

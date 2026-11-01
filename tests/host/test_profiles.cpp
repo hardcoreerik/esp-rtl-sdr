@@ -231,7 +231,7 @@ static void test_frequency_policy(void)
     EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::E4000, 433920000u), 433920000u);
     EXPECT_TRUE(rtl_profile_supports_stream(RtlProfileId::E4000));
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_STREAM) != 0);
-    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_GAIN) == 0);
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_GAIN) != 0);
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
     EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::Unknown, 100000000u));
 
@@ -982,6 +982,23 @@ static void test_e4000_offset_policy(void)
     EXPECT_TRUE(!e4000::make_offset_plan(96100000, 2400000, true, nullptr));
 }
 
+static void test_e4000_gain_policy()
+{
+    const int gains[] = {-10,15,40,65,90,115,140,165,190,215,240,290,340,420};
+    const uint8_t lna[] = {0,1,4,5,6,7,8,9,10,11,12,13,14,14};
+    EXPECT_EQ_U(e4000::kGainStepCount, 14);
+    for (size_t i=0;i<14;++i) {
+        const auto &step=e4000::kGainSteps[e4000::nearest_gain_index(gains[i])];
+        EXPECT_TRUE(step.tenth_db==gains[i]);
+        EXPECT_EQ_U(step.lna, lna[i]);
+        EXPECT_EQ_U(step.mixer, i==13 ? 1 : 0);
+    }
+    EXPECT_EQ_U(e4000::nearest_gain_index(-999),0);
+    EXPECT_EQ_U(e4000::nearest_gain_index(999),13);
+    EXPECT_EQ_U(e4000::nearest_gain_index(2),0);
+    EXPECT_EQ_U(e4000::nearest_gain_index(3),1);
+}
+
 int main(void)
 {
     test_detection_matrix();
@@ -1002,6 +1019,7 @@ int main(void)
     test_nooelec_captured_programming();
     test_e4000_pll_policy();
     test_e4000_offset_policy();
+    test_e4000_gain_policy();
     std::printf("RESULT profiles passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

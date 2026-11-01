@@ -11,6 +11,27 @@ constexpr uint32_t kReferenceXtalHz = 28800000u;
 constexpr uint32_t kVcoNominalMinHz = 2600000000u;
 constexpr uint32_t kVcoNominalMaxHz = 3900000000u;
 
+struct GainStep { int tenth_db; uint8_t lna; uint8_t mixer; };
+// First-party PC gain API/USB capture, 2026-10-31. Nominal requests, not
+// calibrated analog gain; 29/34 dB plateau is retained in the RF report.
+inline constexpr GainStep kGainSteps[] = {
+    {-10,0,0}, {15,1,0}, {40,4,0}, {65,5,0}, {90,6,0}, {115,7,0},
+    {140,8,0}, {165,9,0}, {190,10,0}, {215,11,0}, {240,12,0},
+    {290,13,0}, {340,14,0}, {420,14,1},
+};
+constexpr size_t kGainStepCount = sizeof(kGainSteps)/sizeof(kGainSteps[0]);
+inline size_t nearest_gain_index(int requested)
+{
+    size_t best=0;
+    int64_t error=INT64_MAX;
+    for (size_t i=0;i<kGainStepCount;++i) {
+        const int64_t delta=static_cast<int64_t>(requested)-kGainSteps[i].tenth_db;
+        const int64_t distance=delta<0 ? -delta : delta;
+        if (distance<error) { error=distance; best=i; }
+    }
+    return best;
+}
+
 enum class Band : uint8_t {
     Vhf2 = 0,
     Vhf3 = 1,

@@ -370,6 +370,9 @@ struct esp_rtl_sdr_handle {
     bool ctrl_stall = false;
     uint16_t ctrl_data_len = 0; /* bytes the device returned in the data stage of the last control transfer */
     uint32_t last_pll_if_hz = 0; /* PLL IF used by the last run_tune */
+    bool e4000_offset_requested = false;
+    uint32_t e4000_rate_sps = ESP_RTL_SDR_RATE_960K;
+    uint32_t e4000_offset_applied_hz = 0;
     uint32_t last_lo_hz = 0;     /* LO the last run_tune programmed (ppm-corrected tuner frequency + IF); band rows key on it */
     /** ctrl_xfer submitted and its callback not yet run. usb_host_device_close()
      *  asserts (usbh num_ctrl_xfers_inflight == 0) while this is true. */
@@ -787,6 +790,9 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->pending_bandwidth = false;
     h->bandwidth_requested_hz = 0;
     h->hf_direct_min_hz = 0;
+    h->e4000_offset_requested = false;
+    h->e4000_offset_applied_hz = 0;
+    h->e4000_rate_sps = ESP_RTL_SDR_RATE_960K;
     h->bandwidth_applied = {};
     h->bandwidth_applied_rf_hz = 0;
     h->bandwidth_applied_valid = false;
@@ -1491,7 +1497,7 @@ static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t rf_hz)
            rf_hz < ESP_RTL_SDR_XTAL_HZ;
 }
 
-static esp_err_t run_e4000_set_zero_if(esp_rtl_sdr_handle *h)
+static esp_err_t run_e4000_set_zero_if(esp_rtl_sdr_handle *h, uint32_t nco_word = 0)
 {
     // Experimental dual-ADC composition; provenance and hardware gate: docs/E4000_EXPERIMENTAL.md.
     const RtlControlRecord records[] = {
@@ -1499,11 +1505,11 @@ static esp_err_t run_e4000_set_zero_if(esp_rtl_sdr_handle *h)
         {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
         {0x0820, 0x0010, 0x40, 1, {0xcd, 0, 0, 0, 0, 0, 0, 0}},
         {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
-        {0x1920, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},
+        {0x1920, 0x0011, 0x40, 1, {static_cast<uint8_t>(nco_word >> 16), 0, 0, 0, 0, 0, 0, 0}},
         {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
-        {0x1a20, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},
+        {0x1a20, 0x0011, 0x40, 1, {static_cast<uint8_t>(nco_word >> 8), 0, 0, 0, 0, 0, 0, 0}},
         {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
-        {0x1b20, 0x0011, 0x40, 1, {0x00, 0, 0, 0, 0, 0, 0, 0}},
+        {0x1b20, 0x0011, 0x40, 1, {static_cast<uint8_t>(nco_word), 0, 0, 0, 0, 0, 0, 0}},
         {0x0120, 0x000a, 0xc0, 1, {0, 0, 0, 0, 0, 0, 0, 0}},
     };
     for (const auto &rec : records) {
@@ -1518,12 +1524,34 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
     if (h == nullptr || !rtl_profile_supports_rf_hz(RtlProfileId::E4000, frequency_hz)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
-    const uint32_t corrected_hz = apply_freq_correction_hz(frequency_hz, h->freq_correction_ppm);
+    e4000::OffsetPlan offset{};
+    if (!e4000::make_offset_plan(frequency_hz, h->e4000_rate_sps,
+                                h->e4000_offset_requested, &offset)) {
+        return ESP_RTL_SDR_ERR_BAD_FREQ;
+    }
+    // Preserve the existing correction of requested RF. Scaling the shifted
+    // LO instead would introduce an extra offset*ppm error after hardware DDC.
+    const uint32_t corrected_hz =
+        apply_freq_correction_hz(frequency_hz, h->freq_correction_ppm) - offset.offset_hz;
     e4000::PllPlan plan{};
     if (!e4000::make_pll_plan(corrected_hz,
                               static_cast<uint32_t>(rtl_profile_pll_xtal_hz(h->profile)), &plan)) {
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
+    // Once controls begin, a failed live transaction can leave NCO, filters
+    // and PLL inconsistent. Never resume IQ carrying the old frequency label.
+    struct TuneGuard {
+        esp_rtl_sdr_handle *handle;
+        bool committed = false;
+        ~TuneGuard() {
+            if (!committed && handle->streaming) {
+                handle->streaming = false;
+                handle->pause_resubmit = true;
+                handle->state = ESP_RTL_SDR_STATE_FAULT;
+                set_error_unlocked(handle, ESP_RTL_SDR_ERR_FAULT);
+            }
+        }
+    } guard{h};
     esp_err_t err = ESP_OK;
     // The shared sample-rate path can touch demod state; explicitly reopen
     // the RTL2832U I2C repeater before every E4000 retune.
@@ -1531,8 +1559,20 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         err = run_record(h, rec, false);
         if (err != ESP_OK) return err;
     }
-    err = run_e4000_set_zero_if(h);
+    err = run_e4000_set_zero_if(h, offset.nco_word);
     if (err != ESP_OK) return err;
+
+    if (offset.offset_hz != 0 || h->e4000_offset_applied_hz != 0) {
+        const uint16_t address = tuner_i2c_value_for_handle(h);
+        const RtlControlRecord filters[] = {
+            {address, 0x0610, 0x40, 2, {0x11, offset.filter2}},
+            {address, 0x0610, 0x40, 2, {0x12, offset.filter3}},
+        };
+        for (const auto &rec : filters) {
+            err = run_record(h, rec, false);
+            if (err != ESP_OK) return err;
+        }
+    }
 
     const uint8_t band_bits = static_cast<uint8_t>(static_cast<uint8_t>(plan.band) << 1);
     const uint8_t divider = static_cast<uint8_t>(
@@ -1554,8 +1594,10 @@ static esp_err_t run_e4000_tune(esp_rtl_sdr_handle *h, uint32_t frequency_hz)
         if (err != ESP_OK) return err;
     }
 
-    h->last_pll_if_hz = 0;
+    h->last_pll_if_hz = offset.offset_hz;
     h->last_lo_hz = corrected_hz;
+    h->e4000_offset_applied_hz = offset.offset_hz;
+    guard.committed = true;
     if (!plan.vco_in_nominal_range) {
         RTL_LOGW(h, "E4000 RF=%u Hz uses provisional VCO=%llu Hz outside nominal 2.6-3.9 GHz window",
                  static_cast<unsigned>(frequency_hz), static_cast<unsigned long long>(plan.vco_hz));
@@ -4239,7 +4281,10 @@ esp_err_t esp_rtl_sdr_get_capture_meta(esp_rtl_sdr_handle_t handle,
     }
     const uint32_t center = handle->frequency_hz != 0 ? handle->frequency_hz
                                                       : handle->preferred_frequency_hz;
-    const uint32_t tuner = hf_direct_route(handle, center)
+    const uint32_t tuner = handle->profile == RtlProfileId::E4000 &&
+                                  handle->state == ESP_RTL_SDR_STATE_STREAMING
+                               ? handle->last_lo_hz
+                               : hf_direct_route(handle, center)
                                ? center
                                : esp_rtl_sdr_tuner_frequency_hz(center);
     esp_rtl_sdr_fill_capture_meta(
@@ -4546,6 +4591,11 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         ret = run_sample_rate(handle, local.sample_rate_sps);
         if (ret != ESP_OK) {
             break;
+        }
+        // A start configuration can override the preferred rate. Use the rate
+        // just programmed, not the previous stream's rate, for E4000 IF.
+        if (handle->profile == RtlProfileId::E4000) {
+            handle->e4000_rate_sps = local.sample_rate_sps;
         }
         const bool cold_tuner_reinit =
             rtl_profile_needs_cold_tuner_reinit(handle->profile, freq);
@@ -6514,6 +6564,39 @@ esp_err_t esp_rtl_sdr_set_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t
         min_hz == 0 ? 0 : (min_hz < floor_hz ? floor_hz : min_hz);
     ESP_LOGI(TAG, "HF direct route min=%u Hz (0 = upconverter)",
              static_cast<unsigned>(handle->hf_direct_min_hz));
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_set_offset_tuning(esp_rtl_sdr_handle_t handle, bool enabled)
+{
+    if (!handle_ok(handle)) return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    HandleLock lk(handle);
+    if (!lk.ok()) return ESP_RTL_SDR_ERR_TIMEOUT;
+    const esp_err_t re = check_not_reentrant(handle);
+    if (re != ESP_OK) return re;
+    if (!(handle->device_caps & ESP_RTL_SDR_CAP_OFFSET_TUNING))
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    if (handle->state != ESP_RTL_SDR_STATE_IDLE) return ESP_RTL_SDR_ERR_BUSY;
+    handle->e4000_offset_requested = enabled;
+    return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_get_offset_tuning_state(esp_rtl_sdr_handle_t handle,
+                                            esp_rtl_sdr_offset_tuning_state_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    if (!handle_ok(handle)) return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    HandleLock lk(handle, kQueryLockTicks);
+    if (!lk.ok()) return ESP_RTL_SDR_ERR_TIMEOUT;
+    if (!(handle->device_caps & ESP_RTL_SDR_CAP_OFFSET_TUNING))
+        return ESP_RTL_SDR_ERR_UNSUPPORTED;
+    *out = {};
+    out->requested = handle->e4000_offset_requested;
+    if (handle->state == ESP_RTL_SDR_STATE_STREAMING) {
+        out->applied_offset_hz = handle->e4000_offset_applied_hz;
+        out->tuner_lo_hz = handle->last_lo_hz;
+        out->iq_center_hz = handle->frequency_hz;
+    }
     return ESP_OK;
 }
 

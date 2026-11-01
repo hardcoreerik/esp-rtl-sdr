@@ -98,6 +98,13 @@ ADC/baseband bits. [Document mirror](https://homepages.uni-regensburg.de/~erc244
 That document is marked confidential and copyright Realtek; it is not bundled
 or reproduced here. No foreign driver source was imported.
 
-This is a documentation-derived experimental composition, not a measured XTR
-sequence. First-party E4000 PC capture and physical I/Q reception remain required.
-Host tests verify ordered writes and early failure at each transfer, not RF operation.
+The original composition was documentation-derived. The 2026-10-31 first-party
+XTR reference now independently records B1=1B; physical FM/RDS and translated
+AM reception are documented in `validation/e4000-com39-2026-10-31/`.
+Those observations do not validate every ADC setting or every RF band.
+
+Opt-in hardware offset tuning and its first-party PC evidence are described in
+[the offset report](captures/e4000_xtr_2026-10-31/offset/README.md). This preserves
+the effective requested IQ center while moving tuner LO/DC away from it; no
+application offset mixer should be added. The correction candidate still needs
+firmware build and physical comparison. E4000 remains experimental.

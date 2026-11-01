@@ -924,6 +924,64 @@ static void test_e4000_pll_policy(void)
     EXPECT_TRUE(error <= 440u);
 }
 
+static void test_e4000_offset_policy(void)
+{
+    EXPECT_TRUE((rtl_profile_library_capabilities() & ESP_RTL_SDR_CAP_OFFSET_TUNING) != 0);
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_OFFSET_TUNING) != 0);
+    for (const auto profile : {RtlProfileId::BlogV3, RtlProfileId::BlogV4,
+                              RtlProfileId::NooelecSmartV5, RtlProfileId::Unknown}) {
+        EXPECT_TRUE((rtl_profile_device_capabilities(profile) & ESP_RTL_SDR_CAP_OFFSET_TUNING) == 0);
+    }
+    struct Case { uint32_t rate, offset, nco; uint8_t filter2, filter3; };
+    // First-party PC OFF/ON/OFF capture, 2026-10-31; no vendor source.
+    const Case cases[] = {
+        {240000, 204000, 0x3f8bf3, 0xff, 0x1f},
+        {250000, 212500, 0x3f871d, 0xff, 0x1f},
+        {256000, 217600, 0x3f8436, 0xff, 0x1f},
+        {900001, 765000, 0x3e4ccd, 0xfd, 0x1f},
+        {960000, 816000, 0x3e2fca, 0xfd, 0x1f},
+        {1024000, 870400, 0x3e10d7, 0xfd, 0x1f},
+        {1400000, 1190000, 0x3d5b06, 0xec, 0x1a},
+        {1800000, 1530000, 0x3c999a, 0xcb, 0x0f},
+        {1920000, 1632000, 0x3c5f93, 0xcb, 0x0d},
+        {2000000, 1700000, 0x3c38e4, 0xbb, 0x0c},
+        {2048000, 1740800, 0x3c21ae, 0xbb, 0x0c},
+        {2400000, 2040000, 0x3b7778, 0x9a, 0x07},
+        {2560000, 2176000, 0x3b2a1a, 0x9a, 0x05},
+        {2800000, 2380000, 0x3ab60c, 0x8a, 0x03},
+        {2880000, 2448000, 0x3a8f5d, 0x89, 0x03},
+        {3200000, 2720000, 0x39f4a0, 0x89, 0x00},
+    };
+    for (const auto &c : cases) {
+        e4000::OffsetPlan p{};
+        EXPECT_TRUE(e4000::make_offset_plan(96100000, c.rate, true, &p));
+        EXPECT_EQ_U(p.offset_hz, c.offset);
+        EXPECT_EQ_U(p.tuner_hz, 96100000u-c.offset);
+        EXPECT_EQ_U(p.nco_word, c.nco);
+        EXPECT_EQ_U(p.filter2, c.filter2);
+        EXPECT_EQ_U(p.filter3, c.filter3);
+    }
+    e4000::OffsetPlan p{};
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 400000, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 900000, true, &p));
+    EXPECT_TRUE(e4000::make_offset_plan(96100000, 2400000, false, &p));
+    EXPECT_EQ_U(p.offset_hz, 0);
+    EXPECT_EQ_U(p.tuner_hz, 96100000);
+    EXPECT_EQ_U(p.nco_word, 0);
+    // Preserve the RF range: requested correction is suspended at the lower
+    // edge instead of programming an out-of-range LO or moving the channel.
+    EXPECT_TRUE(e4000::make_offset_plan(64000000, 3200000, true, &p));
+    EXPECT_EQ_U(p.offset_hz, 0);
+    EXPECT_EQ_U(p.tuner_hz, 64000000);
+    EXPECT_TRUE(e4000::make_offset_plan(66720000, 3200000, true, &p));
+    EXPECT_EQ_U(p.offset_hz, 2720000);
+    EXPECT_TRUE(!e4000::make_offset_plan(63999999, 2400000, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(1700000001, 2400000, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 0, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 3200001, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 2400000, true, nullptr));
+}
+
 int main(void)
 {
     test_detection_matrix();
@@ -943,6 +1001,7 @@ int main(void)
     test_blog_v4l_identity();
     test_nooelec_captured_programming();
     test_e4000_pll_policy();
+    test_e4000_offset_policy();
     std::printf("RESULT profiles passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

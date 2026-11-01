@@ -1,0 +1,203 @@
+{
+  "device_serial": "82115932",
+  "antenna": "Outside 20m telescopic; Ham It Up Plus v2 separately powered, passthrough",
+  "reference_requested_hz": 96100000,
+  "iq_rates": [
+    960000,
+    2400000,
+    3200000
+  ],
+  "controls_rate_count": 16,
+  "reference_controls": 939,
+  "rate_controls": 2981,
+  "unpaired": 0,
+  "failed_attempt": "offset-rate-controls: stopped after correctly rejecting 400000 Hz; retained",
+  "enabled_registers": [
+    {
+      "stage": "offset_240000_1",
+      "r11": "ff",
+      "r12": "1f",
+      "nco": "3f8bf3"
+    },
+    {
+      "stage": "offset_250000_1",
+      "r11": "ff",
+      "r12": "1f",
+      "nco": "3f871d"
+    },
+    {
+      "stage": "offset_256000_1",
+      "r11": "ff",
+      "r12": "1f",
+      "nco": "3f8436"
+    },
+    {
+      "stage": "offset_900001_1",
+      "r11": "fd",
+      "r12": "1f",
+      "nco": "3e4ccd"
+    },
+    {
+      "stage": "offset_960000_1",
+      "r11": "fd",
+      "r12": "1f",
+      "nco": "3e2fca"
+    },
+    {
+      "stage": "offset_1024000_1",
+      "r11": "fd",
+      "r12": "1f",
+      "nco": "3e10d7"
+    },
+    {
+      "stage": "offset_1400000_1",
+      "r11": "ec",
+      "r12": "1a",
+      "nco": "3d5b06"
+    },
+    {
+      "stage": "offset_1800000_1",
+      "r11": "cb",
+      "r12": "0f",
+      "nco": "3c999a"
+    },
+    {
+      "stage": "offset_1920000_1",
+      "r11": "cb",
+      "r12": "0d",
+      "nco": "3c5f93"
+    },
+    {
+      "stage": "offset_2000000_1",
+      "r11": "bb",
+      "r12": "0c",
+      "nco": "3c38e4"
+    },
+    {
+      "stage": "offset_2048000_1",
+      "r11": "bb",
+      "r12": "0c",
+      "nco": "3c21ae"
+    },
+    {
+      "stage": "offset_2400000_1",
+      "r11": "9a",
+      "r12": "07",
+      "nco": "3b7778"
+    },
+    {
+      "stage": "offset_2560000_1",
+      "r11": "9a",
+      "r12": "05",
+      "nco": "3b2a1a"
+    },
+    {
+      "stage": "offset_2800000_1",
+      "r11": "8a",
+      "r12": "03",
+      "nco": "3ab60c"
+    },
+    {
+      "stage": "offset_2880000_1",
+      "r11": "89",
+      "r12": "03",
+      "nco": "3a8f5d"
+    },
+    {
+      "stage": "offset_3200000_1",
+      "r11": "89",
+      "r12": "00",
+      "nco": "39f4a0"
+    }
+  ],
+  "artifacts": {
+    "offset-reference\\analysis-luna.md": {
+      "bytes": 6689,
+      "sha256": "38bdf54b6ef2d83584dd468aeea273224369dec6d21c6b08cd7cd153ef829a24"
+    },
+    "offset-reference\\capture.log": {
+      "bytes": 49,
+      "sha256": "87114181eb9b463c6beb7ffdb2a1727a1f1c57722e9a3879a10dc5c1813465fb"
+    },
+    "offset-reference\\control-transfers.txt": {
+      "bytes": 65686,
+      "sha256": "723e9eef2e6c3acab9067d41c8832fd132588fd8498b04135f5f190adb5dba3b"
+    },
+    "offset-reference\\events.json": {
+      "bytes": 7142,
+      "sha256": "21e4873695b87ea88a325c88fe59bb495a6c778696a7c82753a0f24e1348e942"
+    },
+    "offset-reference\\iq-2400000-0-17.cu8": {
+      "bytes": 524288,
+      "sha256": "8d65c95f1f30fc7a5dc967903b5759de24cdd61436ed78936d3a11ae66086979"
+    },
+    "offset-reference\\iq-2400000-0-23.cu8": {
+      "bytes": 524288,
+      "sha256": "06c19a1a8e7919fc40eafd7fb84a4e2edb3303610e8ad63fe0cb499e4e6634b7"
+    },
+    "offset-reference\\iq-2400000-1-20.cu8": {
+      "bytes": 524288,
+      "sha256": "7e067a0ff0f72b17c5e1af52f095e085e1fd3ed2aadfccc68bb284328f2d26c7"
+    },
+    "offset-reference\\iq-3200000-0-28.cu8": {
+      "bytes": 524288,
+      "sha256": "a068a875a7039fad91bdab16211e4519b65a121867ab2393072e937ca9f42f89"
+    },
+    "offset-reference\\iq-3200000-0-34.cu8": {
+      "bytes": 524288,
+      "sha256": "eedd8df9c01af5252435cee992fa83d70e213e19689daa84edec228517eb0e98"
+    },
+    "offset-reference\\iq-3200000-1-31.cu8": {
+      "bytes": 524288,
+      "sha256": "168a0da924bca202b6b3d478b297ec9394810fcdec07c452753aeccc8985dc5b"
+    },
+    "offset-reference\\iq-960000-0-12.cu8": {
+      "bytes": 524288,
+      "sha256": "3610e64986793987fa57acc3dfe0c0d40b0fb01f0f5c1acae8480822aed9646c"
+    },
+    "offset-reference\\iq-960000-0-6.cu8": {
+      "bytes": 524288,
+      "sha256": "e390ad543dd7253532d4bf93a68c3e058bdfe8243d2625404d963cb84d209dd6"
+    },
+    "offset-reference\\iq-960000-1-9.cu8": {
+      "bytes": 524288,
+      "sha256": "3c121dce7c86df77e544a93b51180509beaf6c0165d5d0a6a7b76927e9cad534"
+    },
+    "offset-reference\\offset.pcapng": {
+      "bytes": 3961120,
+      "sha256": "ff50d2ee9681785dc93bfc3dcf4452facc848ca50ced278d9423d3cef447ec49"
+    },
+    "offset-rate-controls\\capture.log": {
+      "bytes": 49,
+      "sha256": "3921da9a50755a811cb90e35b5fb7056d60cfdc38b8c5989516f8063f932667c"
+    },
+    "offset-rate-controls\\events.json": {
+      "bytes": 4344,
+      "sha256": "be8a5be9afbb13b02faa3f0f5ce316ab6fa9264e026b321c55a725c305074365"
+    },
+    "offset-rate-controls\\offset.pcapng": {
+      "bytes": 4855944,
+      "sha256": "c0af485b18a53f851f39b075b2ed919981af665622581e8b3f3c34cd37fcb057"
+    },
+    "offset-valid-rate-controls\\capture.log": {
+      "bytes": 49,
+      "sha256": "b8cc4f71f0ea8db64325f446938e723a873e97e1460e30cfa34b4caa32e4df53"
+    },
+    "offset-valid-rate-controls\\control-transfers.txt": {
+      "bytes": 210318,
+      "sha256": "5d8389f1c2d5e7cb9301bbb105fabde7a31e109f916686e05c32a083592a4aa9"
+    },
+    "offset-valid-rate-controls\\events.json": {
+      "bytes": 20671,
+      "sha256": "0704707fdfe081cd8bff7c4548bbe4e1a17f37900dfb3b4c6a88c2099c710d76"
+    },
+    "offset-valid-rate-controls\\offset.pcapng": {
+      "bytes": 4897960,
+      "sha256": "8fcb13c808ec7dfa563be3891e2abb1af3e4f5e5ba61f4082c57c3c6808e4d60"
+    },
+    "offset-valid-rate-controls\\register-summary.json": {
+      "bytes": 9732,
+      "sha256": "d3a50b49fccddff840cce6c7f5d03f4d70454323bdb44a35cac085b946d16172"
+    }
+  }
+}

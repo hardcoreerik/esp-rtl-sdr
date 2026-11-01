@@ -895,7 +895,7 @@ static void test_e4000_pll_policy(void)
     EXPECT_TRUE(e4000::make_pll_plan(100000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.vco_in_nominal_range);
     EXPECT_EQ_U(p.rf_filter_code, 0);
-    EXPECT_EQ_U(p.bias_register, 0x0f);
+    EXPECT_EQ_U(p.bias_register, 0x03); // Captured PC VHF bias, upper bits reserved.
     EXPECT_TRUE(e4000::make_pll_plan(666000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.band == e4000::Band::Uhf);
     EXPECT_TRUE(!p.three_phase_mixing);
@@ -906,7 +906,7 @@ static void test_e4000_pll_policy(void)
     EXPECT_TRUE(e4000::make_pll_plan(1575000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.band == e4000::Band::L);
     EXPECT_EQ_U(p.rf_filter_code, 8);
-    EXPECT_EQ_U(p.bias_register, 0x0c);
+    EXPECT_EQ_U(p.bias_register, 0x00); // Captured PC L-band bias.
     EXPECT_TRUE(e4000::make_pll_plan(1700000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.valid);
     EXPECT_TRUE(!e4000::make_pll_plan(1700000001u, e4000::kReferenceXtalHz, &p));

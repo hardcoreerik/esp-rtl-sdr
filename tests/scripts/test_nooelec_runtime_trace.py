@@ -252,6 +252,8 @@ int main() {
         }
     }
     CHECK(tuner_writes == 9);
+    const RtlControlRecord captured_vhf_bias = {0x00c8, 0x0610, 0x40, 2, {0x78, 0x03}};
+    records_seen(&captured_vhf_bias, 1);
     // E4000 init must release the shared USB FIFO even without acquisition metadata.
     wire.clear();
     CHECK(run_init_table(&h) == ESP_OK);

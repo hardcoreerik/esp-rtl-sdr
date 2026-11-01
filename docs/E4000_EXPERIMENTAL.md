@@ -2,7 +2,14 @@
 
 ## Status
 
-**Experimental implementation — not hardware-verified on ESP32-P4.**
+**Experimental implementation — initial Tab5 FM/RDS reception verified;
+broader hardware acceptance remains pending.**
+
+The October 31 [COM39 report](validation/e4000-com39-2026-10-31/README.md)
+records exact source/image provenance, high-speed enumeration, 2.4 MS/s
+delivery, a one-minute observation, user-confirmed FM audio and decoded KZEL
+RDS with an approximately one-foot monopole. This does not establish
+calibrated sensitivity, all-band support or the inconclusive cabled-tone test.
 
 This profile currently targets the Nooelec SMArTee XTR v5 descriptor, the
 first-party captured Nooelec SMArt XTR v5 descriptor (serial 82115932), and
@@ -46,6 +53,13 @@ zero. Probe, registry and initialization/tuning use the same profile address.
 The previous unshifted `0x0064` value was incorrect. Host profile and actual
 initializer/tune trace regressions cover the corrected address; ESP hardware
 acceptance remains a separate gate.
+
+PC controls frames 1785 and 2801 also establish tuner bias register 78 values
+03 (VHF) and 00 (L-band). Datasheet section 1.11/table 4 assigns only bits
+[1:0]; upper bits are reserved. The planner previously produced 0f/0c and now
+preserves those reserved bits as zero. Profile and actual-tune trace tests
+cover this correction. It is not yet included in the b7cb81a FM/RDS hardware
+result and must not inherit that candidate's acceptance automatically.
 
 The October 31 P4 run accepted the corrected identity/address and initialized
 the tuner, but exposed a skipped USB FIFO release in the new-tuner startup

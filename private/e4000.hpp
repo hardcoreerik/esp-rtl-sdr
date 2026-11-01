@@ -32,7 +32,7 @@ struct PllPlan {
     uint8_t integer_divider = 0;
     uint16_t fractional_divider = 0;
     uint8_t rf_filter_code = 0;
-    uint8_t bias_register = 0x0f;
+    uint8_t bias_register = 0x03;
     bool three_phase_mixing = false;
     uint64_t vco_hz = 0;
     bool vco_in_nominal_range = false;
@@ -150,7 +150,8 @@ inline bool make_pll_plan(uint32_t frequency_hz, uint32_t xtal_hz, PllPlan *out)
     out->integer_divider = static_cast<uint8_t>(z);
     out->fractional_divider = x;
     out->rf_filter_code = rf_filter_code(band, frequency_hz);
-    out->bias_register = band == Band::L ? 0x0c : 0x0f;
+    // First-party XTR controls frames 1785/2801; only bits [1:0] are writable.
+    out->bias_register = band == Band::L ? 0x00 : 0x03;
     out->three_phase_mixing = three_phase;
     out->vco_hz = vco_hz;
     out->vco_in_nominal_range = found_nominal;

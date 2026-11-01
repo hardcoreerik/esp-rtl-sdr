@@ -4,7 +4,8 @@
 
 **Experimental implementation — not hardware-verified on ESP32-P4.**
 
-This profile currently targets the Nooelec SMArTee XTR v5 descriptor and
+This profile currently targets the Nooelec SMArTee XTR v5 descriptor, the
+first-party captured Nooelec SMArt XTR v5 descriptor (serial 82115932), and
 ambiguous devices using the shared `0bda:2838` identity only when an E4000 ID
 probe succeeds. Other USB IDs are not accepted yet. It is not a claim that
 every E4000-branded receiver has identical RF routing or clocking.
@@ -12,6 +13,8 @@ every E4000-branded receiver has identical RF routing or clocking.
 ## What is implemented
 
 - Exact Nooelec / SMArTee XTR v5 descriptor recognition.
+- Exact Nooelec / SMArt XTR v5 recognition from the October 31 PC campaign;
+  see [the capture report](captures/e4000_xtr_2026-10-31/README.md).
 - E4000 ID probing on the existing shared `0bda:2838` USB identity when the
   product descriptor is ambiguous.
 - A separate E4000 register-control path, without R820T2/R828D init or tune

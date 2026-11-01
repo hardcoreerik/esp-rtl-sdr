@@ -63,6 +63,20 @@ static void test_detection_matrix(void)
                                                        "SMArTee XTR v5"),
                 (unsigned)RtlProfileId::E4000);
 
+    /* First-party XTR serial 82115932 reports SMArt, not SMArTee. */
+    EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "Nooelec",
+                                                       "SMArt XTR v5"),
+                (unsigned)RtlProfileId::E4000);
+    EXPECT_EQ_U((unsigned)rtl_profile_select(0x0BDA, 0x2838, "Nooelec",
+                                             "SMArt XTR v5", {}),
+                (unsigned)RtlProfileId::E4000);
+    EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x1234, 0x2838, "Nooelec",
+                                                       "SMArt XTR v5"),
+                (unsigned)RtlProfileId::Unknown);
+    EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "Other",
+                                                       "SMArt XTR v5"),
+                (unsigned)RtlProfileId::Unknown);
+
     /* Never treat bare / unknown 0bda:2838 as V4. */
     EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "RTL2832U", "Generic"),
                 (unsigned)RtlProfileId::Unknown);

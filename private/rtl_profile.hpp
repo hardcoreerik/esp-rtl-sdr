@@ -88,7 +88,8 @@ inline RtlProfileId rtl_profile_from_descriptors(uint16_t vid, uint16_t pid,
         return RtlProfileId::NooelecSmartV5;
     }
     if (rtl_profile_text_is(manufacturer, "Nooelec") &&
-        rtl_profile_text_contains(product, "SMArTee XTR v5")) {
+        (rtl_profile_text_contains(product, "SMArTee XTR v5") ||
+         rtl_profile_text_is(product, "SMArt XTR v5"))) {
         return RtlProfileId::E4000;
     }
     return RtlProfileId::Unknown;

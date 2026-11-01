@@ -1,0 +1,11 @@
+{
+  "sdk_source": "C:\\Espressif\\frameworks\\esp-idf-v5.5.4\\components\\hal\\usb_dwc_hal.c",
+  "source_sha256": "024a1eeb7e4331490fa1f27d0bfc1f826d1c75761dc55cb091397dbf43920998",
+  "upstream_commit": "63b468539f86f759ae1075ed277b2da65eccbdfe",
+  "change": "remove only the early CHHLTD error assertion",
+  "limits": "Host register/interrupt mocks; no physical timing or USB recovery proof",
+  "host_checks": 202,
+  "stock_failure_reproduced": true,
+  "patched_checks_passed": true,
+  "hardware_verified": false
+}

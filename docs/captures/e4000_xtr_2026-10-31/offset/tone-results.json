@@ -1,0 +1,356 @@
+{
+  "setup": "tinySA RF -> 30 dB attenuator -> XTR; PC USB; nominal generator -40 dBm at 100.1 MHz; RF center 100 MHz; manual gain 19 dB; RTL AGC off",
+  "controls": 981,
+  "unpaired": 0,
+  "failed_controls": 0,
+  "summary": [
+    {
+      "rate": 960000,
+      "center_reduction_db": 18.57249928422489,
+      "tone_change_db": -0.9204882458386976,
+      "tone_offset_hz": 99990.234375
+    },
+    {
+      "rate": 2400000,
+      "center_reduction_db": 19.129593928423006,
+      "tone_change_db": -1.1620732641864713,
+      "tone_offset_hz": 99975.5859375
+    },
+    {
+      "rate": 3200000,
+      "center_reduction_db": 15.491815410475326,
+      "tone_change_db": -1.5492174053282142,
+      "tone_offset_hz": 99999.99999999999
+    }
+  ],
+  "measurements": [
+    {
+      "stage": "off",
+      "sample_rate": 960000,
+      "offset_enabled": 0,
+      "index": 0,
+      "tone_hz": 101660.15625,
+      "tone_dbfs": -81.97412293543996,
+      "clip_fraction": 0.0,
+      "artifact": "023-off.cu8",
+      "sha256": "f621af5e0523f79e4be78b01ab5b115cbf6881c921c194106421ac2ea610286b",
+      "center_peak_dbfs": -57.39263798430024,
+      "near_floor_dbfs": -69.59151867533971
+    },
+    {
+      "stage": "on",
+      "sample_rate": 960000,
+      "offset_enabled": 0,
+      "index": 0,
+      "tone_hz": 99990.234375,
+      "tone_dbfs": -22.814418037277512,
+      "clip_fraction": 0.0,
+      "artifact": "025-on.cu8",
+      "sha256": "e537117d6fac5e325bf586966e1b5561ef8e30cd91fde8fb35a8cff1eab5a477",
+      "center_peak_dbfs": -57.46557991957805,
+      "near_floor_dbfs": -69.59520933002861
+    },
+    {
+      "stage": "off",
+      "sample_rate": 960000,
+      "offset_enabled": 1,
+      "index": 1,
+      "tone_hz": 100839.84375,
+      "tone_dbfs": -84.62967896649204,
+      "clip_fraction": 0.0,
+      "artifact": "029-off.cu8",
+      "sha256": "5cfcb80509c5d63e907357d8979b3f25a5edc37ace05998c508a260767884ede",
+      "center_peak_dbfs": -75.971860785637,
+      "near_floor_dbfs": -76.40466618794905
+    },
+    {
+      "stage": "on",
+      "sample_rate": 960000,
+      "offset_enabled": 1,
+      "index": 1,
+      "tone_hz": 99990.234375,
+      "tone_dbfs": -23.736503485597392,
+      "clip_fraction": 0.0,
+      "artifact": "031-on.cu8",
+      "sha256": "7e40ca3ca41ef0d5fee3b9d64eff00b92adf8baaa556206251913e085511bd6e",
+      "center_peak_dbfs": -76.1097650115869,
+      "near_floor_dbfs": -77.06509732520979
+    },
+    {
+      "stage": "off",
+      "sample_rate": 960000,
+      "offset_enabled": 0,
+      "index": 2,
+      "tone_hz": 100693.359375,
+      "tone_dbfs": -82.65718220566225,
+      "clip_fraction": 0.0,
+      "artifact": "035-off.cu8",
+      "sha256": "a2e998116bd8aeae4ac2cf5bb67338e9fba9041f37de832d051344395576ce63",
+      "center_peak_dbfs": -57.406085018523996,
+      "near_floor_dbfs": -69.5740587438369
+    },
+    {
+      "stage": "on",
+      "sample_rate": 960000,
+      "offset_enabled": 0,
+      "index": 2,
+      "tone_hz": 99990.234375,
+      "tone_dbfs": -22.817612442239877,
+      "clip_fraction": 0.0,
+      "artifact": "037-on.cu8",
+      "sha256": "040f8fadbd8be2b18da27fc9d11bc402b4ae5ee159434dd8e6b90cd648534df6",
+      "center_peak_dbfs": -57.28740098503767,
+      "near_floor_dbfs": -69.77804734257903
+    },
+    {
+      "stage": "off",
+      "sample_rate": 2400000,
+      "offset_enabled": 0,
+      "index": 0,
+      "tone_hz": 97814.94140625,
+      "tone_dbfs": -78.87725669118726,
+      "clip_fraction": 0.0,
+      "artifact": "043-off.cu8",
+      "sha256": "4080ad0558a891c30e11ce3f7693818de68debc61c5558f15b3afc81963c877f",
+      "center_peak_dbfs": -55.90946302755018,
+      "near_floor_dbfs": -66.06953034721984
+    },
+    {
+      "stage": "on",
+      "sample_rate": 2400000,
+      "offset_enabled": 0,
+      "index": 0,
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -23.239895528730905,
+      "clip_fraction": 0.0,
+      "artifact": "045-on.cu8",
+      "sha256": "80e465247d750f62f135adb88123c945ac3ebb23b5152ed844da677f2dccf838",
+      "center_peak_dbfs": -55.474381728537765,
+      "near_floor_dbfs": -65.79382469243815
+    },
+    {
+      "stage": "off",
+      "sample_rate": 2400000,
+      "offset_enabled": 1,
+      "index": 1,
+      "tone_hz": 102026.3671875,
+      "tone_dbfs": -81.31282693866113,
+      "clip_fraction": 0.0,
+      "artifact": "049-off.cu8",
+      "sha256": "ece60e7b0927cdcc335acde55f5dea56da0c60b532fe5e1fcc3cf57c82a2de40",
+      "center_peak_dbfs": -74.98405514580429,
+      "near_floor_dbfs": -75.24346800778135
+    },
+    {
+      "stage": "on",
+      "sample_rate": 2400000,
+      "offset_enabled": 1,
+      "index": 1,
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -24.345055660404597,
+      "clip_fraction": 0.0,
+      "artifact": "051-on.cu8",
+      "sha256": "2f605c4f25d32eeb3b2af3fac7a23f9a97a8b0725e23ba25d65a45212cd38b2b",
+      "center_peak_dbfs": -72.99937869866278,
+      "near_floor_dbfs": -75.0413571115872
+    },
+    {
+      "stage": "off",
+      "sample_rate": 2400000,
+      "offset_enabled": 0,
+      "index": 2,
+      "tone_hz": 100341.796875,
+      "tone_dbfs": -78.05337554126801,
+      "clip_fraction": 0.0,
+      "artifact": "055-off.cu8",
+      "sha256": "5e5a704392e4ac015b6e413c3299f52982c8d053fc44a7e9ad3c6b4780bb6826",
+      "center_peak_dbfs": -55.799459407212396,
+      "near_floor_dbfs": -65.9201432011737
+    },
+    {
+      "stage": "on",
+      "sample_rate": 2400000,
+      "offset_enabled": 0,
+      "index": 2,
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -23.126069263705347,
+      "clip_fraction": 0.0,
+      "artifact": "057-on.cu8",
+      "sha256": "cdd0934577294ba82e05cbfc1229c4c0baa78b91c33784128fe5322824db8f65",
+      "center_peak_dbfs": -54.9652722091336,
+      "near_floor_dbfs": -65.56705218498064
+    },
+    {
+      "stage": "off",
+      "sample_rate": 3200000,
+      "offset_enabled": 0,
+      "index": 0,
+      "tone_hz": 99218.74999999999,
+      "tone_dbfs": -84.43753013424029,
+      "clip_fraction": 0.0,
+      "artifact": "063-off.cu8",
+      "sha256": "714c30de02a1632e9c29f74283448eec745eb71dca1aab0bd1983092f7c7bde8",
+      "center_peak_dbfs": -66.88239151069229,
+      "near_floor_dbfs": -75.4477348499218
+    },
+    {
+      "stage": "on",
+      "sample_rate": 3200000,
+      "offset_enabled": 0,
+      "index": 0,
+      "tone_hz": 99999.99999999999,
+      "tone_dbfs": -34.38729766859644,
+      "clip_fraction": 0.0,
+      "artifact": "065-on.cu8",
+      "sha256": "26ce589937b917d9a622e8e67479256319e382faf4d14a0ab52f1c15a8c3638d",
+      "center_peak_dbfs": -66.62222500772076,
+      "near_floor_dbfs": -75.09803667682473
+    },
+    {
+      "stage": "off",
+      "sample_rate": 3200000,
+      "offset_enabled": 1,
+      "index": 1,
+      "tone_hz": 99804.68749999999,
+      "tone_dbfs": -89.19088787624652,
+      "clip_fraction": 0.0,
+      "artifact": "069-off.cu8",
+      "sha256": "7504b08c857c67c01a6f3f61d518801d163093b10656904b2229b224354e2fe4",
+      "center_peak_dbfs": -82.29637948475421,
+      "near_floor_dbfs": -82.5293652207819
+    },
+    {
+      "stage": "on",
+      "sample_rate": 3200000,
+      "offset_enabled": 1,
+      "index": 1,
+      "tone_hz": 99999.99999999999,
+      "tone_dbfs": -35.958945642214715,
+      "clip_fraction": 0.0,
+      "artifact": "071-on.cu8",
+      "sha256": "6f3472ee17a55c0a59b24818bc6e7431dd71347d566f02ca11754f7e482de7f4",
+      "center_peak_dbfs": -80.43154257837313,
+      "near_floor_dbfs": -80.93668309179826
+    },
+    {
+      "stage": "off",
+      "sample_rate": 3200000,
+      "offset_enabled": 0,
+      "index": 2,
+      "tone_hz": 101562.49999999999,
+      "tone_dbfs": -86.17494813734338,
+      "clip_fraction": 0.0,
+      "artifact": "075-off.cu8",
+      "sha256": "bfdc13fe2b6430176fce903f13eaa41b1f906948be5c032ab5456a8e4f7b533b",
+      "center_peak_dbfs": -66.72673663786549,
+      "near_floor_dbfs": -75.06828724905375
+    },
+    {
+      "stage": "on",
+      "sample_rate": 3200000,
+      "offset_enabled": 0,
+      "index": 2,
+      "tone_hz": 99999.99999999999,
+      "tone_dbfs": -34.43215880517656,
+      "clip_fraction": 0.0,
+      "artifact": "077-on.cu8",
+      "sha256": "e2754b3ace83dadfa37f0e4a5737b03ff15be1d912ffb848227969ffd57df241",
+      "center_peak_dbfs": -66.18959800244878,
+      "near_floor_dbfs": -75.09602688430189
+    }
+  ],
+  "artifacts": {
+    "023-off.cu8": {
+      "bytes": 524288,
+      "sha256": "f621af5e0523f79e4be78b01ab5b115cbf6881c921c194106421ac2ea610286b"
+    },
+    "025-on.cu8": {
+      "bytes": 524288,
+      "sha256": "e537117d6fac5e325bf586966e1b5561ef8e30cd91fde8fb35a8cff1eab5a477"
+    },
+    "029-off.cu8": {
+      "bytes": 524288,
+      "sha256": "5cfcb80509c5d63e907357d8979b3f25a5edc37ace05998c508a260767884ede"
+    },
+    "031-on.cu8": {
+      "bytes": 524288,
+      "sha256": "7e40ca3ca41ef0d5fee3b9d64eff00b92adf8baaa556206251913e085511bd6e"
+    },
+    "035-off.cu8": {
+      "bytes": 524288,
+      "sha256": "a2e998116bd8aeae4ac2cf5bb67338e9fba9041f37de832d051344395576ce63"
+    },
+    "037-on.cu8": {
+      "bytes": 524288,
+      "sha256": "040f8fadbd8be2b18da27fc9d11bc402b4ae5ee159434dd8e6b90cd648534df6"
+    },
+    "043-off.cu8": {
+      "bytes": 524288,
+      "sha256": "4080ad0558a891c30e11ce3f7693818de68debc61c5558f15b3afc81963c877f"
+    },
+    "045-on.cu8": {
+      "bytes": 524288,
+      "sha256": "80e465247d750f62f135adb88123c945ac3ebb23b5152ed844da677f2dccf838"
+    },
+    "049-off.cu8": {
+      "bytes": 524288,
+      "sha256": "ece60e7b0927cdcc335acde55f5dea56da0c60b532fe5e1fcc3cf57c82a2de40"
+    },
+    "051-on.cu8": {
+      "bytes": 524288,
+      "sha256": "2f605c4f25d32eeb3b2af3fac7a23f9a97a8b0725e23ba25d65a45212cd38b2b"
+    },
+    "055-off.cu8": {
+      "bytes": 524288,
+      "sha256": "5e5a704392e4ac015b6e413c3299f52982c8d053fc44a7e9ad3c6b4780bb6826"
+    },
+    "057-on.cu8": {
+      "bytes": 524288,
+      "sha256": "cdd0934577294ba82e05cbfc1229c4c0baa78b91c33784128fe5322824db8f65"
+    },
+    "063-off.cu8": {
+      "bytes": 524288,
+      "sha256": "714c30de02a1632e9c29f74283448eec745eb71dca1aab0bd1983092f7c7bde8"
+    },
+    "065-on.cu8": {
+      "bytes": 524288,
+      "sha256": "26ce589937b917d9a622e8e67479256319e382faf4d14a0ab52f1c15a8c3638d"
+    },
+    "069-off.cu8": {
+      "bytes": 524288,
+      "sha256": "7504b08c857c67c01a6f3f61d518801d163093b10656904b2229b224354e2fe4"
+    },
+    "071-on.cu8": {
+      "bytes": 524288,
+      "sha256": "6f3472ee17a55c0a59b24818bc6e7431dd71347d566f02ca11754f7e482de7f4"
+    },
+    "075-off.cu8": {
+      "bytes": 524288,
+      "sha256": "bfdc13fe2b6430176fce903f13eaa41b1f906948be5c032ab5456a8e4f7b533b"
+    },
+    "077-on.cu8": {
+      "bytes": 524288,
+      "sha256": "e2754b3ace83dadfa37f0e4a5737b03ff15be1d912ffb848227969ffd57df241"
+    },
+    "analysis.json": {
+      "bytes": 7256,
+      "sha256": "01eeae13d448b7bddc7f7abb3b3dc7baf07631db14ecccc5df117ad5d92c86ed"
+    },
+    "control-transfers.txt": {
+      "bytes": 68838,
+      "sha256": "0837e2900bf42035f22ecf14b469a37486c74b486fd4ec06425ac4d4fe326c10"
+    },
+    "controls.pcapng": {
+      "bytes": 5190680,
+      "sha256": "c358cdee31a65ca4989e357c234c71e6b10f0afdc69cb0f9b9c34dadb8e46b4c"
+    },
+    "events.json": {
+      "bytes": 16981,
+      "sha256": "55a1ce85bcfa60715117fefed0365286233741ad976a92f09a8dff991227d9e5"
+    },
+    "usb-capture.log": {
+      "bytes": 49,
+      "sha256": "a7f2ab24154dd29ec5122e0e2915472cc8cee401948e19d4124f5875be034c16"
+    }
+  }
+}

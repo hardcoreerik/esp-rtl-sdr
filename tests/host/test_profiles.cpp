@@ -63,6 +63,20 @@ static void test_detection_matrix(void)
                                                        "SMArTee XTR v5"),
                 (unsigned)RtlProfileId::E4000);
 
+    /* First-party XTR serial 82115932 reports SMArt, not SMArTee. */
+    EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "Nooelec",
+                                                       "SMArt XTR v5"),
+                (unsigned)RtlProfileId::E4000);
+    EXPECT_EQ_U((unsigned)rtl_profile_select(0x0BDA, 0x2838, "Nooelec",
+                                             "SMArt XTR v5", {}),
+                (unsigned)RtlProfileId::E4000);
+    EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x1234, 0x2838, "Nooelec",
+                                                       "SMArt XTR v5"),
+                (unsigned)RtlProfileId::Unknown);
+    EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "Other",
+                                                       "SMArt XTR v5"),
+                (unsigned)RtlProfileId::Unknown);
+
     /* Never treat bare / unknown 0bda:2838 as V4. */
     EXPECT_EQ_U((unsigned)rtl_profile_from_descriptors(0x0BDA, 0x2838, "RTL2832U", "Generic"),
                 (unsigned)RtlProfileId::Unknown);
@@ -116,7 +130,8 @@ static void test_tuner_isolation(void)
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::BlogV4), 0x0074);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::BlogV3), 0x0034);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::NooelecSmartV5), 0x0034);
-    EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::E4000), 0x0064);
+    // First-party PC ID read, controls-verified frame 705: wValue=00c8, ID=40.
+    EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::E4000), 0x00c8);
     EXPECT_EQ_U(rtl_profile_tuner_i2c_value(RtlProfileId::Unknown), 0);
     EXPECT_TRUE(!rtl_profile_allows_init_record(RtlProfileId::E4000, kRtlInitTransfers[0]));
 
@@ -216,7 +231,7 @@ static void test_frequency_policy(void)
     EXPECT_EQ_U(rtl_profile_tuner_frequency_hz(RtlProfileId::E4000, 433920000u), 433920000u);
     EXPECT_TRUE(rtl_profile_supports_stream(RtlProfileId::E4000));
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_STREAM) != 0);
-    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_GAIN) == 0);
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_GAIN) != 0);
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
     EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::Unknown, 100000000u));
 
@@ -880,7 +895,7 @@ static void test_e4000_pll_policy(void)
     EXPECT_TRUE(e4000::make_pll_plan(100000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.vco_in_nominal_range);
     EXPECT_EQ_U(p.rf_filter_code, 0);
-    EXPECT_EQ_U(p.bias_register, 0x0f);
+    EXPECT_EQ_U(p.bias_register, 0x03); // Captured PC VHF bias, upper bits reserved.
     EXPECT_TRUE(e4000::make_pll_plan(666000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.band == e4000::Band::Uhf);
     EXPECT_TRUE(!p.three_phase_mixing);
@@ -891,7 +906,7 @@ static void test_e4000_pll_policy(void)
     EXPECT_TRUE(e4000::make_pll_plan(1575000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.band == e4000::Band::L);
     EXPECT_EQ_U(p.rf_filter_code, 8);
-    EXPECT_EQ_U(p.bias_register, 0x0c);
+    EXPECT_EQ_U(p.bias_register, 0x00); // Captured PC L-band bias.
     EXPECT_TRUE(e4000::make_pll_plan(1700000000u, e4000::kReferenceXtalHz, &p));
     EXPECT_TRUE(p.valid);
     EXPECT_TRUE(!e4000::make_pll_plan(1700000001u, e4000::kReferenceXtalHz, &p));
@@ -907,6 +922,81 @@ static void test_e4000_pll_policy(void)
     const uint64_t target = static_cast<uint64_t>(p.vco_hz);
     const uint64_t error = reconstructed > target ? reconstructed - target : target - reconstructed;
     EXPECT_TRUE(error <= 440u);
+}
+
+static void test_e4000_offset_policy(void)
+{
+    EXPECT_TRUE((rtl_profile_library_capabilities() & ESP_RTL_SDR_CAP_OFFSET_TUNING) != 0);
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_OFFSET_TUNING) != 0);
+    for (const auto profile : {RtlProfileId::BlogV3, RtlProfileId::BlogV4,
+                              RtlProfileId::NooelecSmartV5, RtlProfileId::Unknown}) {
+        EXPECT_TRUE((rtl_profile_device_capabilities(profile) & ESP_RTL_SDR_CAP_OFFSET_TUNING) == 0);
+    }
+    struct Case { uint32_t rate, offset, nco; uint8_t filter2, filter3; };
+    // First-party PC OFF/ON/OFF capture, 2026-10-31; no vendor source.
+    const Case cases[] = {
+        {240000, 204000, 0x3f8bf3, 0xff, 0x1f},
+        {250000, 212500, 0x3f871d, 0xff, 0x1f},
+        {256000, 217600, 0x3f8436, 0xff, 0x1f},
+        {900001, 765000, 0x3e4ccd, 0xfd, 0x1f},
+        {960000, 816000, 0x3e2fca, 0xfd, 0x1f},
+        {1024000, 870400, 0x3e10d7, 0xfd, 0x1f},
+        {1400000, 1190000, 0x3d5b06, 0xec, 0x1a},
+        {1800000, 1530000, 0x3c999a, 0xcb, 0x0f},
+        {1920000, 1632000, 0x3c5f93, 0xcb, 0x0d},
+        {2000000, 1700000, 0x3c38e4, 0xbb, 0x0c},
+        {2048000, 1740800, 0x3c21ae, 0xbb, 0x0c},
+        {2400000, 2040000, 0x3b7778, 0x9a, 0x07},
+        {2560000, 2176000, 0x3b2a1a, 0x9a, 0x05},
+        {2800000, 2380000, 0x3ab60c, 0x8a, 0x03},
+        {2880000, 2448000, 0x3a8f5d, 0x89, 0x03},
+        {3200000, 2720000, 0x39f4a0, 0x89, 0x00},
+    };
+    for (const auto &c : cases) {
+        e4000::OffsetPlan p{};
+        EXPECT_TRUE(e4000::make_offset_plan(96100000, c.rate, true, &p));
+        EXPECT_EQ_U(p.offset_hz, c.offset);
+        EXPECT_EQ_U(p.tuner_hz, 96100000u-c.offset);
+        EXPECT_EQ_U(p.nco_word, c.nco);
+        EXPECT_EQ_U(p.filter2, c.filter2);
+        EXPECT_EQ_U(p.filter3, c.filter3);
+    }
+    e4000::OffsetPlan p{};
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 400000, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 900000, true, &p));
+    EXPECT_TRUE(e4000::make_offset_plan(96100000, 2400000, false, &p));
+    EXPECT_EQ_U(p.offset_hz, 0);
+    EXPECT_EQ_U(p.tuner_hz, 96100000);
+    EXPECT_EQ_U(p.nco_word, 0);
+    // Preserve the RF range: requested correction is suspended at the lower
+    // edge instead of programming an out-of-range LO or moving the channel.
+    EXPECT_TRUE(e4000::make_offset_plan(64000000, 3200000, true, &p));
+    EXPECT_EQ_U(p.offset_hz, 0);
+    EXPECT_EQ_U(p.tuner_hz, 64000000);
+    EXPECT_TRUE(e4000::make_offset_plan(66720000, 3200000, true, &p));
+    EXPECT_EQ_U(p.offset_hz, 2720000);
+    EXPECT_TRUE(!e4000::make_offset_plan(63999999, 2400000, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(1700000001, 2400000, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 0, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 3200001, true, &p));
+    EXPECT_TRUE(!e4000::make_offset_plan(96100000, 2400000, true, nullptr));
+}
+
+static void test_e4000_gain_policy()
+{
+    const int gains[] = {-10,15,40,65,90,115,140,165,190,215,240,290,340,420};
+    const uint8_t lna[] = {0,1,4,5,6,7,8,9,10,11,12,13,14,14};
+    EXPECT_EQ_U(e4000::kGainStepCount, 14);
+    for (size_t i=0;i<14;++i) {
+        const auto &step=e4000::kGainSteps[e4000::nearest_gain_index(gains[i])];
+        EXPECT_TRUE(step.tenth_db==gains[i]);
+        EXPECT_EQ_U(step.lna, lna[i]);
+        EXPECT_EQ_U(step.mixer, i==13 ? 1 : 0);
+    }
+    EXPECT_EQ_U(e4000::nearest_gain_index(-999),0);
+    EXPECT_EQ_U(e4000::nearest_gain_index(999),13);
+    EXPECT_EQ_U(e4000::nearest_gain_index(2),0);
+    EXPECT_EQ_U(e4000::nearest_gain_index(3),1);
 }
 
 int main(void)
@@ -928,6 +1018,8 @@ int main(void)
     test_blog_v4l_identity();
     test_nooelec_captured_programming();
     test_e4000_pll_policy();
+    test_e4000_offset_policy();
+    test_e4000_gain_policy();
     std::printf("RESULT profiles passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

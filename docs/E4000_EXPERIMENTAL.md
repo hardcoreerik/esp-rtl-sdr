@@ -47,6 +47,13 @@ The previous unshifted `0x0064` value was incorrect. Host profile and actual
 initializer/tune trace regressions cover the corrected address; ESP hardware
 acceptance remains a separate gate.
 
+The October 31 P4 run accepted the corrected identity/address and initialized
+the tuner, but exposed a skipped USB FIFO release in the new-tuner startup
+path. PC delivery trace frames 1887/1889 establish the shared 2148 reset/release
+pair. The new-tuner init path now completes that pair without requiring
+acquisition metadata. Actual-function tests reject a missing release and
+inject failure into both transfers. RF streaming acceptance is still pending.
+
 1. Confirm `rtl_test -t` reports E4000 on the XTR v5 and save the full output.
 2. Confirm the USB descriptors with `rtl_eeprom`; do not write to the EEPROM.
 3. On ESP32-P4, capture cold boot, first tune, retunes across VHF/UHF/L-band,

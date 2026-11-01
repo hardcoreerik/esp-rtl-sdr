@@ -1266,9 +1266,13 @@ static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
             }
         }
         if (driver->initialize != nullptr) {
-            return driver->initialize(h);
+            const esp_err_t e = driver->initialize(h);
+            if (e != ESP_OK) return e;
         }
-        return ESP_OK;
+        // The shared prefix holds the USB FIFO in reset. Release it even when
+        // acquisition metadata is disabled; E4000 PC capture frames 1887/1889.
+        constexpr size_t count = std::size(kRtlInitTransfers);
+        return run_records(h, &kRtlInitTransfers[count - 2], 2);
     }
     size_t skipped = 0;
     for (size_t i = 0; i < std::size(kRtlInitTransfers); ++i) {

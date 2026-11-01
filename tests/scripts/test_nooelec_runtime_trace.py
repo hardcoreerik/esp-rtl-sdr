@@ -14,13 +14,14 @@ ROOT = Path(__file__).resolve().parents[2]
 FUNCTIONS = """apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
 map_tuner_record_for_profile run_record run_records run_profile_demod_if_restore
 run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_nooelec_gain_restore run_v3_leave_direct
-run_e4000_initialize_tuner run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
+run_e4000_initialize_tuner run_init_table e4000_sample_rate_record_allowed rtl_tuner_driver_for_profile run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
 apply_tuner_agc_auto_records apply_rtl_agc_records run_bandwidth_program""".split()
 
 
 def extract(source, name):
     # A definition has no ';' in its signature; bodies end at a column-zero brace.
-    pattern = rf"^static [^;{{}}]*?\b{re.escape(name)}\([^;{{}}]*\)\s*\{{"
+    prefix = r"const RtlTunerDriver \*" if name == "rtl_tuner_driver_for_profile" else "static "
+    pattern = rf"^{prefix}[^;{{}}]*?\b{re.escape(name)}\([^;{{}}]*\)\s*\{{"
     matches = list(re.finditer(pattern, source, re.MULTILINE))
     if len(matches) != 1:
         raise RuntimeError(f"Expected one definition of {name}, found {len(matches)}")
@@ -74,9 +75,7 @@ struct esp_rtl_sdr_handle {
     esp_rtl_sdr_gain_mode_t gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     int gain_tenth_db = 0;
 };
-// This trace harness is scoped to legacy Nooelec behavior. Keep the new tuner
-// registry empty here so the captured Nooelec path remains the subject tested.
-const RtlTunerDriver *rtl_tuner_driver_for_profile(RtlProfileId) { return nullptr; }
+constexpr size_t kDemodBringupRecordCount = 86;
 static std::vector<RtlControlRecord> wire;
 static size_t fail_transfer = 0;
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
@@ -253,6 +252,21 @@ int main() {
         }
     }
     CHECK(tuner_writes == 9);
+    // E4000 init must release the shared USB FIFO even without acquisition metadata.
+    wire.clear();
+    CHECK(run_init_table(&h) == ESP_OK);
+    CHECK(wire.size() >= 2);
+    CHECK(wire[wire.size()-2].value == 0x2148);
+    CHECK(wire[wire.size()-2].data[0] == 0x10);
+    CHECK(wire.back().value == 0x2148 && wire.back().index == 0x0110);
+    CHECK(wire.back().length == 2 && wire.back().data[0] == 0 && wire.back().data[1] == 0);
+    const size_t init_count = wire.size();
+    for (size_t i = init_count-1; i <= init_count; ++i) {
+        wire.clear(); fail_transfer = i;
+        CHECK(run_init_table(&h) == ESP_FAIL);
+        CHECK(wire.size() == i);
+    }
+    fail_transfer = 0;
     std::printf("RESULT nooelec_runtime_trace passed=%u failed=0\n", checks);
 }
 '''

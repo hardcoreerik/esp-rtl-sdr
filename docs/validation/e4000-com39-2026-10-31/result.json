@@ -1,0 +1,48 @@
+{
+  "driver_revision": "b7cb81a491ce69acb33a66234e1bdc3a85dc36c4",
+  "initial_acceptance": {
+    "USB_identity": true,
+    "stream_start": true,
+    "FM_audio_user_confirmed": true,
+    "RDS_user_confirmed": true,
+    "stereo_lock_serial": true,
+    "RDS_carrier_serial": true,
+    "station_on_screen": "KZEL",
+    "driver_frequency_hz": 96118000,
+    "antenna": "approximately one-foot monopole, intended band unspecified"
+  },
+  "not_accepted": [
+    "controlled source response",
+    "calibrated gain/sensitivity",
+    "universal E4000 support",
+    "HF direct sampling",
+    "tuner gain/AGC/bandwidth/bias API support"
+  ],
+  "captures": [
+    {
+      "capture": "off-cold",
+      "bytes": 4800000,
+      "sha256": "4755748a967d59beb1ff7840cbc615e68b6ce871231d12ae402254285700b6c0",
+      "driver_requested_revision": "b7cb81a491ce69acb33a66234e1bdc3a85dc36c4",
+      "source_nominal_dbm": null,
+      "controlled_tone_accepted": false
+    },
+    {
+      "capture": "on-m50",
+      "bytes": 4800000,
+      "sha256": "a5a012659aab23b243260a52039441c961644ae4a1868791da637831e80fbbd0",
+      "driver_requested_revision": "b7cb81a491ce69acb33a66234e1bdc3a85dc36c4",
+      "source_nominal_dbm": -50,
+      "controlled_tone_accepted": false
+    },
+    {
+      "capture": "on-m20",
+      "bytes": 4800000,
+      "sha256": "283e37049ee62b922e836d40aa0a005cda32e958e00a9d42da5dac1c915931cf",
+      "driver_requested_revision": "b7cb81a491ce69acb33a66234e1bdc3a85dc36c4",
+      "source_nominal_dbm": -20,
+      "controlled_tone_accepted": false
+    }
+  ],
+  "screenshot_sha256": "1a602d6af8045da76169d2d3c83ff85c38e0a5fe4732b3f074b97954334940a6"
+}

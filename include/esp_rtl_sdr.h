@@ -92,7 +92,7 @@ extern "C" {
 /** Semantic version of this public header / binary API. */
 #define ESP_RTL_SDR_VERSION_MAJOR 0
 #define ESP_RTL_SDR_VERSION_MINOR 9
-#define ESP_RTL_SDR_VERSION_PATCH 3
+#define ESP_RTL_SDR_VERSION_PATCH 4
 /** 1 while experimental prerelease; 0 for stable X.Y.Z. */
 #define ESP_RTL_SDR_VERSION_IS_PRERELEASE 0
 /** Token for prerelease suffix (stringized into VERSION_STRING when IS_PRERELEASE). */
@@ -343,6 +343,7 @@ typedef enum {
     ESP_RTL_SDR_CAP_RTL_AGC = 1u << 19,
     /** Measured tuner filter/IF control at 2.4 MS/s; direct-Q HF excluded. */
     ESP_RTL_SDR_CAP_TUNER_BANDWIDTH = 1u << 20,
+    ESP_RTL_SDR_CAP_OFFSET_TUNING = 1u << 21,
 } esp_rtl_sdr_cap_t;
 
 /**
@@ -1286,6 +1287,26 @@ esp_err_t esp_rtl_sdr_set_tuner_bandwidth(esp_rtl_sdr_handle_t handle, uint32_t 
  */
 esp_err_t esp_rtl_sdr_set_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t min_hz);
 esp_err_t esp_rtl_sdr_get_hf_direct_min_hz(esp_rtl_sdr_handle_t handle, uint32_t *out_min_hz);
+
+/** Experimental hardware offset tuning (currently E4000 only).
+ * Configure while IDLE; takes effect on the next start and subsequent retunes.
+ * Default OFF, cleared on attachment. The tuner LO moves below requested RF;
+ * the RTL2832U corrects it before IQ delivery. Do not add a software mixer.
+ * The public center frequency and delivered IQ center retain requested RF.
+ * Near the lower RF limit the offset is suspended to keep the LO in range;
+ * get_offset_tuning_state reports applied_offset_hz=0 in that case.
+ */
+esp_err_t esp_rtl_sdr_set_offset_tuning(esp_rtl_sdr_handle_t handle, bool enabled);
+
+typedef struct {
+    bool requested;
+    uint32_t applied_offset_hz; /**< Positive RF-minus-LO magnitude; 0 unless streaming. */
+    uint32_t tuner_lo_hz;      /**< Programmed physical LO, including configured ppm correction. */
+    uint32_t iq_center_hz;     /**< Requested RF center; hardware correction already applied. */
+} esp_rtl_sdr_offset_tuning_state_t;
+
+esp_err_t esp_rtl_sdr_get_offset_tuning_state(esp_rtl_sdr_handle_t handle,
+                                            esp_rtl_sdr_offset_tuning_state_t *out);
 
 /** Software shadow: requested may precede applied while EP0 is queued.
  * Check get_last_error()/get_state() for an asynchronous failure.

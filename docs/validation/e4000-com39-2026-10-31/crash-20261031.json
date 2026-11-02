@@ -1,0 +1,28 @@
+{
+  "firmware_driver_revision": "068efab99615fead03e8dd56239ff0f12a9ccdaf",
+  "app_image_sha256": "09b98810135ab15ffbe08fd0256ab76b34f38416d4cdf8f61e860558577bd5ac",
+  "core_sha256": "a1c05bd7afa07bc5cc327f96c10c00d353716351feba90f9a19890eb7e3db562",
+  "elf_sha256": "1f06eff87a0a039bc1df6cf66da99585230eac4450ff2471d0c0fab30cce06d0",
+  "core_integrity_valid": true,
+  "application_elf_matches_core": true,
+  "panic": "assert failed: usb_dwc_hal_chan_decode_intr /IDF/components/hal/usb_dwc_hal.c:519 (chan_intrs & USB_DWC_LL_INTR_CHAN_CHHLTD)",
+  "interrupted_task": "main",
+  "execution_context": "USB host ISR",
+  "stack": [
+    "panic_abort",
+    "esp_system_abort",
+    "__assert_func",
+    "usb_dwc_hal_chan_decode_intr",
+    "_intr_hdlr_chan",
+    "intr_hdlr_main",
+    "_interrupt_handler"
+  ],
+  "unknown": [
+    "trigger action and USB power topology",
+    "exact channel error bits (optimized out)",
+    "channel and pipe heap objects (not retained in dump)",
+    "whether application scheduling, driver control, USB hardware or supply triggered the condition"
+  ],
+  "raw_artifacts_private": true,
+  "root_cause_confirmed": false
+}

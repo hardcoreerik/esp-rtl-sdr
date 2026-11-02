@@ -1,0 +1,49 @@
+{
+  "current_screen_sha256": "07ff3d370459b455efdc3a6f1a1892392d31d5cee14e647c9561be443d3b3574",
+  "current_screen_hz": 132105000,
+  "current_screen_mode": "AM",
+  "current_screen_band_label": "AIR BAND",
+  "raw_capture_driver": "b7cb81a491ce69acb33a66234e1bdc3a85dc36c4",
+  "raw_analysis": [
+    {
+      "capture": "off-cold",
+      "app_equivalent_fft_bins": 2048,
+      "windows": 128,
+      "dc_bin_dbfs": -59.501972588539395,
+      "peak_within_20k_hz": -1171.875,
+      "peak_within_20k_dbfs": -55.16824153596958,
+      "median_100k_to_1M_dbfs": -73.5525399128669
+    },
+    {
+      "capture": "on-m50",
+      "app_equivalent_fft_bins": 2048,
+      "windows": 128,
+      "dc_bin_dbfs": -59.87341845961615,
+      "peak_within_20k_hz": -1171.875,
+      "peak_within_20k_dbfs": -55.639629997684295,
+      "median_100k_to_1M_dbfs": -73.62999237493707
+    },
+    {
+      "capture": "on-m20",
+      "app_equivalent_fft_bins": 2048,
+      "windows": 128,
+      "dc_bin_dbfs": -59.98435651119769,
+      "peak_within_20k_hz": -1171.875,
+      "peak_within_20k_dbfs": -55.55272712375874,
+      "median_100k_to_1M_dbfs": -73.63301460589699
+    }
+  ],
+  "analysis_scope": "128 Hann-windowed 2048-point FFTs, per-window unweighted complex mean removed; relative center region vs 100k-1M median. Not a full pixel/render reproduction.",
+  "current_vs_saved_revision": "Current screenshot uses later 068efab candidate; no contemporaneous IQ was acquired.",
+  "hypothesis": "zero-IF DC-region receiver artifact; exact analog/DC calibration cause not established",
+  "not_implemented": [
+    "E4000 offset tuning",
+    "I/Q imbalance correction"
+  ],
+  "not_changed": [
+    "raw IQ stream",
+    "center bins",
+    "tuning",
+    "Ham It Up mode"
+  ]
+}

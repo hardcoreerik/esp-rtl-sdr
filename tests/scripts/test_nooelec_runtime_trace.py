@@ -11,16 +11,18 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-FUNCTIONS = """apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
+FUNCTIONS = """ctrl_submit esp_rtl_sdr_get_tuner_gains esp_rtl_sdr_set_offset_tuning esp_rtl_sdr_get_offset_tuning_state apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
 map_tuner_record_for_profile run_record run_records run_profile_demod_if_restore
 run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_nooelec_gain_restore run_v3_leave_direct
-run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
+trace_e4000_start_state run_e4000_masked_write run_e4000_gain run_e4000_initialize_tuner run_init_table e4000_sample_rate_record_allowed rtl_tuner_driver_for_profile run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
 apply_tuner_agc_auto_records apply_rtl_agc_records run_bandwidth_program""".split()
 
 
 def extract(source, name):
     # A definition has no ';' in its signature; bodies end at a column-zero brace.
-    pattern = rf"^static [^;{{}}]*?\b{re.escape(name)}\([^;{{}}]*\)\s*\{{"
+    prefix = (r"esp_err_t " if name.startswith("esp_rtl_sdr_") else
+              r"const RtlTunerDriver \*" if name == "rtl_tuner_driver_for_profile" else "static ")
+    pattern = rf"^{prefix}[^;{{}}]*?\b{re.escape(name)}\([^;{{}}]*\)\s*\{{"
     matches = list(re.finditer(pattern, source, re.MULTILINE))
     if len(matches) != 1:
         raise RuntimeError(f"Expected one definition of {name}, found {len(matches)}")
@@ -29,7 +31,7 @@ def extract(source, name):
     if end is None:
         raise RuntimeError(f"Missing column-zero closing brace for {name}")
     signature = source[start.start():start.end() - 1].strip()
-    declaration = re.sub(r"\s*=\s*0(?=\s*[,)]\s*)", "", signature) + ";"
+    declaration = re.sub(r"\s*=\s*(?:0|nullptr)(?=\s*[,)]\s*)", "", signature) + ";"
     return declaration, source[start.start():start.end() + end.end()]
 
 
@@ -64,27 +66,58 @@ static unsigned checks = 0;
 static int64_t esp_timer_get_time() { return 0; }
 static void vTaskDelay(int) {}
 struct esp_rtl_sdr_handle {
+    void *dev = reinterpret_cast<void *>(1);
+    void *ctrl_xfer = reinterpret_cast<void *>(1), *ctrl_mutex = reinterpret_cast<void *>(1);
+    bool device_gone = false;
     RtlProfileId profile = RtlProfileId::NooelecSmartV5;
+    esp_rtl_sdr_state_t state = ESP_RTL_SDR_STATE_IDLE;
+    uint32_t device_caps = 0;
+    bool streaming = false, pause_resubmit = false;
+    esp_err_t last_error = ESP_OK;
     uint32_t frequency_hz = 99100000, preferred_frequency_hz = 99100000;
     int32_t freq_correction_ppm = 0;
     uint32_t last_pll_if_hz = 0, last_lo_hz = 0;
+    bool e4000_offset_requested = false;
+    uint32_t e4000_rate_sps = 2400000, e4000_offset_applied_hz = 0;
     bool ctrl_stall = false, bias_tee_want = false, tuner_auto_applied = false;
     uint32_t tuner_reg_known = 0;
     uint8_t tuner_reg_val[32] = {}, tuner_reg05_low_bits = 3, tuner_reg07 = 0x75;
     esp_rtl_sdr_gain_mode_t gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     int gain_tenth_db = 0;
 };
-// This trace harness is scoped to legacy Nooelec behavior. Keep the new tuner
-// registry empty here so the captured Nooelec path remains the subject tested.
-const RtlTunerDriver *rtl_tuner_driver_for_profile(RtlProfileId) { return nullptr; }
+static void set_error_unlocked(esp_rtl_sdr_handle *h, esp_err_t err) { h->last_error = err; }
+static bool api_lock_ok = true;
+static esp_err_t api_reentrant = ESP_OK;
+constexpr int kQueryLockTicks = 1;
+struct HandleLock {
+    HandleLock(esp_rtl_sdr_handle *, int = 0) {}
+    bool ok() const { return api_lock_ok; }
+};
+static bool handle_ok(esp_rtl_sdr_handle *h) { return h != nullptr; }
+static esp_err_t check_not_reentrant(esp_rtl_sdr_handle *) { return api_reentrant; }
+constexpr size_t kDemodBringupRecordCount = 86;
 static std::vector<RtlControlRecord> wire;
 static size_t fail_transfer = 0;
-static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
-    uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool) {
+static uint8_t e4000_registers[256] = {};
+static uint8_t e4000_pointer = 0;
+static int ignored_e4000_write = -1;
+
+static esp_err_t wire_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
+    uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool, uint8_t *response=nullptr, uint16_t response_length=0) {
     CHECK(length <= 8);
     RtlControlRecord r{value, index, type, length, {}};
+    if (response) {
+        CHECK(response_length==1 && length==1 && index==0x0600);
+        wire.push_back(r);
+        if(fail_transfer==wire.size()) return ESP_FAIL;
+        *response=e4000_registers[e4000_pointer];return ESP_OK;
+    }
     if (length) std::memcpy(r.data, data, length);
     wire.push_back(r);
+    if (value==0x00c8 && index==0x0610 && length) {
+        e4000_pointer=data[0];
+        if (length==2 && data[0]!=ignored_e4000_write) e4000_registers[data[0]]=data[1];
+    }
     return fail_transfer == wire.size() ? ESP_FAIL : ESP_OK;
 }
 static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t) {
@@ -93,6 +126,28 @@ static bool hf_direct_route(const esp_rtl_sdr_handle *h, uint32_t) {
 template <typename... Args>
 static esp_err_t run_band_frontend(esp_rtl_sdr_handle *h, uint32_t, Args...) {
     CHECK(h->profile == RtlProfileId::NooelecSmartV5); return ESP_OK;
+}
+static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *, void *, uint8_t, uint8_t,
+    uint16_t value, uint16_t index, const uint8_t *, uint16_t length, bool,
+    uint8_t *response, size_t capacity) {
+    CHECK(value == 0x00c8 && index == 0x0600 && length == 1 && capacity == 1);
+    RtlControlRecord r{value,index,0xc0,1,{}};wire.push_back(r);
+    if (fail_transfer==wire.size()) return ESP_FAIL;
+    *response=e4000_registers[e4000_pointer]; return ESP_OK;
+}
+using usb_device_handle_t = void *;
+constexpr int portMAX_DELAY=1;
+static esp_rtl_sdr_handle *disconnect_on_lock=nullptr;
+static int control_lock_depth=0;
+static void xSemaphoreTake(void *,int) {
+    CHECK(control_lock_depth==0);++control_lock_depth;
+    if(disconnect_on_lock){disconnect_on_lock->device_gone=true;disconnect_on_lock->dev=nullptr;disconnect_on_lock=nullptr;}
+}
+static void xSemaphoreGive(void *) { CHECK(control_lock_depth==1);--control_lock_depth; }
+static esp_err_t ctrl_transfer_locked(esp_rtl_sdr_handle *h,void *dev,uint8_t bm,uint8_t req,
+ uint16_t value,uint16_t index,const uint8_t *data,uint16_t len,bool stall,uint8_t *response,uint16_t response_len) {
+ CHECK(control_lock_depth==1 && dev!=nullptr);
+ return wire_submit(h,bm,req,value,index,data,static_cast<uint8_t>(len),stall,response,response_len);
 }
 // ACTUAL_DRIVER_FUNCTIONS
 static int last_tuner(uint8_t reg) {
@@ -213,6 +268,65 @@ int main() {
         if (r.request_type == 0x40 && r.index == 0x0610 && r.length == 2 && r.data[0] == 0x1a && r.data[1] == 0x61)
             pll_1a_seen = true;
     CHECK(pll_1a_seen);
+    h = {}; h.profile=RtlProfileId::E4000; wire.clear();
+    uint8_t read_value=0;disconnect_on_lock=&h;
+    CHECK(ctrl_submit(&h,0xc0,0,0xc8,0x0600,nullptr,1,false,&read_value,1)==ESP_RTL_SDR_ERR_USB);
+    CHECK(wire.empty() && control_lock_depth==0);
+    h.device_gone=false;h.dev=reinterpret_cast<void *>(1);
+    e4000_registers[0x1a]=0x49; e4000_registers[0x20]=0xa1;
+    e4000_registers[0x16]=0xff; e4000_registers[0x17]=0xff;
+    e4000_registers[0x14]=0xb0; e4000_registers[0x15]=0xc0;
+    int actual=-999;
+    CHECK(run_e4000_gain(&h, 420, false, &actual)==ESP_OK);
+    CHECK(actual==420);
+    CHECK(e4000_registers[0x1a]==0x50 && e4000_registers[0x20]==0xa0);
+    CHECK(e4000_registers[0x14]==0xbe && e4000_registers[0x15]==0xc1);
+    CHECK(e4000_registers[0x16]==0x81 && e4000_registers[0x17]==0xd2);
+    const size_t gain_transfers=wire.size();
+    size_t gain_count=0; int gains[14]{};
+    h.device_caps=ESP_RTL_SDR_CAP_GAIN;
+    CHECK(esp_rtl_sdr_get_tuner_gains(&h,nullptr,0,&gain_count)==ESP_OK);
+    CHECK(gain_count==14);
+    CHECK(esp_rtl_sdr_get_tuner_gains(&h,gains,14,&gain_count)==ESP_OK);
+    CHECK(gain_count==14 && gains[0]==-10 && gains[13]==420);
+    const uint8_t expected_lna[]={0,1,4,5,6,7,8,9,10,11,12,13,14,14};
+    for (size_t i=0;i<14;++i) {
+        wire.clear();e4000_registers[0x14]=0xb0;e4000_registers[0x15]=0xc0;
+        e4000_registers[0x16]=static_cast<uint8_t>(i*17);
+        e4000_registers[0x17]=static_cast<uint8_t>(255-i*11);
+        const uint8_t reserved16=e4000_registers[0x16]&0x80;
+        const uint8_t reserved17=e4000_registers[0x17]&0xc0;
+        CHECK(run_e4000_gain(&h,gains[i],false,&actual)==ESP_OK);
+        CHECK(actual==gains[i]);
+        CHECK(e4000_registers[0x16]==(reserved16|0x01));
+        CHECK(e4000_registers[0x17]==(reserved17|0x12));
+        CHECK(e4000_registers[0x14]==(0xb0|expected_lna[i]));
+        CHECK(e4000_registers[0x15]==(0xc0|(i==13?1:0)));
+    }
+
+    for (size_t i=1;i<=gain_transfers;++i) {
+        wire.clear();fail_transfer=i;actual=-999;h.streaming=true;h.pause_resubmit=false;
+        h.state=ESP_RTL_SDR_STATE_STREAMING;
+        CHECK(run_e4000_gain(&h,190,false,&actual)==ESP_FAIL);
+        CHECK(actual==-999 && wire.size()==i);
+        CHECK(!h.streaming && h.pause_resubmit && h.state==ESP_RTL_SDR_STATE_FAULT);
+    }
+    fail_transfer=0;
+    for (int reg : {0x1a,0x20,0x16,0x17,0x14,0x15}) {
+        wire.clear();ignored_e4000_write=reg;
+        e4000_registers[reg]=0xff;actual=-999;h.streaming=true;h.pause_resubmit=false;
+        h.state=ESP_RTL_SDR_STATE_STREAMING;
+        CHECK(run_e4000_gain(&h,190,false,&actual)==ESP_FAIL);
+        CHECK(actual==-999 && !h.streaming && h.pause_resubmit);
+        CHECK(h.state==ESP_RTL_SDR_STATE_FAULT);
+    }
+    ignored_e4000_write=-1;
+    e4000_registers[0x1a]=0x50;e4000_registers[0x20]=0xa0;
+    h.streaming=false;wire.clear();
+    e4000_registers[0x16]=0xfe;e4000_registers[0x17]=0xff;
+    CHECK(run_e4000_gain(&h,0,true,nullptr)==ESP_OK);
+    CHECK(e4000_registers[0x16]==0x81 && e4000_registers[0x17]==0xd2);
+    CHECK(e4000_registers[0x1a]==0x59 && e4000_registers[0x20]==0xa1);
     // E4000 alone enables both ADCs and zero-IF before clearing the NCO.
     h = {}; h.profile = RtlProfileId::E4000; wire.clear();
     CHECK(run_e4000_set_zero_if(&h) == ESP_OK);
@@ -229,6 +343,124 @@ int main() {
     for (size_t i = 1; i <= 10; ++i) {
         wire.clear(); fail_transfer = i;
         CHECK(run_e4000_set_zero_if(&h) == ESP_FAIL);
+        CHECK(wire.size() == i);
+    }
+    fail_transfer = 0;
+    // Captured E4000 bridge address is the shifted address 00c8, not 0064.
+    wire.clear();
+    h.gain_mode=ESP_RTL_SDR_GAIN_MODE_MANUAL;h.gain_tenth_db=140;
+    e4000_registers[0x14]=14;e4000_registers[0x15]=1;
+    CHECK(run_e4000_initialize_tuner(&h) == ESP_OK);
+    CHECK((e4000_registers[0x14]&0x0f)==0 && (e4000_registers[0x15]&1)==0);
+    CHECK(h.gain_tenth_db==140 && h.gain_mode==ESP_RTL_SDR_GAIN_MODE_MANUAL);
+    size_t tuner_writes = 0;
+    for (const auto &r : wire) {
+        if (r.index == 0x0610 || r.index == 0x0600) {
+            CHECK(r.value == 0x00c8);
+            ++tuner_writes;
+        }
+    }
+    CHECK(tuner_writes >= 10);
+    wire.clear();
+    CHECK(run_e4000_tune(&h, 100000000) == ESP_OK);
+    tuner_writes = 0;
+    for (const auto &r : wire) {
+        if (r.index == 0x0610 || r.index == 0x0600) {
+            CHECK(r.value == 0x00c8);
+            ++tuner_writes;
+        }
+    }
+    CHECK(tuner_writes == 39);
+    CHECK((e4000_registers[0x14]&0x0f)==8);
+    CHECK(h.gain_tenth_db==140);
+    const RtlControlRecord captured_vhf_bias = {0x00c8, 0x0610, 0x40, 2, {0x78, 0x03}};
+    records_seen(&captured_vhf_bias, 1);
+    // Enabled offset uses hardware IF once, preserving the requested IQ center.
+    h.e4000_offset_requested = true; wire.clear();
+    CHECK(run_e4000_tune(&h, 96100000) == ESP_OK);
+    CHECK(h.last_lo_hz == 94060000);
+    CHECK(h.last_pll_if_hz == 2040000);
+    CHECK(h.e4000_offset_applied_hz == 2040000);
+    const RtlControlRecord offset_controls[] = {
+        {0x1920, 0x0011, 0x40, 1, {0x3b}},
+        {0x1a20, 0x0011, 0x40, 1, {0x77}},
+        {0x1b20, 0x0011, 0x40, 1, {0x78}},
+        {0x00c8, 0x0610, 0x40, 2, {0x11, 0x9a}},
+        {0x00c8, 0x0610, 0x40, 2, {0x12, 0x07}},
+    };
+    if_bytes(0x3b, 0x77, 0x78);
+    records_seen(offset_controls+3, 2);
+    const size_t offset_count = wire.size();
+    h.freq_correction_ppm = 10; wire.clear();
+    CHECK(run_e4000_tune(&h, 96100000) == ESP_OK);
+    CHECK(h.last_lo_hz + h.last_pll_if_hz == 96100961);
+    h.freq_correction_ppm = 0;
+
+    for (size_t i = 1; i <= offset_count; ++i) {
+        h.last_lo_hz = 123; h.last_pll_if_hz = 456;
+        h.e4000_offset_applied_hz = 789;
+        h.state = ESP_RTL_SDR_STATE_STREAMING; h.streaming = true; h.pause_resubmit = false;
+        wire.clear(); fail_transfer = i;
+        CHECK(run_e4000_tune(&h, 96100000) == ESP_FAIL);
+        CHECK(wire.size() == i);
+        CHECK(h.last_lo_hz == 123 && h.last_pll_if_hz == 456);
+        CHECK(h.e4000_offset_applied_hz == 789);
+        CHECK(h.state == ESP_RTL_SDR_STATE_FAULT);
+        CHECK(!h.streaming && h.pause_resubmit);
+        CHECK(h.last_error == ESP_RTL_SDR_ERR_FAULT);
+    }
+    fail_transfer = 0;
+    h.e4000_offset_requested = false; wire.clear();
+    CHECK(run_e4000_tune(&h, 96100000) == ESP_OK);
+    CHECK(h.last_lo_hz == 96100000 && h.last_pll_if_hz == 0);
+    const RtlControlRecord restore_filters[] = {
+        {0x00c8, 0x0610, 0x40, 2, {0x11, 0xec}},
+        {0x00c8, 0x0610, 0x40, 2, {0x12, 0x1f}},
+    };
+    records_seen(restore_filters, std::size(restore_filters));
+    h.state = ESP_RTL_SDR_STATE_IDLE;
+    // Public offset API contract with mocked locking; no hardware/concurrency claim.
+    esp_rtl_sdr_offset_tuning_state_t state{};
+    CHECK(esp_rtl_sdr_set_offset_tuning(nullptr, true) == ESP_RTL_SDR_ERR_STALE_HANDLE);
+    CHECK(esp_rtl_sdr_get_offset_tuning_state(&h, nullptr) == ESP_ERR_INVALID_ARG);
+    CHECK(esp_rtl_sdr_set_offset_tuning(&h, true) == ESP_RTL_SDR_ERR_UNSUPPORTED);
+    h.device_caps = ESP_RTL_SDR_CAP_OFFSET_TUNING;
+    CHECK(esp_rtl_sdr_set_offset_tuning(&h, true) == ESP_OK);
+    CHECK(esp_rtl_sdr_get_offset_tuning_state(&h, &state) == ESP_OK);
+    CHECK(state.requested && state.applied_offset_hz == 0 && state.tuner_lo_hz == 0);
+    h.state = ESP_RTL_SDR_STATE_STREAMING;
+    CHECK(esp_rtl_sdr_set_offset_tuning(&h, false) == ESP_RTL_SDR_ERR_BUSY);
+    CHECK(h.e4000_offset_requested);
+    CHECK(esp_rtl_sdr_get_offset_tuning_state(&h, &state) == ESP_OK);
+    CHECK(state.tuner_lo_hz == h.last_lo_hz && state.iq_center_hz == h.frequency_hz);
+    for (const auto busy : {ESP_RTL_SDR_STATE_STARTING, ESP_RTL_SDR_STATE_STOPPING,
+                            ESP_RTL_SDR_STATE_FAULT}) {
+        h.state = busy;
+        CHECK(esp_rtl_sdr_set_offset_tuning(&h, false) == ESP_RTL_SDR_ERR_BUSY);
+        CHECK(h.e4000_offset_requested);
+    }
+    h.state = ESP_RTL_SDR_STATE_IDLE;
+    api_lock_ok = false;
+    CHECK(esp_rtl_sdr_set_offset_tuning(&h, false) == ESP_RTL_SDR_ERR_TIMEOUT);
+    CHECK(esp_rtl_sdr_get_offset_tuning_state(&h, &state) == ESP_RTL_SDR_ERR_TIMEOUT);
+    api_lock_ok = true;
+    api_reentrant = ESP_RTL_SDR_ERR_BUSY;
+    CHECK(esp_rtl_sdr_set_offset_tuning(&h, false) == ESP_RTL_SDR_ERR_BUSY);
+    CHECK(h.e4000_offset_requested);
+    api_reentrant = ESP_OK;
+    CHECK(esp_rtl_sdr_set_offset_tuning(&h, false) == ESP_OK);
+    // E4000 init must release the shared USB FIFO even without acquisition metadata.
+    wire.clear();
+    CHECK(run_init_table(&h) == ESP_OK);
+    CHECK(wire.size() >= 2);
+    CHECK(wire[wire.size()-2].value == 0x2148);
+    CHECK(wire[wire.size()-2].data[0] == 0x10);
+    CHECK(wire.back().value == 0x2148 && wire.back().index == 0x0110);
+    CHECK(wire.back().length == 2 && wire.back().data[0] == 0 && wire.back().data[1] == 0);
+    const size_t init_count = wire.size();
+    for (size_t i = init_count-1; i <= init_count; ++i) {
+        wire.clear(); fail_transfer = i;
+        CHECK(run_init_table(&h) == ESP_FAIL);
         CHECK(wire.size() == i);
     }
     fail_transfer = 0;

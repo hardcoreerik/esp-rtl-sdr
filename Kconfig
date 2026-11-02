@@ -22,4 +22,19 @@ menu "ESP_RTL_SDR-ESP"
         bool "Verbose driver logs"
         default n
 
+    config ESP_RTL_SDR_E4000_START_TRACE
+        bool "Diagnostic E4000 startup register snapshots"
+        default n
+        help
+            Lab only: reads selected tuner/demod registers at startup stages.
+            Adds control transfers and changes timing. Keep off for releases.
+
+    config ESP_RTL_SDR_E4000_START_TRACE_DELAY_ONLY
+        bool "Replace E4000 snapshots with timing-only waits"
+        depends on ESP_RTL_SDR_E4000_START_TRACE
+        default n
+        help
+            Lab control: wait 110 ms per stage without register reads or
+            repeater writes. Not a production settling-time recommendation.
+
 endmenu

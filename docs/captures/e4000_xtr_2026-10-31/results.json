@@ -1,0 +1,860 @@
+{
+  "scope": "PC reference only; no ESP E4000 acceptance",
+  "device": {
+    "serial": "82115932",
+    "product": "SMArt XTR v5",
+    "open_rc": 0,
+    "tools": {
+      "C:\\Program Files\\Wireshark\\tshark.exe": "16fcc57d76fe2e7ce006aad2cbe204ad7cd62837d105b7c619e64e2aa492d229",
+      "C:\\Tools\\esp-rtl-sdr-lab\\v4l-driver-1.4.0\\x64\\rtlsdr.dll": "0fa7f8bf4b7e07918a0a9e98228007cccac3109dbaac7497e116e416135d58a5"
+    },
+    "tuner_type": 1
+  },
+  "rf_setup": {
+    "source": "tinySA Ultra COM7 USB serial 400",
+    "firmware": "tinySA4_v1.4-151-g31a89ce",
+    "connection": "RF -> 30 dB attenuator -> SMA cable -> XTR; antenna disconnected",
+    "nominal_source_dbm": -40,
+    "receiver_hz": 100000000,
+    "rate_sps": 2400000,
+    "output_off_confirmed": true,
+    "level_accuracy_calibrated": false
+  },
+  "usb": {
+    "controls": {
+      "paired": 1378,
+      "unpaired": 0
+    },
+    "delivery": {
+      "paired": 3519,
+      "unpaired": 0
+    },
+    "rf": {
+      "paired": 813,
+      "unpaired": 0
+    }
+  },
+  "delivery": [
+    {
+      "t": 1793489909.6192808,
+      "stage": "sustained_iq",
+      "rate": 250000,
+      "bytes": 2621440,
+      "elapsed": 5.24294549995102,
+      "measured_sps": 249996.87675796836,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 10,
+      "max_read_ms": 524.5332999620587,
+      "artifact": "iq-250000.cu8",
+      "sha256": "666bc6a9a3e339f9b80ee90f20ece984ca569d34725d1851d07bfbc0a1f52387",
+      "i_mean": 127.13639831542969,
+      "q_mean": 127.57083892822266,
+      "std": 105.36649410191103,
+      "clip_fraction": 0.5426597595214844,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    },
+    {
+      "t": 1793489914.8943355,
+      "stage": "sustained_iq",
+      "rate": 960000,
+      "bytes": 9699328,
+      "elapsed": 5.062385000055656,
+      "measured_sps": 957980.0824999843,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 37,
+      "max_read_ms": 141.60259999334812,
+      "artifact": "iq-960000.cu8",
+      "sha256": "bf2618e047421c9361bda3b23125c7b4289f08a1db0472af2a4ed937f37d8edf",
+      "i_mean": 126.13895416259766,
+      "q_mean": 127.94918823242188,
+      "std": 4.778711318855152,
+      "clip_fraction": 0.0,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    },
+    {
+      "t": 1793489920.222569,
+      "stage": "sustained_iq",
+      "rate": 1024000,
+      "bytes": 10485760,
+      "elapsed": 5.123910000082105,
+      "measured_sps": 1023218.5967192999,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 40,
+      "max_read_ms": 128.08799999766052,
+      "artifact": "iq-1024000.cu8",
+      "sha256": "82c7047f5a2cc2a0aa27797154694fe8943951080aa05f1d3fac879cfb482641",
+      "i_mean": 126.14037322998047,
+      "q_mean": 127.89192962646484,
+      "std": 5.125186680386166,
+      "clip_fraction": 0.0,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    },
+    {
+      "t": 1793489925.4262772,
+      "stage": "sustained_iq",
+      "rate": 2048000,
+      "bytes": 20709376,
+      "elapsed": 5.061123899882659,
+      "measured_sps": 2045926.597497459,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 79,
+      "max_read_ms": 64.063600031659,
+      "artifact": "iq-2048000.cu8",
+      "sha256": "92bb94186cc0c0805f21c8434176e84984c79a2f6c1e37afb842b6ad77ae2a6e",
+      "i_mean": 126.77237701416016,
+      "q_mean": 127.52172088623047,
+      "std": 109.86656081141618,
+      "clip_fraction": 0.6041679382324219,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    },
+    {
+      "t": 1793489930.6136007,
+      "stage": "sustained_iq",
+      "rate": 2400000,
+      "bytes": 24117248,
+      "elapsed": 5.048855500062928,
+      "measured_sps": 2388387.6256410396,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 92,
+      "max_read_ms": 65.27799996547401,
+      "artifact": "iq-2400000.cu8",
+      "sha256": "ea633276ad677fbb58942ec04711d80f6654497417def7b77f0cee490742581e",
+      "i_mean": 126.91513061523438,
+      "q_mean": 127.51161193847656,
+      "std": 114.1079499508484,
+      "clip_fraction": 0.6993522644042969,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    },
+    {
+      "t": 1793489935.769321,
+      "stage": "sustained_iq",
+      "rate": 2560000,
+      "bytes": 25690112,
+      "elapsed": 5.023502700030804,
+      "measured_sps": 2556991.9570106403,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 98,
+      "max_read_ms": 51.277599995955825,
+      "artifact": "iq-2560000.cu8",
+      "sha256": "91c4a0cac2dbf501453c861b2dc3137e6e4813a9fb7c571486da23222480e594",
+      "i_mean": 126.9982681274414,
+      "q_mean": 127.44971466064453,
+      "std": 110.77891758320783,
+      "clip_fraction": 0.6221046447753906,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    },
+    {
+      "t": 1793489940.9058113,
+      "stage": "sustained_iq",
+      "rate": 2880000,
+      "bytes": 28835840,
+      "elapsed": 5.012030499987304,
+      "measured_sps": 2876662.462456388,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 110,
+      "max_read_ms": 45.67080014385283,
+      "artifact": "iq-2880000.cu8",
+      "sha256": "7487ed6794336e868106db9bcfd8b0c483002b077bd373698f5c42d2d9453253",
+      "i_mean": 126.82064819335938,
+      "q_mean": 127.51962280273438,
+      "std": 96.54838068589021,
+      "clip_fraction": 0.29878997802734375,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    },
+    {
+      "t": 1793489946.0378122,
+      "stage": "sustained_iq",
+      "rate": 3200000,
+      "bytes": 31981568,
+      "elapsed": 5.007232700008899,
+      "measured_sps": 3193537.220663138,
+      "short_reads": 0,
+      "errors": [],
+      "reads": 122,
+      "max_read_ms": 44.475800124928355,
+      "artifact": "iq-3200000.cu8",
+      "sha256": "d3e6a9cfa57ba57516f8cd042ddae1187793a79cb6d693bfb7013677cc431b10",
+      "i_mean": 126.96695709228516,
+      "q_mean": 127.43339538574219,
+      "std": 48.66124258239347,
+      "clip_fraction": 0.0,
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
+    }
+  ],
+  "restarts": [
+    {
+      "t": 1793489948.0823865,
+      "stage": "restart_iq",
+      "cycle": 0,
+      "rc": 0,
+      "bytes": 262144
+    },
+    {
+      "t": 1793489949.2525249,
+      "stage": "restart_iq",
+      "cycle": 1,
+      "rc": 0,
+      "bytes": 262144
+    },
+    {
+      "t": 1793489950.425799,
+      "stage": "restart_iq",
+      "cycle": 2,
+      "rc": 0,
+      "bytes": 262144
+    },
+    {
+      "t": 1793489951.5989685,
+      "stage": "restart_iq",
+      "cycle": 3,
+      "rc": 0,
+      "bytes": 262144
+    },
+    {
+      "t": 1793489952.7720876,
+      "stage": "restart_iq",
+      "cycle": 4,
+      "rc": 0,
+      "bytes": 262144
+    }
+  ],
+  "tune_failures": [
+    {
+      "t": 1793489946.3014514,
+      "stage": "boundary_tune_1110000000",
+      "t_start": 1793489946.2628858,
+      "rc": -1,
+      "args": [
+        1110000000
+      ]
+    },
+    {
+      "t": 1793489946.3409617,
+      "stage": "boundary_tune_1120000000",
+      "t_start": 1793489946.3026874,
+      "rc": -1,
+      "args": [
+        1120000000
+      ]
+    },
+    {
+      "t": 1793489946.3804448,
+      "stage": "boundary_tune_1130000000",
+      "t_start": 1793489946.3421106,
+      "rc": -1,
+      "args": [
+        1130000000
+      ]
+    },
+    {
+      "t": 1793489946.4199562,
+      "stage": "boundary_tune_1135000000",
+      "t_start": 1793489946.3815818,
+      "rc": -1,
+      "args": [
+        1135000000
+      ]
+    },
+    {
+      "t": 1793489946.4617028,
+      "stage": "boundary_tune_1140000000",
+      "t_start": 1793489946.4211764,
+      "rc": -1,
+      "args": [
+        1140000000
+      ]
+    },
+    {
+      "t": 1793489946.5013287,
+      "stage": "boundary_tune_1150000000",
+      "t_start": 1793489946.463076,
+      "rc": -1,
+      "args": [
+        1150000000
+      ]
+    },
+    {
+      "t": 1793489946.5408359,
+      "stage": "boundary_tune_1160000000",
+      "t_start": 1793489946.5024915,
+      "rc": -1,
+      "args": [
+        1160000000
+      ]
+    },
+    {
+      "t": 1793489946.5803204,
+      "stage": "boundary_tune_1170000000",
+      "t_start": 1793489946.5421126,
+      "rc": -1,
+      "args": [
+        1170000000
+      ]
+    },
+    {
+      "t": 1793489946.619711,
+      "stage": "boundary_tune_1180000000",
+      "t_start": 1793489946.5815492,
+      "rc": -1,
+      "args": [
+        1180000000
+      ]
+    },
+    {
+      "t": 1793489946.6592033,
+      "stage": "boundary_tune_1190000000",
+      "t_start": 1793489946.6210046,
+      "rc": -1,
+      "args": [
+        1190000000
+      ]
+    },
+    {
+      "t": 1793489946.6986165,
+      "stage": "boundary_tune_1200000000",
+      "t_start": 1793489946.6603727,
+      "rc": -1,
+      "args": [
+        1200000000
+      ]
+    }
+  ],
+  "rf_measurements": [
+    {
+      "t": 1793491239.166532,
+      "stage": "source_off",
+      "artifact": "020-source_off.cu8",
+      "sha256": "68c6823724421f6a9ab78a332778ea704bb7478dbe42d7439358cccd5b303004",
+      "tone_hz": 98291.015625,
+      "tone_dbfs": -77.02076138479723,
+      "rms_dbfs": -38.07048435854439,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491239.8670523,
+      "stage": "source_on",
+      "artifact": "023-source_on.cu8",
+      "sha256": "97ff26444cad64afbc5e402c930ba981521bbb06339dba992768b5ed6c3822dd",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -22.7005022471942,
+      "rms_dbfs": -22.563104305037697,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491240.2657967,
+      "stage": "gain",
+      "artifact": "025-gain.cu8",
+      "sha256": "ba4b23127a6739d5ada2096f0b527f4ddd5023ea193ec73cf4792c9c0669599f",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -43.356839982507566,
+      "rms_dbfs": -38.696412038503794,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": -10
+    },
+    {
+      "t": 1793491240.664899,
+      "stage": "gain",
+      "artifact": "027-gain.cu8",
+      "sha256": "49d92092b49339ab9ac0c301ae006f8386ee00b74a672db37ce12558105c4f44",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -41.968072090747306,
+      "rms_dbfs": -38.13810918440264,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 15
+    },
+    {
+      "t": 1793491241.0633786,
+      "stage": "gain",
+      "artifact": "029-gain.cu8",
+      "sha256": "f5cb94fda49005ac76602792cfd1162b16c5331fa8448fa3c3344cef1c4f5dc4",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -38.43768355876576,
+      "rms_dbfs": -36.288802116525055,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 40
+    },
+    {
+      "t": 1793491241.461991,
+      "stage": "gain",
+      "artifact": "031-gain.cu8",
+      "sha256": "584a67ca69c84fd345751b6b8ff1659d2e0704dfdd0899a6841730c094088e11",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -36.00972594147062,
+      "rms_dbfs": -34.6511696423955,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 65
+    },
+    {
+      "t": 1793491241.8615944,
+      "stage": "gain",
+      "artifact": "033-gain.cu8",
+      "sha256": "f667f6ff2b4b085117eec9a393e8027cbc5ad2fb7f86f296744eb64594063a26",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -32.95353411954969,
+      "rms_dbfs": -32.16137021786069,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 90
+    },
+    {
+      "t": 1793491242.2603922,
+      "stage": "gain",
+      "artifact": "035-gain.cu8",
+      "sha256": "a8c09ecac78aa49c3229c18ba5db6fd49062a6a23efcdb649cc1de5443efc373",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -31.583328282535966,
+      "rms_dbfs": -30.97519903523768,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 115
+    },
+    {
+      "t": 1793491242.659278,
+      "stage": "gain",
+      "artifact": "037-gain.cu8",
+      "sha256": "7359e0def5a601dd1fbe4a2244bd96ee3fbdac3d023dbccb7c05362d5cb88e37",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -27.540236719762294,
+      "rms_dbfs": -27.224289411036352,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 140
+    },
+    {
+      "t": 1793491243.058677,
+      "stage": "gain",
+      "artifact": "039-gain.cu8",
+      "sha256": "9b30e0ecbe779d6da99890aed4f9e94d3d0129174277232732498a2ee601b6a8",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -26.362675997919442,
+      "rms_dbfs": -26.0911658685821,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 165
+    },
+    {
+      "t": 1793491243.4583704,
+      "stage": "gain",
+      "artifact": "041-gain.cu8",
+      "sha256": "1893474cdb84d1f592f96c9e76fede1d3003745d710ea954a5c2453c16b4f269",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -22.768024323859176,
+      "rms_dbfs": -22.588432957934565,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491243.8579671,
+      "stage": "gain",
+      "artifact": "043-gain.cu8",
+      "sha256": "8de3bc39bb44e39cd2252acb5a4b60ac833f5d966cc8390a9f1287e32becfbc3",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -20.158591395212238,
+      "rms_dbfs": -19.987327401551042,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 215
+    },
+    {
+      "t": 1793491244.2587776,
+      "stage": "gain",
+      "artifact": "045-gain.cu8",
+      "sha256": "956bfd8a4dc84361b54a89bd10b75fce1fa754a7d70d13224ab09c4104bdf275",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -18.077474096010768,
+      "rms_dbfs": -17.9247551797141,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 240
+    },
+    {
+      "t": 1793491244.6585116,
+      "stage": "gain",
+      "artifact": "047-gain.cu8",
+      "sha256": "e4646af33b3d44389129e6eea3aaa5965b2e944003459ef5db1434a297bd3d1b",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -13.179826597273943,
+      "rms_dbfs": -13.039312097738511,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 290
+    },
+    {
+      "t": 1793491245.057851,
+      "stage": "gain",
+      "artifact": "049-gain.cu8",
+      "sha256": "f1a96b6a2e4f41fc81cdee131ef18dd32981f4c56c0cb73ddbbb46b726dc0fdb",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -13.187943559913363,
+      "rms_dbfs": -13.03914703040094,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 340
+    },
+    {
+      "t": 1793491245.4566436,
+      "stage": "gain",
+      "artifact": "051-gain.cu8",
+      "sha256": "fa74e2c0fef46278e4800c57985ab2bdc19c81831e95d293e12135621fc8ee75",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -6.735344263052316,
+      "rms_dbfs": -6.591260225434028,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 420
+    },
+    {
+      "t": 1793491246.0153446,
+      "stage": "level",
+      "artifact": "054-level.cu8",
+      "sha256": "5e00cf7a0b13311ca6e3ad62d4a7c89c813aeb818c6c3a1ca1a9cd23e1f3bdd8",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -32.81006192372217,
+      "rms_dbfs": -31.59541799841093,
+      "clip_fraction": 0.0,
+      "source_dbm": -50,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491246.5597816,
+      "stage": "level",
+      "artifact": "056-level.cu8",
+      "sha256": "1048ca41387e2d532c78d8829add6ddffb6b58cf91538a54571badb00cebc6da",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -22.856617413487136,
+      "rms_dbfs": -22.61465232570904,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491247.108545,
+      "stage": "level",
+      "artifact": "058-level.cu8",
+      "sha256": "d529778fe022afdfa15b4b8e06b0205fd0e36cf05805a9c7fa23f775649d8264",
+      "tone_hz": 99975.5859375,
+      "tone_dbfs": -12.953657243961496,
+      "rms_dbfs": -12.829773051003402,
+      "clip_fraction": 0.0,
+      "source_dbm": -30,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491248.159474,
+      "stage": "bandwidth",
+      "artifact": "064-bandwidth.cu8",
+      "sha256": "280987a555756d15585276a4fa0347439dcc5f1aa9c5906b276de08e0f29f8f3",
+      "tone_hz": 19958.49609375,
+      "tone_dbfs": -23.221201322850284,
+      "rms_dbfs": -22.525683885374505,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 0,
+      "offset_hz": 20000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491249.0201845,
+      "stage": "bandwidth",
+      "artifact": "068-bandwidth.cu8",
+      "sha256": "3f586ce2526fffd94338ac4b5f6ac8ed349152dee8fa50a963ddde0e22ccd92c",
+      "tone_hz": 299963.37890625,
+      "tone_dbfs": -23.48979570813217,
+      "rms_dbfs": -23.15873073848526,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 0,
+      "offset_hz": 300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491249.877271,
+      "stage": "bandwidth",
+      "artifact": "072-bandwidth.cu8",
+      "sha256": "cb2980062b672f0281d8bd437f83a61793860f34de57fe58d93c3bf3c69c5895",
+      "tone_hz": -300036.62109375,
+      "tone_dbfs": -23.51962925320542,
+      "rms_dbfs": -23.18020541094082,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 0,
+      "offset_hz": -300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491250.7298834,
+      "stage": "bandwidth",
+      "artifact": "076-bandwidth.cu8",
+      "sha256": "40af0fe236a708e60a7594f6b3b55b0631e1d8cfbb605e0d1f6a80e9fc95a306",
+      "tone_hz": 899963.37890625,
+      "tone_dbfs": -24.75488200845198,
+      "rms_dbfs": -24.404326057045598,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 0,
+      "offset_hz": 900000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491251.6316302,
+      "stage": "bandwidth",
+      "artifact": "081-bandwidth.cu8",
+      "sha256": "7a8e76bca8e4f13510dbd53d9dae6277c1e6ec7b6ee314f50b0200ffd70d26cd",
+      "tone_hz": 19958.49609375,
+      "tone_dbfs": -23.22232640060802,
+      "rms_dbfs": -22.570347618838515,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 200000,
+      "offset_hz": 20000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491252.4862144,
+      "stage": "bandwidth",
+      "artifact": "085-bandwidth.cu8",
+      "sha256": "8bfb00c594b7a6f6b8565ab206d3a0daab115dbbb4631f005be2f1ccdaff45df",
+      "tone_hz": 299963.37890625,
+      "tone_dbfs": -23.757144546720692,
+      "rms_dbfs": -23.464022625131946,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 200000,
+      "offset_hz": 300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491253.3406737,
+      "stage": "bandwidth",
+      "artifact": "089-bandwidth.cu8",
+      "sha256": "e3e4c661082765a69ada1169bdcaff0ec9f5e277cdcdcfe92d08dc492cc9932a",
+      "tone_hz": -300036.62109375,
+      "tone_dbfs": -23.801098085006057,
+      "rms_dbfs": -23.488463120146314,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 200000,
+      "offset_hz": -300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491254.1973784,
+      "stage": "bandwidth",
+      "artifact": "093-bandwidth.cu8",
+      "sha256": "9dee5d01b09b7763fbf2673111eef20014c5f46b78344483d8c953cababb5656",
+      "tone_hz": 899963.37890625,
+      "tone_dbfs": -26.90589045340913,
+      "rms_dbfs": -26.501842348454815,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 200000,
+      "offset_hz": 900000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491255.0856812,
+      "stage": "bandwidth",
+      "artifact": "098-bandwidth.cu8",
+      "sha256": "32cc17356dfad93abf13a77ab3be59b9457edecae2bca798119a143ead825619",
+      "tone_hz": 19958.49609375,
+      "tone_dbfs": -23.221415456697997,
+      "rms_dbfs": -22.58808503049396,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 500000,
+      "offset_hz": 20000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491255.9384296,
+      "stage": "bandwidth",
+      "artifact": "102-bandwidth.cu8",
+      "sha256": "4c605cce9456048ed13d18d8bae0b17a8d0a4f69794ef47e668a447a210e5afc",
+      "tone_hz": 299963.37890625,
+      "tone_dbfs": -23.77734586711955,
+      "rms_dbfs": -23.47768458801752,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 500000,
+      "offset_hz": 300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491256.7947612,
+      "stage": "bandwidth",
+      "artifact": "106-bandwidth.cu8",
+      "sha256": "e87914210f1638d8c3540148ca5d2312d08ebbbb7bd2e739010a4e45569add47",
+      "tone_hz": -300036.62109375,
+      "tone_dbfs": -23.80792406901414,
+      "rms_dbfs": -23.501075449617353,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 500000,
+      "offset_hz": -300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491257.6518724,
+      "stage": "bandwidth",
+      "artifact": "110-bandwidth.cu8",
+      "sha256": "06601e1a4592181f7e19272b62ccca3294444815e1478a89927644cb64f08046",
+      "tone_hz": 899963.37890625,
+      "tone_dbfs": -26.92411770710627,
+      "rms_dbfs": -26.51542131170476,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 500000,
+      "offset_hz": 900000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491258.5368516,
+      "stage": "bandwidth",
+      "artifact": "115-bandwidth.cu8",
+      "sha256": "1a12c4ea20bc603d597e47ec1e3d5de3146ad1880ec5978c4e50d61c0a0e5f4c",
+      "tone_hz": 19958.49609375,
+      "tone_dbfs": -23.233363123073048,
+      "rms_dbfs": -22.602482320250957,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 1000000,
+      "offset_hz": 20000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491259.3912616,
+      "stage": "bandwidth",
+      "artifact": "119-bandwidth.cu8",
+      "sha256": "b8088dc3905004b13209e093a1db96c9cbc2054a28bfbbfa0bd7bbac6d8aef04",
+      "tone_hz": 299963.37890625,
+      "tone_dbfs": -23.78305936706459,
+      "rms_dbfs": -23.493994903550185,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 1000000,
+      "offset_hz": 300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491260.2513344,
+      "stage": "bandwidth",
+      "artifact": "123-bandwidth.cu8",
+      "sha256": "02041ef603962e22804f42e1812f55eeab93fa60876107bc2904ef8db8f5f5f3",
+      "tone_hz": -300036.62109375,
+      "tone_dbfs": -23.814535087520674,
+      "rms_dbfs": -23.519639222468488,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 1000000,
+      "offset_hz": -300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491261.1045923,
+      "stage": "bandwidth",
+      "artifact": "127-bandwidth.cu8",
+      "sha256": "5a0d4bd2d1506234385ff3d982ff50fc3f7edfd093681e98c05de0bb425f873d",
+      "tone_hz": 899963.37890625,
+      "tone_dbfs": -26.935410579830766,
+      "rms_dbfs": -26.540690707712695,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 1000000,
+      "offset_hz": 900000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491261.992817,
+      "stage": "bandwidth",
+      "artifact": "132-bandwidth.cu8",
+      "sha256": "648d258d80faf3880dd87465d857705616f4f8972dc1ddc5c17cd308f8f7493f",
+      "tone_hz": 19958.49609375,
+      "tone_dbfs": -23.249055162799962,
+      "rms_dbfs": -22.594409695250537,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 2400000,
+      "offset_hz": 20000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491262.849618,
+      "stage": "bandwidth",
+      "artifact": "136-bandwidth.cu8",
+      "sha256": "385bf0af2ad953fe72a50e7fd99cb137ad6c131b1cf58f95b4c2bfb523cdeb63",
+      "tone_hz": 299963.37890625,
+      "tone_dbfs": -23.535489188827974,
+      "rms_dbfs": -23.230873229573533,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 2400000,
+      "offset_hz": 300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491263.7042136,
+      "stage": "bandwidth",
+      "artifact": "140-bandwidth.cu8",
+      "sha256": "78f1a165a2926b37bc03ca62edf471b60ca62bbf8b4356cc3eef980d9ae487de",
+      "tone_hz": -300036.62109375,
+      "tone_dbfs": -23.570739829745044,
+      "rms_dbfs": -23.253489537304155,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 2400000,
+      "offset_hz": -300000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491264.5587487,
+      "stage": "bandwidth",
+      "artifact": "144-bandwidth.cu8",
+      "sha256": "d7d52f58a0fa80d79227b1b50d0619d1aa90952101791a8ae894effd1d6c4c68",
+      "tone_hz": 899963.37890625,
+      "tone_dbfs": -24.794411531232097,
+      "rms_dbfs": -24.46575374906559,
+      "clip_fraction": 0.0,
+      "requested_bandwidth_hz": 2400000,
+      "offset_hz": 900000,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    },
+    {
+      "t": 1793491265.6028764,
+      "stage": "source_off_final",
+      "artifact": "150-source_off_final.cu8",
+      "sha256": "172b11ca32ec0bcdb60121b8140bf8dd42b2644282b2ab20c5e760255f468cd7",
+      "tone_hz": 98107.91015625,
+      "tone_dbfs": -77.027060350691,
+      "rms_dbfs": -38.40739121282686,
+      "clip_fraction": 0.0,
+      "source_dbm": -40,
+      "gain_tenth_db": 190
+    }
+  ],
+  "remaining": [
+    "ESP enumeration and E4000 startup",
+    "ESP RF tuning/gain acceptance",
+    "calibrated frequency/absolute gain/sensitivity",
+    "direct-sampling RF input wiring",
+    "physical USB unplug/replug",
+    "long-duration soak and deterministic stream-loss proof",
+    "repeat 29/34 dB gain plateau"
+  ]
+}

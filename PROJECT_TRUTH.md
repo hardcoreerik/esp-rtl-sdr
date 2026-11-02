@@ -7,7 +7,7 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
 Snapshot date: **2026-10-29**
-Version: **0.9.3** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, plus bounded standalone Waveshare V4+V3/R820T2 hardware verification on 2026-10-29; universal reentry/hotplug qualification remains open. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec is implemented, not experimental; standalone Tab5 streaming/control checks passed on 2026-10-29. Per-band RF/calibration qualification remains separate. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
+Version: **0.9.4** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, plus bounded standalone Waveshare V4+V3/R820T2 hardware verification on 2026-10-29; universal reentry/hotplug qualification remains open. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec is implemented, not experimental; standalone Tab5 streaming/control checks passed on 2026-10-29. Per-band RF/calibration qualification remains separate. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
 This branch adds an **experimental E4000 profile**; XTR v5 physical acceptance remains pending.
 
 This branch adds an **experimental E4000 profile**; XTR v5 physical acceptance remains pending.
@@ -254,3 +254,7 @@ Subsequent reauthorized Tab5/Nooelec regression check: latest IDF5.5.4 default
 960kS/s quiet-window throughput with zero drops/overruns. IDF6.1's auto ring was
 smaller (139264 versus245760bytes), so buffering-margin qualification remains.
 [Exact regression evidence](docs/acquisition-reliability/COM39_REGRESSION_2026-10-29.md).
+
+## 0.9.4 release boundary
+
+Experimental E4000 gains and hardware offset are implemented; startup gain-history correction passed one fixed-14 dB raw restart pair (0.088 dB difference versus prior ~1.85 dB). Broader gain/AUTO serial smoke timed out; RF calibration and serial reliability remain open. Installed-device control reads now use the disconnect-safe mutex path. No SDK HAL patch is included or applied. Maintainer explicitly requested version/tag v0.9.4 despite the additive pre-1.0 API.

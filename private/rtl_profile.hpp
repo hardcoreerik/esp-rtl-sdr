@@ -88,7 +88,8 @@ inline RtlProfileId rtl_profile_from_descriptors(uint16_t vid, uint16_t pid,
         return RtlProfileId::NooelecSmartV5;
     }
     if (rtl_profile_text_is(manufacturer, "Nooelec") &&
-        rtl_profile_text_contains(product, "SMArTee XTR v5")) {
+        (rtl_profile_text_contains(product, "SMArTee XTR v5") ||
+         rtl_profile_text_is(product, "SMArt XTR v5"))) {
         return RtlProfileId::E4000;
     }
     return RtlProfileId::Unknown;
@@ -156,7 +157,7 @@ inline uint16_t rtl_profile_tuner_i2c_value(RtlProfileId profile)
     case RtlProfileId::BlogV4:
         return kBlogV4TunerI2cValue;
     case RtlProfileId::E4000:
-        return 0x0064; // E4000 7-bit I2C address in RTL2832U control encoding.
+        return 0x00c8; // Captured RTL2832U control encoding: 7-bit 0x64 shifted left.
     default:
         return 0;
     }
@@ -173,7 +174,8 @@ inline uint32_t rtl_profile_library_capabilities(void)
            ESP_RTL_SDR_CAP_NEED | ESP_RTL_SDR_CAP_HEALTH | ESP_RTL_SDR_CAP_PASSPORT |
            ESP_RTL_SDR_CAP_DELIVERY_MODE | ESP_RTL_SDR_CAP_GAIN | ESP_RTL_SDR_CAP_BIAS_TEE |
            ESP_RTL_SDR_CAP_HF_UPCONVERTER | ESP_RTL_SDR_CAP_GAIN_AUTO |
-           ESP_RTL_SDR_CAP_RTL_AGC | ESP_RTL_SDR_CAP_TUNER_BANDWIDTH;
+           ESP_RTL_SDR_CAP_RTL_AGC | ESP_RTL_SDR_CAP_TUNER_BANDWIDTH |
+           ESP_RTL_SDR_CAP_OFFSET_TUNING;
 }
 
 /**
@@ -191,7 +193,8 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
 
     switch (profile) {
     case RtlProfileId::BlogV4:
-        return rtl_profile_library_capabilities() & ~ESP_RTL_SDR_CAP_DIRECT_SAMPLING;
+        return rtl_profile_library_capabilities() &
+               ~(ESP_RTL_SDR_CAP_DIRECT_SAMPLING | ESP_RTL_SDR_CAP_OFFSET_TUNING);
     case RtlProfileId::BlogV3:
         /* Generic R820T2 identity includes the user-tested V3c, but does not
          * prove a bias circuit on every stick. Enable only by explicit API. */
@@ -218,10 +221,12 @@ inline uint32_t rtl_profile_device_capabilities(RtlProfileId profile)
                ESP_RTL_SDR_CAP_RTL_AGC | ESP_RTL_SDR_CAP_DIRECT_SAMPLING |
                ESP_RTL_SDR_CAP_TUNER_BANDWIDTH;
     case RtlProfileId::E4000:
-        /* Experimental: tuning/stream path only; gain, AGC, bandwidth, HF and
-         * board controls remain unavailable until separately implemented. */
+        /* Experimental E4000: captured manual/automatic tuner gain. RTL AGC,
+         * bandwidth selection, HF and board controls remain separate. */
         return common | ESP_RTL_SDR_CAP_STREAM | ESP_RTL_SDR_CAP_RETUNE |
-               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT;
+               ESP_RTL_SDR_CAP_SYNC_READ | ESP_RTL_SDR_CAP_PASSPORT |
+               ESP_RTL_SDR_CAP_OFFSET_TUNING | ESP_RTL_SDR_CAP_GAIN |
+               ESP_RTL_SDR_CAP_GAIN_AUTO;
     default:
         return 0;
     }

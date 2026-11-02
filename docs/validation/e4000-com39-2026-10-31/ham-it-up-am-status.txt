@@ -1,0 +1,4 @@
+RTL_SDR_STATUS connected=true vid=0bda pid=2838 speed=high serial="82115932"
+RTL_UI_STATUS screen=home band=AIRBAND frequency_hz=126600000 settings=0 fm=0 am=0 p25=0 adsb=0 lora=0 rf24=0 home_font=1 graphics=1 radio_ui=1 route=home
+RTL_DRIVER_STATUS installed=1 version=0.9.3 state=STREAMING profile=5 profile_name="e4000_experimental" provisional=0 device_caps=0x00017f1f library_caps=0x001fff7f delivery=callback gain_auto_cap=0 rtl_agc_cap=0 gain_cap=0 bias_cap=0 mode=AUTO gain_tenth_db=0 rtl_agc=0 bias=0 bytes=917733376 blocks=28007 effective_sps=2398926 overruns=0 drops=0 shadow_ok=1 metrics_ok=1 frequency_hz=126600000 frequency_ok=1 route=TUNER bw_requested_hz=0 bw_applied_hz=0
+RTL_SIGNAL_STATUS band=AIRBAND frequency_hz=126600000 signal_dbfs_tenths=-139 stereo_locked=0 left_dbfs_tenths=-900 right_dbfs_tenths=-900 rds_carrier=0 rds_signal_tenths=-900 pilot_env_thou=2025 clipping_percent=0.002 filter_hz=10000 lo_nudge=0

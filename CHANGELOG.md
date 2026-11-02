@@ -1,3 +1,10 @@
+## 0.9.4 (2026-11-02)
+
+- Experimental SMArt XTR/E4000 bring-up, manual/tuner AUTO gain and opt-in offset tuning.
+- Fixed startup gain-history dependence: initialize at low gain, then restore requested gain before streaming. One fixed-14 dB raw restart pair improved from about 1.85 dB to 0.088 dB.
+- Verify E4000 gain fields and protect installed-device reads against disconnect.
+- E4000 remains experimental. Broader RF calibration, RTL digital AGC and serial timeout investigation remain open. SDK USB HAL workarounds are outside this release.
+
 # Changelog
 
 ## Unreleased

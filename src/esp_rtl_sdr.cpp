@@ -1217,6 +1217,8 @@ static bool probe_e4000_tuner(esp_rtl_sdr_handle *h, usb_device_handle_t dev,
     return chip_id == 0x40;
 }
 
+static esp_err_t run_e4000_gain(esp_rtl_sdr_handle *h, int requested, bool automatic, int *applied);
+
 static esp_err_t run_e4000_initialize_tuner(esp_rtl_sdr_handle *h)
 {
     const uint16_t tuner_address = tuner_i2c_value_for_handle(h);
@@ -1250,6 +1252,10 @@ static esp_err_t run_e4000_initialize_tuner(esp_rtl_sdr_handle *h)
             return e;
         }
     }
+    // Calibration must not inherit the previous stream's LNA/mixer gain.
+    // run_e4000_tune restores the user's requested mode/gain before IQ starts.
+    const esp_err_t baseline=run_e4000_gain(h,-10,false,nullptr);
+    if (baseline!=ESP_OK) return baseline;
     ESP_LOGW(TAG, "E4000 tuner initialized experimentally; no hardware acceptance recorded");
     return ESP_OK;
 }

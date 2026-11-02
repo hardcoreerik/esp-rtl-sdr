@@ -83,3 +83,17 @@ immediate state, not persistence through a later calibration or sample block.
 Host runtime result: 11,390 checks, including an acknowledged but ignored
 write for each of the six manual fields, every transfer failure, AUTO,
 reserved bits, retune and existing legacy paths. Hardware gate remains open.
+
+## Startup gain-history candidate
+
+Existing-firmware discriminator: manual14 telemetry -31.9 before restart,
+-33.6 after restart at14. Live -1->14 and retune at-1 then14 did not recover;
+restart at-1 then live14 recovered -31.97. This isolates a reproducible
+startup gain-history dependency; exact analog mechanism remains a hypothesis.
+
+Initialize E4000 to manual-1 LNA/mixer/IF baseline without changing requested
+mode/gain shadow. Subsequent run_e4000_tune restores that request before IQ.
+This prevents inherited prior gain from entering initial tuning/calibration.
+No gain ladder change; no production delays; other tuner paths unchanged.
+Host checks verify high inherited hardware gain resets low, request stays14,
+and tune restores14. RF acceptance remains pending.

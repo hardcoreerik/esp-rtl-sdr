@@ -322,7 +322,11 @@ int main() {
     fail_transfer = 0;
     // Captured E4000 bridge address is the shifted address 00c8, not 0064.
     wire.clear();
+    h.gain_mode=ESP_RTL_SDR_GAIN_MODE_MANUAL;h.gain_tenth_db=140;
+    e4000_registers[0x14]=14;e4000_registers[0x15]=1;
     CHECK(run_e4000_initialize_tuner(&h) == ESP_OK);
+    CHECK((e4000_registers[0x14]&0x0f)==0 && (e4000_registers[0x15]&1)==0);
+    CHECK(h.gain_tenth_db==140 && h.gain_mode==ESP_RTL_SDR_GAIN_MODE_MANUAL);
     size_t tuner_writes = 0;
     for (const auto &r : wire) {
         if (r.index == 0x0610 || r.index == 0x0600) {
@@ -340,7 +344,9 @@ int main() {
             ++tuner_writes;
         }
     }
-    CHECK(tuner_writes == 29);
+    CHECK(tuner_writes == 39);
+    CHECK((e4000_registers[0x14]&0x0f)==8);
+    CHECK(h.gain_tenth_db==140);
     const RtlControlRecord captured_vhf_bias = {0x00c8, 0x0610, 0x40, 2, {0x78, 0x03}};
     records_seen(&captured_vhf_bias, 1);
     // Enabled offset uses hardware IF once, preserving the requested IQ center.

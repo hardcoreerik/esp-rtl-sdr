@@ -1254,6 +1254,44 @@ static esp_err_t run_e4000_initialize_tuner(esp_rtl_sdr_handle *h)
     return ESP_OK;
 }
 
+// Diagnostic-only reads; disabled in production builds and other tuner paths.
+static void trace_e4000_start_state(esp_rtl_sdr_handle *h, const char *stage)
+{
+#if CONFIG_ESP_RTL_SDR_E4000_START_TRACE
+    if (h->profile != RtlProfileId::E4000) return;
+    for (const auto &r : kBlogV3TunerRepeaterOn) {
+        if (run_record(h,r,false)!=ESP_OK) {
+            ESP_LOGW(TAG,"E4000_START_REG stage=%s error=repeater",stage);
+            return;
+        }
+    }
+    const uint8_t regs[]={0x07,0x0d,0x10,0x11,0x12,0x14,0x15,0x16,0x17,
+                          0x1a,0x20,0x21,0x24,0x29,0x2a,0x2b,0x2c,0x2d,0x70,0x71,0x78};
+    const uint16_t address=tuner_i2c_value_for_handle(h);
+    for (uint8_t reg : regs) {
+        const RtlControlRecord pointer{address,0x0610,0x40,1,{reg}};
+        uint8_t value=0;
+        esp_err_t err=run_record(h,pointer,false);
+        if (err==ESP_OK) err=ctrl_submit_device(h,h->dev,0xc0,0,address,0x0600,nullptr,1,false,&value,1);
+        ESP_LOGI(TAG,"E4000_START_REG stage=%s target=tuner reg=0x%02x value=0x%02x result=%d",
+                 stage,reg,value,static_cast<int>(err));
+        if (err!=ESP_OK) return;
+    }
+    const uint8_t pages[]={0,1,1,1,1,1};
+    const uint8_t demod_regs[]={0x19,0x04,0x11,0x93,0x94,0xb1};
+    for (size_t i=0;i<std::size(pages);++i) {
+        uint8_t value=0;
+        const esp_err_t err=ctrl_submit_device(h,h->dev,0xc0,0,
+            static_cast<uint16_t>((demod_regs[i]<<8)|0x20),pages[i],nullptr,1,false,&value,1);
+        ESP_LOGI(TAG,"E4000_START_REG stage=%s target=demod page=%u reg=0x%02x value=0x%02x result=%d",
+                 stage,pages[i],demod_regs[i],value,static_cast<int>(err));
+        if (err!=ESP_OK) return;
+    }
+#else
+    (void)h;(void)stage;
+#endif
+}
+
 static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
 {
     ESP_LOGI(TAG, "init begin profile=%s records=%u", rtl_profile_name(h->profile),
@@ -1271,10 +1309,12 @@ static esp_err_t run_init_table(esp_rtl_sdr_handle *h)
                 return e;
             }
         }
+        trace_e4000_start_state(h,"after_demod_init");
         if (driver->initialize != nullptr) {
             const esp_err_t e = driver->initialize(h);
             if (e != ESP_OK) return e;
         }
+        trace_e4000_start_state(h,"after_tuner_init");
         // The shared prefix holds the USB FIFO in reset. Release it even when
         // acquisition metadata is disabled; E4000 PC capture frames 1887/1889.
         constexpr size_t count = std::size(kRtlInitTransfers);
@@ -4639,6 +4679,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                          rtl_profile_name(handle->profile));
             }
         }
+        trace_e4000_start_state(handle,"before_init");
         ret = run_init_table(handle);
         if (ret != ESP_OK) {
             break;
@@ -4652,6 +4693,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (ret != ESP_OK) {
             break;
         }
+        trace_e4000_start_state(handle,"after_sample_rate");
         // A start configuration can override the preferred rate. Use the rate
         // just programmed, not the previous stream's rate, for E4000 IF.
         if (handle->profile == RtlProfileId::E4000) {
@@ -4701,6 +4743,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
             break;
         }
 
+        trace_e4000_start_state(handle,"after_tune");
         ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
                               static_cast<uint32_t>(handle->cfg.transfer_bytes));
         if (ret != ESP_OK) {

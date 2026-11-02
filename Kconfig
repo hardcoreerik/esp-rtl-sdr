@@ -22,4 +22,11 @@ menu "ESP_RTL_SDR-ESP"
         bool "Verbose driver logs"
         default n
 
+    config ESP_RTL_SDR_E4000_START_TRACE
+        bool "Diagnostic E4000 startup register snapshots"
+        default n
+        help
+            Lab only: reads selected tuner/demod registers at startup stages.
+            Adds control transfers and changes timing. Keep off for releases.
+
 endmenu

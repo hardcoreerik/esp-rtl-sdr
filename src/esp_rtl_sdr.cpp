@@ -1259,6 +1259,12 @@ static void trace_e4000_start_state(esp_rtl_sdr_handle *h, const char *stage)
 {
 #if CONFIG_ESP_RTL_SDR_E4000_START_TRACE
     if (h->profile != RtlProfileId::E4000) return;
+#if CONFIG_ESP_RTL_SDR_E4000_START_TRACE_DELAY_ONLY
+    // Approximate the measured 98 ms snapshot span plus transaction overhead.
+    ESP_LOGI(TAG,"E4000_START_DELAY stage=%s delay_ms=110",stage);
+    vTaskDelay(pdMS_TO_TICKS(110));
+    return;
+#endif
     for (const auto &r : kBlogV3TunerRepeaterOn) {
         if (run_record(h,r,false)!=ESP_OK) {
             ESP_LOGW(TAG,"E4000_START_REG stage=%s error=repeater",stage);

@@ -25,14 +25,14 @@ This is consistent with the E4000 zero-IF receiver's DC/near-DC behavior, but
 does not identify the exact analog offset, calibration, or phase-noise source.
 Nooelec explicitly recommends offset tuning and I/Q correction for XTR/E4000
 zero-IF receivers in its [technical support FAQ](https://support.nooelec.com/hc/en-us/articles/360059643693-Technical-Support-FAQs).
-Those features are not implemented in this experimental E4000 path.
+That describes the older candidate. Offset tuning is now implemented; see [current profile](../../E4000_EXPERIMENTAL.md) and [PC reference](../../captures/e4000_xtr_2026-10-31/offset/README.md). I/Q correction and broader acceptance remain separate.
 
 Do not blank center bins or alter retained raw IQ to make the display look
 cleaner: a real station's carrier can also be centered. A proper comparison
 should acquire known-tone and source-off IQ, move the physical receiver LO
 away from the desired channel, apply a verified digital frequency correction,
 and confirm correct labels, tone amplitude, demodulation and raw metadata.
-Capture PC reference offset-tuning controls first. If tuner DC calibration is
+PC reference offset-tuning controls have since been captured (linked above). If tuner DC calibration is
 changed, use first-party before/after evidence and test neighboring signals.
 Keep the USB HAL panic correction and this signal-processing issue separate.
 

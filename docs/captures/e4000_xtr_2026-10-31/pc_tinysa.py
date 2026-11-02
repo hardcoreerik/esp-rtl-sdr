@@ -1,7 +1,7 @@
 import os
 import ctypes as C,json,time,pathlib,subprocess,hashlib
 import numpy as np,serial
-r=pathlib.Path('C:/Tools/esp-rtl-sdr-lab/captures/e4000-xtr-20261031/tinysa-paused-matrix');r.mkdir(exist_ok=False)
+r=(pathlib.Path(os.environ.get('ESP_RTL_SDR_PC_OUTPUT_ROOT','C:/Tools/esp-rtl-sdr-lab/captures/e4000-xtr-20261031'))/'tinysa-paused-matrix');r.mkdir(exist_ok=False)
 p=serial.Serial(port=None,baudrate=115200,timeout=.15,write_timeout=2);p.dtr=False;p.rts=False;p.port='COM7';p.open()
 events=[];d=C.c_void_p();cap=None;clog=None
 l=C.CDLL(r'C:\Tools\esp-rtl-sdr-lab\v4l-driver-1.4.0\x64\rtlsdr.dll')

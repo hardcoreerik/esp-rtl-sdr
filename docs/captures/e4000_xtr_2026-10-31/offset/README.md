@@ -38,6 +38,8 @@ $env:ESP_RTL_SDR_OFFSET_OUTPUT='C:/Tools/esp-rtl-sdr-lab/captures/NEW-offset-iq'
 python run_offset_reference.py
 $env:ESP_RTL_SDR_OFFSET_OUTPUT='C:/Tools/esp-rtl-sdr-lab/captures/NEW-offset-rates'
 python run_offset_valid_rates.py
+$env:ESP_RTL_SDR_OFFSET_OUTPUT='C:/Tools/esp-rtl-sdr-lab/captures/NEW-offset-tone'
+python pc_offset_tone.py
 ```
 
 Use the retained `decode_ep0.py PCAP EVENTS BUS ADDRESS OUT` lab decoder to
@@ -94,3 +96,5 @@ reception or ESP-IDF public API concurrency. OrcSDR integration, firmware build,
 matched before/after RF measurements, FM/RDS/AM, lifecycle tests and legacy
 dongle hardware regressions remain gates. The separate USB HAL panic also
 remains unresolved; this correction is not its fix.
+
+The averaged 2,048-point center-peak calculation remains lab-local; the committed runner does not reproduce that analysis automatically.

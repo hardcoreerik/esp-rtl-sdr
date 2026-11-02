@@ -74,7 +74,7 @@ each returned 262,144 bytes successfully; this was not physical hotplug.
 The user clarified that a telescopic 20 m antenna was attached during PC
 delivery testing. Its exact attachment time is unknown. All those IQ captures
 are qualified as live-antenna observations; raw no-source labels are superseded.
-The 250 kS/s block had substantial clipping, which cannot be attributed to a
+The 250 kS/s, 2.048, 2.4, 2.56 and 2.88 MS/s blocks had substantial clipping (see results.json), which cannot be attributed to a
 driver regression or quiet-input behavior from this setup.
 
 Tune requests at 1.11 through 1.20 GHz, including 1.135 GHz, returned -1 with

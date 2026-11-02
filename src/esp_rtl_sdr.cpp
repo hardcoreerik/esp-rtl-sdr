@@ -1045,7 +1045,8 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *h, usb_device_handle_t d
 
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest,
                              uint16_t wValue, uint16_t wIndex, const uint8_t *data,
-                             uint16_t wLength, bool expect_stall)
+                             uint16_t wLength, bool expect_stall,
+                             uint8_t *response = nullptr, uint16_t response_length = 0)
 {
     if (h == nullptr || h->ctrl_xfer == nullptr) {
         return ESP_RTL_SDR_ERR_USB;
@@ -1061,7 +1062,7 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *h, uint8_t bm, uint8_t bRequest
     const esp_err_t err =
         dev == nullptr ? ESP_RTL_SDR_ERR_USB
                        : ctrl_transfer_locked(h, dev, bm, bRequest, wValue, wIndex, data,
-                                              wLength, expect_stall, nullptr, 0);
+                                              wLength, expect_stall, response, response_length);
     xSemaphoreGive(h->ctrl_mutex);
     return err;
 }
@@ -1284,7 +1285,7 @@ static void trace_e4000_start_state(esp_rtl_sdr_handle *h, const char *stage)
         const RtlControlRecord pointer{address,0x0610,0x40,1,{reg}};
         uint8_t value=0;
         esp_err_t err=run_record(h,pointer,false);
-        if (err==ESP_OK) err=ctrl_submit_device(h,h->dev,0xc0,0,address,0x0600,nullptr,1,false,&value,1);
+        if (err==ESP_OK) err=ctrl_submit(h,0xc0,0,address,0x0600,nullptr,1,false,&value,1);
         ESP_LOGI(TAG,"E4000_START_REG stage=%s target=tuner reg=0x%02x value=0x%02x result=%d",
                  stage,reg,value,static_cast<int>(err));
         if (err!=ESP_OK) return;
@@ -1293,7 +1294,7 @@ static void trace_e4000_start_state(esp_rtl_sdr_handle *h, const char *stage)
     const uint8_t demod_regs[]={0x19,0x04,0x11,0x93,0x94,0xb1};
     for (size_t i=0;i<std::size(pages);++i) {
         uint8_t value=0;
-        const esp_err_t err=ctrl_submit_device(h,h->dev,0xc0,0,
+        const esp_err_t err=ctrl_submit(h,0xc0,0,
             static_cast<uint16_t>((demod_regs[i]<<8)|0x20),pages[i],nullptr,1,false,&value,1);
         ESP_LOGI(TAG,"E4000_START_REG stage=%s target=demod page=%u reg=0x%02x value=0x%02x result=%d",
                  stage,pages[i],demod_regs[i],value,static_cast<int>(err));
@@ -1394,7 +1395,7 @@ static esp_err_t run_sample_rate(esp_rtl_sdr_handle *h, uint32_t sample_rate_sps
     uint32_t observed = 0;
     for (unsigned i = 0; i < 4; ++i) {
         uint8_t value = 0;
-        const esp_err_t err = ctrl_submit_device(h, h->dev, 0xc0, 0,
+        const esp_err_t err = ctrl_submit(h, 0xc0, 0,
             static_cast<uint16_t>(((0x9fu + i) << 8) | 0x20u), 1,
             nullptr, 1, false, &value, 1);
         if (err != ESP_OK) {
@@ -1557,7 +1558,7 @@ static esp_err_t run_e4000_masked_write(esp_rtl_sdr_handle *h, uint8_t reg,
     esp_err_t err=run_record(h,pointer,false);
     if (err!=ESP_OK) return err;
     uint8_t previous=0;
-    err=ctrl_submit_device(h,h->dev,0xc0,0,address,0x0600,nullptr,1,false,&previous,1);
+    err=ctrl_submit(h,0xc0,0,address,0x0600,nullptr,1,false,&previous,1);
     if (err!=ESP_OK) return err;
     const RtlControlRecord write{address,0x0610,0x40,2,
         {reg,static_cast<uint8_t>((previous & ~mask) | (bits & mask))}};
@@ -1567,7 +1568,7 @@ static esp_err_t run_e4000_masked_write(esp_rtl_sdr_handle *h, uint8_t reg,
     err=run_record(h,pointer,false);
     if (err!=ESP_OK) return err;
     uint8_t observed=0;
-    err=ctrl_submit_device(h,h->dev,0xc0,0,address,0x0600,nullptr,1,false,&observed,1);
+    err=ctrl_submit(h,0xc0,0,address,0x0600,nullptr,1,false,&observed,1);
     if (err!=ESP_OK) return err;
     ESP_LOGI(TAG,"E4000_GAIN_REG reg=0x%02x before=0x%02x expected=0x%02x observed=0x%02x mask=0x%02x",
              reg,previous,write.data[1],observed,mask);

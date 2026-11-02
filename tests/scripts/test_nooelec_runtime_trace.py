@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-FUNCTIONS = """esp_rtl_sdr_get_tuner_gains esp_rtl_sdr_set_offset_tuning esp_rtl_sdr_get_offset_tuning_state apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
+FUNCTIONS = """ctrl_submit esp_rtl_sdr_get_tuner_gains esp_rtl_sdr_set_offset_tuning esp_rtl_sdr_get_offset_tuning_state apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
 map_tuner_record_for_profile run_record run_records run_profile_demod_if_restore
 run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_nooelec_gain_restore run_v3_leave_direct
 trace_e4000_start_state run_e4000_masked_write run_e4000_gain run_e4000_initialize_tuner run_init_table e4000_sample_rate_record_allowed rtl_tuner_driver_for_profile run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
@@ -31,7 +31,7 @@ def extract(source, name):
     if end is None:
         raise RuntimeError(f"Missing column-zero closing brace for {name}")
     signature = source[start.start():start.end() - 1].strip()
-    declaration = re.sub(r"\s*=\s*0(?=\s*[,)]\s*)", "", signature) + ";"
+    declaration = re.sub(r"\s*=\s*(?:0|nullptr)(?=\s*[,)]\s*)", "", signature) + ";"
     return declaration, source[start.start():start.end() + end.end()]
 
 
@@ -66,7 +66,9 @@ static unsigned checks = 0;
 static int64_t esp_timer_get_time() { return 0; }
 static void vTaskDelay(int) {}
 struct esp_rtl_sdr_handle {
-    void *dev = nullptr;
+    void *dev = reinterpret_cast<void *>(1);
+    void *ctrl_xfer = reinterpret_cast<void *>(1), *ctrl_mutex = reinterpret_cast<void *>(1);
+    bool device_gone = false;
     RtlProfileId profile = RtlProfileId::NooelecSmartV5;
     esp_rtl_sdr_state_t state = ESP_RTL_SDR_STATE_IDLE;
     uint32_t device_caps = 0;
@@ -100,10 +102,16 @@ static uint8_t e4000_registers[256] = {};
 static uint8_t e4000_pointer = 0;
 static int ignored_e4000_write = -1;
 
-static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
-    uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool) {
+static esp_err_t wire_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
+    uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool, uint8_t *response=nullptr, uint16_t response_length=0) {
     CHECK(length <= 8);
     RtlControlRecord r{value, index, type, length, {}};
+    if (response) {
+        CHECK(response_length==1 && length==1 && index==0x0600);
+        wire.push_back(r);
+        if(fail_transfer==wire.size()) return ESP_FAIL;
+        *response=e4000_registers[e4000_pointer];return ESP_OK;
+    }
     if (length) std::memcpy(r.data, data, length);
     wire.push_back(r);
     if (value==0x00c8 && index==0x0610 && length) {
@@ -126,6 +134,20 @@ static esp_err_t ctrl_submit_device(esp_rtl_sdr_handle *, void *, uint8_t, uint8
     RtlControlRecord r{value,index,0xc0,1,{}};wire.push_back(r);
     if (fail_transfer==wire.size()) return ESP_FAIL;
     *response=e4000_registers[e4000_pointer]; return ESP_OK;
+}
+using usb_device_handle_t = void *;
+constexpr int portMAX_DELAY=1;
+static esp_rtl_sdr_handle *disconnect_on_lock=nullptr;
+static int control_lock_depth=0;
+static void xSemaphoreTake(void *,int) {
+    CHECK(control_lock_depth==0);++control_lock_depth;
+    if(disconnect_on_lock){disconnect_on_lock->device_gone=true;disconnect_on_lock->dev=nullptr;disconnect_on_lock=nullptr;}
+}
+static void xSemaphoreGive(void *) { CHECK(control_lock_depth==1);--control_lock_depth; }
+static esp_err_t ctrl_transfer_locked(esp_rtl_sdr_handle *h,void *dev,uint8_t bm,uint8_t req,
+ uint16_t value,uint16_t index,const uint8_t *data,uint16_t len,bool stall,uint8_t *response,uint16_t response_len) {
+ CHECK(control_lock_depth==1 && dev!=nullptr);
+ return wire_submit(h,bm,req,value,index,data,static_cast<uint8_t>(len),stall,response,response_len);
 }
 // ACTUAL_DRIVER_FUNCTIONS
 static int last_tuner(uint8_t reg) {
@@ -247,6 +269,10 @@ int main() {
             pll_1a_seen = true;
     CHECK(pll_1a_seen);
     h = {}; h.profile=RtlProfileId::E4000; wire.clear();
+    uint8_t read_value=0;disconnect_on_lock=&h;
+    CHECK(ctrl_submit(&h,0xc0,0,0xc8,0x0600,nullptr,1,false,&read_value,1)==ESP_RTL_SDR_ERR_USB);
+    CHECK(wire.empty() && control_lock_depth==0);
+    h.device_gone=false;h.dev=reinterpret_cast<void *>(1);
     e4000_registers[0x1a]=0x49; e4000_registers[0x20]=0xa1;
     e4000_registers[0x16]=0xff; e4000_registers[0x17]=0xff;
     e4000_registers[0x14]=0xb0; e4000_registers[0x15]=0xc0;

@@ -52,7 +52,7 @@
       "q_mean": 127.57083892822266,
       "std": 105.36649410191103,
       "clip_fraction": 0.5426597595214844,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     },
     {
       "t": 1793489914.8943355,
@@ -71,7 +71,7 @@
       "q_mean": 127.94918823242188,
       "std": 4.778711318855152,
       "clip_fraction": 0.0,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     },
     {
       "t": 1793489920.222569,
@@ -90,7 +90,7 @@
       "q_mean": 127.89192962646484,
       "std": 5.125186680386166,
       "clip_fraction": 0.0,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     },
     {
       "t": 1793489925.4262772,
@@ -109,7 +109,7 @@
       "q_mean": 127.52172088623047,
       "std": 109.86656081141618,
       "clip_fraction": 0.6041679382324219,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     },
     {
       "t": 1793489930.6136007,
@@ -128,7 +128,7 @@
       "q_mean": 127.51161193847656,
       "std": 114.1079499508484,
       "clip_fraction": 0.6993522644042969,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     },
     {
       "t": 1793489935.769321,
@@ -147,7 +147,7 @@
       "q_mean": 127.44971466064453,
       "std": 110.77891758320783,
       "clip_fraction": 0.6221046447753906,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     },
     {
       "t": 1793489940.9058113,
@@ -166,7 +166,7 @@
       "q_mean": 127.51962280273438,
       "std": 96.54838068589021,
       "clip_fraction": 0.29878997802734375,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     },
     {
       "t": 1793489946.0378122,
@@ -185,7 +185,7 @@
       "q_mean": 127.43339538574219,
       "std": 48.66124258239347,
       "clip_fraction": 0.0,
-      "scope": "host delivery and uncalibrated no-source IQ; not loss proof"
+      "scope": "host delivery with live antenna (attachment time unknown); uncalibrated IQ, not loss proof"
     }
   ],
   "restarts": [

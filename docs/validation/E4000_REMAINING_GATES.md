@@ -1,3 +1,5 @@
+> Release 0.9.4: the historical one-line HAL workaround below is NOT shipped or recommended by this driver release. Error/CHHLTD sequencing needs independent SDK qualification. Use a separately qualified SDK; this driver does not modify it.
+
 # E4000 test completion audit
 
 Current audit: October 31, 2026. This is not release acceptance.
@@ -16,13 +18,13 @@ Driver branch `codex/lab-regression-20261029`; app branch
 | USB HAL error-before-halt panic | Matching saved crash; official upstream patch; 202 actual-function host checks | Host reproduction/correction passed; isolated patched firmware build and physical recovery pending approval |
 | FM audio / RDS / translated AM with offset candidate | Earlier non-offset firmware reception is documented, but does not prove current candidate | Pending antenna change and current-image RF evidence |
 | Existing Blog V4 and Nooelec SMArt v5 hardware regression | Legacy host traces pass; older physical results exist | Latest-driver hardware run still needed; COM17 must not be flashed |
-| E4000 gain / AGC controls | PC gain capture exists; current device capabilities exclude unimplemented controls | Not implemented; separate requested work remains |
+| E4000 gain / AGC controls | PC gain capture exists; manual gain and tuner AUTO implemented; fixed-gain restart pair improved to 0.088 dB | RTL AGC unsupported; broader gain/AUTO physical acceptance and console reliability remain open |
 | Automated reproducible evidence | PC scripts, hashes, app serial capture, rate verifier, screenshots and scoped host tests | Present for completed tests; physical hardware tests require fixture setup |
 | Publish / merge / release | New work remains local on branches; app manifest references local Git | Not landed; no release tag. Replace local dependency with published exact revision before distributable build |
 
 Evidence locations:
 
-- Driver PC reference and tone results: `../captures/e4000_xtr_2026-10-31/offset/`
+- Driver PC reference and tone results: `captures/e4000_xtr_2026-10-31/offset/`
   relative to the repository `docs` directory.
 - Driver crash diagnosis: `e4000-com39-2026-10-31/CRASH.md` and
   `usb-hal-host-check.json`.
@@ -35,3 +37,5 @@ Pending physical input: replace the tinySA RF fixture with the antenna that
 previously received FM/RDS, recording its identity. Pending approval: one
 isolated HAL-patched firmware build/flash/recovery loop. TinySA was last
 acknowledged OFF and paused. No additional flash was performed for this audit.
+
+Release 0.9.4: historical audit above is not current release acceptance. Experimental E4000 scope and current gain gates are documented in ../E4000_GAIN_CONTROLS.md. External SDK HAL workaround is excluded from release support.

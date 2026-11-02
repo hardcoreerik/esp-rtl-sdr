@@ -1,3 +1,5 @@
+> Release 0.9.4: the historical one-line HAL workaround below is NOT shipped or recommended by this driver release. Error/CHHLTD sequencing needs independent SDK qualification. Use a separately qualified SDK; this driver does not modify it.
+
 # COM39 USB host panic after Ham It Up setup
 
 October 31, 2026. User reported the Tab5 COM39 blue-screen crash after

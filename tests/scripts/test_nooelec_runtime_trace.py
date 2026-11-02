@@ -98,6 +98,7 @@ static std::vector<RtlControlRecord> wire;
 static size_t fail_transfer = 0;
 static uint8_t e4000_registers[256] = {};
 static uint8_t e4000_pointer = 0;
+static int ignored_e4000_write = -1;
 
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool) {
@@ -107,7 +108,7 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     wire.push_back(r);
     if (value==0x00c8 && index==0x0610 && length) {
         e4000_pointer=data[0];
-        if (length==2) e4000_registers[data[0]]=data[1];
+        if (length==2 && data[0]!=ignored_e4000_write) e4000_registers[data[0]]=data[1];
     }
     return fail_transfer == wire.size() ? ESP_FAIL : ESP_OK;
 }
@@ -284,7 +285,18 @@ int main() {
         CHECK(actual==-999 && wire.size()==i);
         CHECK(!h.streaming && h.pause_resubmit && h.state==ESP_RTL_SDR_STATE_FAULT);
     }
-    fail_transfer=0;h.streaming=false;wire.clear();
+    fail_transfer=0;
+    for (int reg : {0x1a,0x20,0x16,0x17,0x14,0x15}) {
+        wire.clear();ignored_e4000_write=reg;
+        e4000_registers[reg]=0xff;actual=-999;h.streaming=true;h.pause_resubmit=false;
+        h.state=ESP_RTL_SDR_STATE_STREAMING;
+        CHECK(run_e4000_gain(&h,190,false,&actual)==ESP_FAIL);
+        CHECK(actual==-999 && !h.streaming && h.pause_resubmit);
+        CHECK(h.state==ESP_RTL_SDR_STATE_FAULT);
+    }
+    ignored_e4000_write=-1;
+    e4000_registers[0x1a]=0x50;e4000_registers[0x20]=0xa0;
+    h.streaming=false;wire.clear();
     e4000_registers[0x16]=0xfe;e4000_registers[0x17]=0xff;
     CHECK(run_e4000_gain(&h,0,true,nullptr)==ESP_OK);
     CHECK(e4000_registers[0x16]==0x81 && e4000_registers[0x17]==0xd2);
@@ -328,7 +340,7 @@ int main() {
             ++tuner_writes;
         }
     }
-    CHECK(tuner_writes == 21);
+    CHECK(tuner_writes == 29);
     const RtlControlRecord captured_vhf_bias = {0x00c8, 0x0610, 0x40, 2, {0x78, 0x03}};
     records_seen(&captured_vhf_bias, 1);
     // Enabled offset uses hardware IF once, preserving the requested IQ center.

@@ -64,3 +64,22 @@ failure before publishing applied gain, and live failure behavior alongside
 legacy Nooelec controls. It does not prove electrical/RF behavior or real RTOS
 timing. Firmware build, cabled gain sweep, AUTO response, FM/RDS, restart and
 retune persistence remain physical gates before this feature is accepted.
+
+## Readback candidate, 2026-11-01
+
+The IF baseline candidate did not close RF acceptance: a completed short run
+still measured a -0.663 dB 14->16.5 step and -1.833 dB return-to-14 shift.
+Do not describe its host pass as a physical fix.
+
+The next candidate reads each controlled register back after masked writes,
+checks only the requested mask (excluding unrelated/status bits), and logs
+E4000_GAIN_REG with before/expected/observed/mask. A mismatch or read failure
+returns failure through existing fail-closed gain handling. This adds two
+EP0 transfers per controlled register and diagnostic log lines; timing and
+hardware behavior need qualification. It does not add a public raw-register
+write API or affect R820-family tuners. Reads after each write establish
+immediate state, not persistence through a later calibration or sample block.
+
+Host runtime result: 11,390 checks, including an acknowledged but ignored
+write for each of the six manual fields, every transfer failure, AUTO,
+reserved bits, retune and existing legacy paths. Hardware gate remains open.

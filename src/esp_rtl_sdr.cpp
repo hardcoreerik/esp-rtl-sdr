@@ -1509,7 +1509,17 @@ static esp_err_t run_e4000_masked_write(esp_rtl_sdr_handle *h, uint8_t reg,
     if (err!=ESP_OK) return err;
     const RtlControlRecord write{address,0x0610,0x40,2,
         {reg,static_cast<uint8_t>((previous & ~mask) | (bits & mask))}};
-    return run_record(h,write,false);
+    err=run_record(h,write,false);
+    if (err!=ESP_OK) return err;
+    // Verify the physical field before reporting gain applied.
+    err=run_record(h,pointer,false);
+    if (err!=ESP_OK) return err;
+    uint8_t observed=0;
+    err=ctrl_submit_device(h,h->dev,0xc0,0,address,0x0600,nullptr,1,false,&observed,1);
+    if (err!=ESP_OK) return err;
+    ESP_LOGI(TAG,"E4000_GAIN_REG reg=0x%02x before=0x%02x expected=0x%02x observed=0x%02x mask=0x%02x",
+             reg,previous,write.data[1],observed,mask);
+    return (observed & mask)==(bits & mask) ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t run_e4000_gain(esp_rtl_sdr_handle *h, int requested, bool automatic,

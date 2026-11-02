@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FUNCTIONS = """esp_rtl_sdr_get_tuner_gains esp_rtl_sdr_set_offset_tuning esp_rtl_sdr_get_offset_tuning_state apply_freq_correction_hz encode_r820_pll tuner_i2c_value_for_handle
 map_tuner_record_for_profile run_record run_records run_profile_demod_if_restore
 run_v3_direct_tune run_v3_enter_direct run_v3_tuner_reinit run_nooelec_gain_restore run_v3_leave_direct
-run_e4000_masked_write run_e4000_gain run_e4000_initialize_tuner run_init_table e4000_sample_rate_record_allowed rtl_tuner_driver_for_profile run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
+trace_e4000_start_state run_e4000_masked_write run_e4000_gain run_e4000_initialize_tuner run_init_table e4000_sample_rate_record_allowed rtl_tuner_driver_for_profile run_e4000_set_zero_if run_e4000_tune run_tune run_profile_tune frontend_rf_hz apply_r820t2_gain_records apply_gain_records
 apply_tuner_agc_auto_records apply_rtl_agc_records run_bandwidth_program""".split()
 
 
@@ -98,6 +98,7 @@ static std::vector<RtlControlRecord> wire;
 static size_t fail_transfer = 0;
 static uint8_t e4000_registers[256] = {};
 static uint8_t e4000_pointer = 0;
+static int ignored_e4000_write = -1;
 
 static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool) {
@@ -107,7 +108,7 @@ static esp_err_t ctrl_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     wire.push_back(r);
     if (value==0x00c8 && index==0x0610 && length) {
         e4000_pointer=data[0];
-        if (length==2) e4000_registers[data[0]]=data[1];
+        if (length==2 && data[0]!=ignored_e4000_write) e4000_registers[data[0]]=data[1];
     }
     return fail_transfer == wire.size() ? ESP_FAIL : ESP_OK;
 }
@@ -246,13 +247,15 @@ int main() {
             pll_1a_seen = true;
     CHECK(pll_1a_seen);
     h = {}; h.profile=RtlProfileId::E4000; wire.clear();
-    e4000_registers[0x1a]=0x59; e4000_registers[0x20]=0xa1;
+    e4000_registers[0x1a]=0x49; e4000_registers[0x20]=0xa1;
+    e4000_registers[0x16]=0xff; e4000_registers[0x17]=0xff;
     e4000_registers[0x14]=0xb0; e4000_registers[0x15]=0xc0;
     int actual=-999;
     CHECK(run_e4000_gain(&h, 420, false, &actual)==ESP_OK);
     CHECK(actual==420);
     CHECK(e4000_registers[0x1a]==0x50 && e4000_registers[0x20]==0xa0);
     CHECK(e4000_registers[0x14]==0xbe && e4000_registers[0x15]==0xc1);
+    CHECK(e4000_registers[0x16]==0x81 && e4000_registers[0x17]==0xd2);
     const size_t gain_transfers=wire.size();
     size_t gain_count=0; int gains[14]{};
     h.device_caps=ESP_RTL_SDR_CAP_GAIN;
@@ -263,8 +266,14 @@ int main() {
     const uint8_t expected_lna[]={0,1,4,5,6,7,8,9,10,11,12,13,14,14};
     for (size_t i=0;i<14;++i) {
         wire.clear();e4000_registers[0x14]=0xb0;e4000_registers[0x15]=0xc0;
+        e4000_registers[0x16]=static_cast<uint8_t>(i*17);
+        e4000_registers[0x17]=static_cast<uint8_t>(255-i*11);
+        const uint8_t reserved16=e4000_registers[0x16]&0x80;
+        const uint8_t reserved17=e4000_registers[0x17]&0xc0;
         CHECK(run_e4000_gain(&h,gains[i],false,&actual)==ESP_OK);
         CHECK(actual==gains[i]);
+        CHECK(e4000_registers[0x16]==(reserved16|0x01));
+        CHECK(e4000_registers[0x17]==(reserved17|0x12));
         CHECK(e4000_registers[0x14]==(0xb0|expected_lna[i]));
         CHECK(e4000_registers[0x15]==(0xc0|(i==13?1:0)));
     }
@@ -276,8 +285,21 @@ int main() {
         CHECK(actual==-999 && wire.size()==i);
         CHECK(!h.streaming && h.pause_resubmit && h.state==ESP_RTL_SDR_STATE_FAULT);
     }
-    fail_transfer=0;h.streaming=false;wire.clear();
+    fail_transfer=0;
+    for (int reg : {0x1a,0x20,0x16,0x17,0x14,0x15}) {
+        wire.clear();ignored_e4000_write=reg;
+        e4000_registers[reg]=0xff;actual=-999;h.streaming=true;h.pause_resubmit=false;
+        h.state=ESP_RTL_SDR_STATE_STREAMING;
+        CHECK(run_e4000_gain(&h,190,false,&actual)==ESP_FAIL);
+        CHECK(actual==-999 && !h.streaming && h.pause_resubmit);
+        CHECK(h.state==ESP_RTL_SDR_STATE_FAULT);
+    }
+    ignored_e4000_write=-1;
+    e4000_registers[0x1a]=0x50;e4000_registers[0x20]=0xa0;
+    h.streaming=false;wire.clear();
+    e4000_registers[0x16]=0xfe;e4000_registers[0x17]=0xff;
     CHECK(run_e4000_gain(&h,0,true,nullptr)==ESP_OK);
+    CHECK(e4000_registers[0x16]==0x81 && e4000_registers[0x17]==0xd2);
     CHECK(e4000_registers[0x1a]==0x59 && e4000_registers[0x20]==0xa1);
     // E4000 alone enables both ADCs and zero-IF before clearing the NCO.
     h = {}; h.profile = RtlProfileId::E4000; wire.clear();
@@ -300,7 +322,11 @@ int main() {
     fail_transfer = 0;
     // Captured E4000 bridge address is the shifted address 00c8, not 0064.
     wire.clear();
+    h.gain_mode=ESP_RTL_SDR_GAIN_MODE_MANUAL;h.gain_tenth_db=140;
+    e4000_registers[0x14]=14;e4000_registers[0x15]=1;
     CHECK(run_e4000_initialize_tuner(&h) == ESP_OK);
+    CHECK((e4000_registers[0x14]&0x0f)==0 && (e4000_registers[0x15]&1)==0);
+    CHECK(h.gain_tenth_db==140 && h.gain_mode==ESP_RTL_SDR_GAIN_MODE_MANUAL);
     size_t tuner_writes = 0;
     for (const auto &r : wire) {
         if (r.index == 0x0610 || r.index == 0x0600) {
@@ -318,7 +344,9 @@ int main() {
             ++tuner_writes;
         }
     }
-    CHECK(tuner_writes == 15);
+    CHECK(tuner_writes == 39);
+    CHECK((e4000_registers[0x14]&0x0f)==8);
+    CHECK(h.gain_tenth_db==140);
     const RtlControlRecord captured_vhf_bias = {0x00c8, 0x0610, 0x40, 2, {0x78, 0x03}};
     records_seen(&captured_vhf_bias, 1);
     // Enabled offset uses hardware IF once, preserving the requested IQ center.

@@ -88,14 +88,6 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 
 ---
 
-## Phase 3 — Gain / bias (implemented; physical qualification continues)
-
-- [x] USB capture per `docs/GAIN_BIAS_CAPTURE.md` (lab 2026-08-12)
-- [x] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only after measured sequences (0.7.5)
-- [ ] Update specific new gain/bias RF evidence after repeatable P4 re-soak; implementation is already documented.
-
----
-
 ## Phase 2.2 — Automated testing spine (TheOrc-aligned) (**complete**)
 
 - [x] Extract pure policy to `esp_rtl_sdr_policy.cpp` (host-linkable)
@@ -108,14 +100,16 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 
 ---
 
-## Phase 3 — Gain and bias-T (measured)
+## Phase 3 — Gain and bias-T (implemented; physical qualification continues)
+
+Historical USB captures from 2026-08-12 support the 0.7.5 Blog V4 implementation. Further P4 RF/soak evidence remains separately open; this is not a missing gain/bias implementation.
 
 - [x] Public fail-closed API surface + capture procedure (`docs/GAIN_BIAS_CAPTURE.md`)
 - [x] Independent USB capture of gain / bias on Blog V4 (PC USBPcap)
 - [x] Wire EP0 from capture into profile; `set_*` applies hardware (0.7.5)
 - [x] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only when measured tables wired
 - [x] Never paste librtlsdr gain tables (clean-room `measured_gain_bias_v4.hpp`)
-- [ ] P4 re-soak: `set_tuner_gain` / `set_bias_tee` on ESP host path
+- [ ] P4 re-soak: `set_tuner_gain` / `set_bias_tee` on ESP host path; add versioned RF observations after repeatable measurements.
 - [ ] Optional multimeter SMA DC for bias-T
 - [x] AUTO AGC capture (Tuner AUTO + RTL AGC, 0.7.8)
 - [ ] P4 re-soak of AUTO / RTL AGC from this tree

@@ -68,7 +68,8 @@ The initial E4000 implementation is intentionally narrow:
 
 A new tuner profile is a public capability addition and should ship in a new
 versioned driver release, not by changing the source behind an existing pinned
-OrcSDR dependency. The E4000 profile shipped in driver v0.9.4 as an implemented profile with
-partial physical acceptance. Any subsequent fixes or broader acceptance should
-ship in a new versioned release. OrcSDR then updates its immutable dependency
+OrcSDR dependency. The v0.9.4 release historically described E4000 bring-up
+as experimental. The current source implements the profile, with partial physical
+acceptance. Subsequent fixes or broader acceptance should ship in a new
+versioned release. OrcSDR then updates its immutable dependency
 pin after integration tests, preserving existing users' reproducible versions.

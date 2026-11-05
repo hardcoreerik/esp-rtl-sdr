@@ -13,7 +13,7 @@ This project **fails closed** on unsupported hardware. Narrow support is a
 | **Dongle** | RTL-SDR **Blog V4** | Primary tested receiver; exact `RTLSDRBlog` / `Blog V4` identity. |
 | **Blog V4L** | Implemented / hardware-tested | Distinct V4 Lite tuner/HF route; Tab5 tuning, streaming and RF reception records exist. |
 | **Nooelec** | NESDR SMArt V5 implemented / hardware-tested | Exact descriptor profile; P4 streaming/control accepted and 7.074 MHz FT8 decoded through OrcSDR; calibration and full-band coverage remain separate. See [capture record](captures/nooelec_v5_2026-09-30.md). |
-| **E4000 / Nooelec XTR** | Implemented / initial P4 FM/RDS verified | 64 MHz–1.7 GHz E4000 zero-IF path, 14 manual gain steps and tuner AUTO implemented. Initial Tab5 2.4 MS/s FM/RDS acceptance is recorded; extended hardware and long-soak qualification remains open. |
+| **E4000 / Nooelec XTR** | Implemented / initial P4 FM/RDS RF-validated | 64 MHz–1.7 GHz E4000 zero-IF path, 14 manual gain steps and tuner AUTO implemented. Initial Tab5 2.4 MS/s FM/RDS acceptance is recorded; extended hardware and long-soak qualification remains open. |
 | **V3c** | Implemented / hardware-tested | Native tuning, streaming, hotplug and HF Q route implemented; gain calibration remains separate. Earlier V3 hardware variants require individual evidence. |
 | **IQ** | Continuous CU8 multi-URB | CAP_STREAM |
 | **Tooling** | ESP-IDF ≥ 5.5, `esp32p4` | CI builds smoke on 5.5.4 |

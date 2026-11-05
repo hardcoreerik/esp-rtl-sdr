@@ -132,9 +132,11 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 - [x] Introduce a generic internal tuner-driver interface for new families; keep existing R820/R828 transfer sequences on the legacy path until they can be migrated with regression evidence.
 - [ ] Add FC0012, FC0013 and FC2580 tuner families from public datasheets and host-tested calculations.
 - [ ] Expand the known-device database and safely probe additional RTL2832U identities.
-- [ ] Blog V4: HF upconverter CAP, R828D input AUTO, notches
+- [x] Implement Blog V4 HF upconverter capability and route.
+- [ ] Complete R828D input AUTO/notch tuning and independent front-end measurements.
 - [ ] `NEED_HF` becomes fully functional (not LO-only)
-- [ ] Direct sampling only if separate evidence (V4 uses upconverter)
+- [x] Implement first-party-captured V3/V3c and Nooelec direct-Q sampling (V4 uses upconverter).
+- [ ] Extend physical LF and frequency-edge RF acceptance on supported receiver models.
 
 ---
 

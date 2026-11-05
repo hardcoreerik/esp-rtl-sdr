@@ -109,7 +109,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Tab5 / Waveshare Blog V4 RF | **Provenance** | OrcSDR |
 | Re-verify from *this* tree on hardware | **Planned** | |
 | Gain / bias-T hardware | **Implemented** (tables from PC USBPcap) | Lab 2026-08-12; **not** yet Hardware-verified from *this* tree on P4; no multimeter DC |
-| Blog V4 HF/LF upconverter path CAP | **Implemented; sub-500 kHz experimental (unreleased)** | Exact-Hz RF requests from 24 kHz; RF&lt;28.8 MHz → tuner RF+28.8e6; RF≤28.8 MHz → Cable-2/GPIO5-low. Host tests cover 24 kHz, DDH47 147.300 kHz, exact-Hz preservation, band edges, and VHF/UHF regression. Physical LF reception remains open. |
+| Blog V4 HF/LF upconverter path CAP | **Implemented / RF evidence is band-specific** | Exact-Hz RF requests down to 24 kHz and RF+28.8 MHz route are implemented. Physical 7.074 MHz FT8 through OrcSDR has been accepted on V4 (2026-10-09); LF below 500 kHz and other frequency-edge calibration remain unqualified. |
 | Blog V3/V3c direct-sampling LF/HF | **Implemented / RF acceptance frequency-specific** | PC controls/IQ captured Q-route points from LF through 23.999999 MHz, and owner accepted 7.074 MHz FT8 through OrcSDR on 2026-10-09. Direct sampling bypasses tuner gain. Not every LF edge or signal quality has been qualified. |
 | R828D stage gain / input / notches | **Planned** | |
 | Adaptive USB URB | **Planned** | |

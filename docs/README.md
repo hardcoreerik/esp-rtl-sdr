@@ -11,6 +11,8 @@ When docs disagree, PROJECT_TRUTH wins.
 |---|---|
 | [AI_DEVELOPMENT_DISCLOSURE.md](AI_DEVELOPMENT_DISCLOSURE.md) | Human-directed, AI-assisted; trust rituals |
 | [DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) | Accuracy rules; no planned-as-done |
+| [STATUS_TERMINOLOGY.md](STATUS_TERMINOLOGY.md) | Implementation, verification and experimental wording policy |
+| [DOCUMENTATION_STATUS_AUDIT_2026-11-04.md](DOCUMENTATION_STATUS_AUDIT_2026-11-04.md) | Cross-page current-status correction record |
 | [CLEAN_ROOM.md](CLEAN_ROOM.md) | Clean-room USB rules |
 | [../SECURITY.md](../SECURITY.md) | Vulnerability reporting |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | PR / clean-room checklist |

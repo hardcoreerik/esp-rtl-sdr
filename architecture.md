@@ -1,5 +1,7 @@
 # Architecture — esp_rtl_sdr
 
+**Current source architecture (reviewed 2026-11-04):** one shared RTL2832U high-speed USB/IQ transport supports model-aware tuning across five implemented device profiles. The driver provides radio hardware capabilities; consumer applications such as OrcSDR implement their own audio and digital protocol decoders. [Profile matrix](docs/PROFILES.md) · [current truth](PROJECT_TRUTH.md) · [OrcSDR native decoder inventory](https://github.com/hardcoreerik/OrcSDR/blob/main/docs/NATIVE_DECODER_INVENTORY.md).
+
 ## Goals
 
 1. Provide a **production-minded** ESP-IDF USB Host client for RTL2832U-class SDR dongles.
@@ -41,18 +43,21 @@
 │  rate quantize · passport soak · reentrancy · fail-closed│
 └────────────────────────────┬─────────────────────────────┘
                              │
-        ┌────────────────────┼────────────────────┐
-        ▼                    ▼                    ▼
- ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
- │ Profile     │      │ Profile     │      │ Profile     │
- │ blog_v4     │      │ r820t2      │      │ future…     │
- │ (R828D)     │      │ (planned)   │      │             │
- │ init/rate/  │      │             │      │             │
- │ tune tables │      │             │      │             │
- └─────────────┘      └─────────────┘      └─────────────┘
+        ├─────────────────────┬──────────────────────┐
+        ▼                     ▼                      ▼
+  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+  │ blog_v4        │  │ blog_v4l       │  │ blog_v3        │
+  │ R828D          │  │ R828S          │  │ V3c/R820 family│
+  └────────────────┘  └────────────────┘  └────────────────┘
+        ├─────────────────────┬──────────────────────┐
+        ▼                     ▼
+  ┌────────────────┐  ┌────────────────────┐
+  │nooelec_smart_v5│  │e4000_experimental  │
+  │R820 / direct-Q │  │historic ID; E4000  │
+  └────────────────┘  └────────────────────┘
 ```
 
-**Today:** only the **blog_v4** profile is populated (`private/transfers_blog_v4.hpp`).
+**Current source implements all five named profiles:** `blog_v4`, `blog_v4l`, `blog_v3` (V3c hardware-qualified), `nooelec_smart_v5` and `e4000_experimental`. The last profile name is historical, not a claim of missing implementation. The maintainer confirms E4000/XTR works as an OrcSDR receiver **within its supported RF tuning range**; OrcSDR intentionally refuses out-of-range tuning even if the target dashboard opens. That is application-level capability gating, not a driver failure. Complete band-edge characterization, calibration and cross-device soak testing remain independent evidence goals.
 
 ---
 
@@ -123,9 +128,9 @@ RTL2832U bulk IN 0x81 (HS, 512 B MPS)
 
 ## Sample rate and frequency policy
 
-- Rates are **allowlisted** (`ESP_RTL_SDR_RATE_*`). Unsupported rates fail validation.
-- Frequency for `CUSTOM_HZ` is clamped/quantized (`normalize_frequency`).
-- Expanding rates requires measurement + table updates in the active profile — not free-form PLL guessing in public API.
+- Sample rates are supported within documented continuous hardware windows (225001–300000 and 900001–3.2 million SPS), quantized to actual RTL2832 rates; recommended `ESP_RTL_SDR_RATE_*` constants are convenient presets, **not** the only supported rates.
+- Frequency for `CUSTOM_HZ` is quantized to the driver's global frequency quantum. Start/retune operations then validate against the selected receiver's RF range, and PLL planning may reject further requests; out-of-range input must not silently appear to tune.
+- New rate/tuner windows require measured profile support and host/device acceptance, not guesses from a different dongle.
 
 ---
 
@@ -158,11 +163,11 @@ Each profile supplies:
 | Tune / PLL | Frequency packing for that tuner |
 | Optional | Gain tables, bias-T, direct sampling — only when evidenced |
 
-Unknown devices: **fail closed** with `ERR_NOT_V4` / `ERR_UNSUPPORTED` (error names may broaden to `ERR_NOT_SUPPORTED_DEVICE` in a later API revision).
+Unknown devices **fail closed** with the current unsupported-device error contract. Do not infer compatibility from generic RTL2832U VID/PID; see [API reference](docs/API_REFERENCE.md) for exact error values.
 
 ### “Any RTL2832U”
 
-Architecture supports growth. **Marketing and Project_truth** only claim profiles that are measured. First profile remains **RTL-SDR Blog V4 (R828D)**.
+Architecture supports controlled growth. Current claimed profiles are **Blog V4, V4L, V3c, Nooelec NESDR SMArt V5 and E4000/XTR**, with model-specific capabilities and explicitly scoped RF acceptance. Blog V4 was the first profile, **not the only populated profile**.
 
 ---
 

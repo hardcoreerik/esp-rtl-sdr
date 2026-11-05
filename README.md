@@ -7,7 +7,7 @@
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
-**Not a librtlsdr port.** Clean-room V4/V4L/V3c/Nooelec V5 profiles · implemented E4000/XTR profile · standalone ESP-IDF USB/IQ API · fail-closed lifecycle
+**Not a librtlsdr port.** Five implemented profiles: Blog V4, V4L, V3c, Nooelec SMArt V5 and E4000/XTR · standalone ESP-IDF USB/IQ API · fail-closed lifecycle
 
 **Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. See [status terminology](docs/STATUS_TERMINOLOGY.md) and the [2026-11-04 documentation audit](docs/DOCUMENTATION_STATUS_AUDIT_2026-11-04.md) for the difference between implementation and physical acceptance. This is **0.9.4**, pre-1.0 — early, public, honest. See the [0.9.4 release notes](docs/releases/v0.9.4.md) for the capture-derived Nooelec profile and its remaining hardware acceptance checks.
 
@@ -57,7 +57,7 @@ On a P4, the **host USB and RAM path is the hard part**. We lean into that:
 | Fixed rate list or “set and hope” | Windows + quantize + optional **on-device passport** |
 | Call set_freq from anywhere | **Hot retune** drains bulk before EP0; **async from callbacks** |
 | Opaque internals | Explicit **state machine**, error codes, reentrancy rules |
-| “Supports every RTL” marketing | **Fail closed** on unknown sticks; one measured profile first |
+| “Supports every RTL” marketing | **Fail closed** on unknown sticks; five explicitly implemented model-aware profiles instead of V4-only assumptions |
 | App figures out “is RF dead?” | **Health** narrative (USB / app / RF clip / weak) |
 
 We are **not** chasing full librtlsdr feature parity (tuner IF filter still open). We are chasing a driver that is **safe to live inside a real FreeRTOS product**.
@@ -69,7 +69,7 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | Item | Notes |
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | RTL-SDR Blog **V4**, **V4 Lite (V4L)** and **V3c**, plus **Nooelec NESDR SMArt V5**, are implemented and physically exercised on ESP32-P4. The **E4000 / Nooelec XTR** profile is implemented with initial Tab5 FM/RDS reception evidence; broader frequency, gain and soak acceptance is open. See [profiles](docs/PROFILES.md) and [current evidence](PROJECT_TRUTH.md). Arbitrary devices sharing `0bda:2838` are not accepted by identity alone. |
+| **Dongle** | RTL-SDR Blog **V4, V4 Lite (V4L), V3c**, **Nooelec NESDR SMArt V5** and **Nooelec XTR/E4000** each have implemented, model-aware driver profiles. E4000 is maintainer-confirmed working in OrcSDR **within its supported 64 MHz–1.7 GHz tuner range**; out-of-range dashboard requests do not tune. Initial Tab5 E4000 FM/RDS evidence exists; broad gain and RF/soak calibration remains open. See [profiles](docs/PROFILES.md) and [project truth](PROJECT_TRUTH.md). Unknown devices sharing `0bda:2838` are not accepted by identity alone. |
 | **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
@@ -77,6 +77,18 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 **Why that is intentional:** [`docs/SCOPE.md`](docs/SCOPE.md).
 
 ---
+
+## Five native driver profiles
+
+| Hardware | Implemented driver features | Physical acceptance scope |
+|---|---|---|
+| RTL-SDR Blog **V4** | R828D, HF upconverter, model gain/controls | Tab5 RF/FT8 and tuner/control evidence |
+| RTL-SDR Blog **V4 Lite** | R828S, HF upconverter and model controls | Tab5 streaming, FT8 and tuner/control evidence |
+| RTL-SDR Blog **V3c** | R820-family, Q direct sampling and native tuning | Tab5 streaming/RDS/FT8 evidence; earlier V3 boards not blanket-qualified |
+| **Nooelec NESDR SMArt V5** | R820-family, Q direct sampling and native controls | Tab5 IQ/FT8 and control evidence |
+| **Nooelec XTR / E4000** | Zero-IF tuning, manual gain ladder and tuner AUTO | **Working in-range within OrcSDR**, initial Tab5 FM/RDS recorded; full band/gain/soak characterization open |
+
+The driver supplies **IQ and hardware controls**, not OrcSDR's digital decoders. For the distinct native P4 protocol implementations—ADS-B, P25, Meshtastic, POCSAG, FT8/FT4, JS8, SSTV, ACARS/VDL2, RDS and more—see the [OrcSDR native decoder inventory](https://github.com/hardcoreerik/OrcSDR/blob/main/docs/NATIVE_DECODER_INVENTORY.md).
 
 ## Quick start — try the smoke app
 
@@ -239,7 +251,7 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | API | Purpose |
 |---|---|
 | `refresh_device_list` · `get_device_count` · `get_device_at` | Candidates |
-| `select_device` · `select_device_serial` | Choose Blog V4 by index/serial |
+| `select_device` · `select_device_serial` | Select a supported device by index/serial; the matched model-specific profile provides its tuning/capability policy |
 
 ### Gain, bias & HF (0.7.5–0.7.8 Blog V4)
 

@@ -9,7 +9,7 @@ The [status terminology](docs/STATUS_TERMINOLOGY.md) separates implemented devic
 
 Snapshot date: **2026-11-04** (documentation reconciliation; the hardware evidence retains its original dates)
 Version: **0.9.4** (pre-1.0). Blog V4, V4L, V3c and Nooelec SMArt V5 profiles are implemented, with documented M5Stack Tab5 streaming/control and receiver RF evidence across the OrcSDR and standalone programs. The E4000/XTR profile is also **implemented**; an initial Tab5 FM/RDS reception result is recorded, while complete band, gain, soak and RF-calibration acceptance remains open. Absolute gain calibration, analog passbands, loaded bias-tee current and LF reception at all endpoints are not broadly measured. See the dated evidence entries and [receiver profiles](docs/PROFILES.md); support implementation and measurement coverage are separate claims.
-The **E4000 profile is implemented** with model-specific probe, zero-IF tuning, IQ streaming, a captured manual gain ladder and tuner AUTO. The October 31 Tab5 record includes initial FM audio/RDS reception; remaining physical acceptance is explicitly scoped below.
+The **E4000 profile is implemented** with model-specific probe, zero-IF tuning, IQ streaming, a captured manual gain ladder and tuner AUTO. The October 31 Tab5 record includes initial FM audio/RDS reception; remaining physical acceptance is explicitly scoped below. **Maintainer-confirmed in OrcSDR (2026-11-04):** E4000 works at frequencies its tuner supports. A dashboard targeting an unreachable band (e.g., AM broadcast without an appropriate converter) may open but OrcSDR does **not** send an invalid tune. This is a valid frequency-capability guard, not a failed integration; no E4000 HF reception is implied.
 
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
@@ -34,7 +34,7 @@ Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DIS
 | Stand-alone re-soak from this tree on P4 | **Still open** — procedure/template ready ([docs/SOAK.md](docs/SOAK.md)); filled log not yet in tree |
 | Full API reference (params/returns/examples) | **Implemented** — [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Intentional hardware scope documented | **Implemented** — [docs/SCOPE.md](docs/SCOPE.md) |
-| Git tags + GitHub Release for 0.7.3 | **Implemented** — tags `v0.5.0`…`v0.7.3`; GitHub Releases |
+| Git tags + published releases | **Implemented** — successive 0.x tags through v0.9.4; [releases](https://github.com/hardcoreerik/esp-rtl-sdr/releases) |
 
 If marketing copy contradicts this table, open a `truth:` issue.
 
@@ -82,7 +82,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | ESP-IDF P4 compile CI | **Implemented** | `examples/p4_serial_smoke` idf.py build esp32p4 |
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
-| E4000 profile | **Implemented / initial Tab5 RF-validated** | Nooelec XTR/E4000 detection, zero-IF tune/stream, PLL and native gain control path are implemented. The 2026-10-31 COM39 report records 2.4 MS/s IQ, user-heard FM and KZEL RDS. Manual gain steps and tuner AUTO exist; tuner bandwidth, RTL AGC, bias tee, direct sampling and HF upconversion are not exposed. Longer soak, RF calibration, band edges, updated image and full gain/AGC acceptance remain open. [Detailed E4000 record](docs/E4000_PROFILE.md). |
+| E4000 profile | **Implemented / in-range OrcSDR operation maintainer-confirmed** | Nooelec XTR/E4000 identity, zero-IF tune/stream, PLL, manual gain and tuner AUTO are implemented. October 31 COM39 2.4 MS/s FM audio/RDS is recorded; on 2026-11-04 the maintainer confirmed valid in-range OrcSDR operation with out-of-range dashboard tunes refused. Complete gain calibration, band-edge characterization, hardware lifecycle and long soak remain open. Tuner bandwidth, RTL AGC, bias tee, direct sampling and HF upconverter are not exposed. [E4000 profile](docs/E4000_PROFILE.md). |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
 | Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; P4 re-soak open |

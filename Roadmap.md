@@ -2,6 +2,8 @@
 
 Evidence labels match `PROJECT_TRUTH.md`. Vision: `docs/VISION.md`.
 
+**Current state (2026-11-04):** Blog V4, V4 Lite, V3c, Nooelec NESDR SMArt V5 and E4000/XTR device profiles are implemented. E4000 can already stream and tune in OrcSDR on frequencies it supports (maintainer confirmation); out-of-range bands are deliberately rejected by OrcSDR. Future roadmap items target more tuner families, extended RF calibration and robust cross-device/host behavior—not first implementation of those five receiver models. Completed early phases below are retained for release history.
+
 ---
 
 ## North star
@@ -11,7 +13,7 @@ A stand-alone ESP-IDF component that:
 1. Streams reliable CU8 IQ from RTL2832U-class dongles on ESP32-P4 HS USB.
 2. Exposes discoverable API (freq, rate, gain, ppm, bias as capabilities).
 3. Acts as a **dongle nervous system**: intent, health, on-host passport.
-4. Supports multiple measured profiles (Blog V4 first).
+4. Supports multiple model-aware profiles (Blog V4 was first, with V4L, V3c, Nooelec V5 and E4000/XTR since added).
 5. Earns trust via docs, soak logs, fail-closed behavior.
 
 ---
@@ -81,16 +83,8 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 - [x] Runtime constants documented (ring/cores/health period)
 - [x] Commercial licensing process clarified
 - [x] GitHub Release + tracking issues
-- [ ] Phase 3 gain/bias CAP (lab capture — not closable by docs)
+- [x] Implement gain/bias capabilities where supported using first-party capture evidence; wider P4 gain/bias and electrical measurements remain a separate acceptance task.
 - [ ] Filled soak log from this tree (lab run)
-
----
-
-## Phase 3 — Gain / bias (next hardware)
-
-- [x] USB capture per `docs/GAIN_BIAS_CAPTURE.md` (lab 2026-08-12)
-- [x] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only after measured sequences (0.7.5)
-- [ ] Update PROJECT_TRUTH to Hardware-verified after P4 re-soak
 
 ---
 
@@ -106,14 +100,16 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 
 ---
 
-## Phase 3 — Gain and bias-T (measured)
+## Phase 3 — Gain and bias-T (implemented; physical qualification continues)
+
+Historical USB captures from 2026-08-12 support the 0.7.5 Blog V4 implementation. Further P4 RF/soak evidence remains separately open; this is not a missing gain/bias implementation.
 
 - [x] Public fail-closed API surface + capture procedure (`docs/GAIN_BIAS_CAPTURE.md`)
 - [x] Independent USB capture of gain / bias on Blog V4 (PC USBPcap)
 - [x] Wire EP0 from capture into profile; `set_*` applies hardware (0.7.5)
 - [x] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only when measured tables wired
 - [x] Never paste librtlsdr gain tables (clean-room `measured_gain_bias_v4.hpp`)
-- [ ] P4 re-soak: `set_tuner_gain` / `set_bias_tee` on ESP host path
+- [ ] P4 re-soak: `set_tuner_gain` / `set_bias_tee` on ESP host path; add versioned RF observations after repeatable measurements.
 - [ ] Optional multimeter SMA DC for bias-T
 - [x] AUTO AGC capture (Tuner AUTO + RTL AGC, 0.7.8)
 - [ ] P4 re-soak of AUTO / RTL AGC from this tree
@@ -124,6 +120,8 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 ---
 
 ## Phase 4 — Tuner-family expansion + RF path depth
+
+All five current profiles already operate at the driver layer. E4000/XTR has initial Tab5 FM/RDS logs and maintainer-confirmed in-range OrcSDR operation. The remaining tasks concern **new families, measured performance and long-run recovery**, not a missing E4000 driver.
 
 - [x] Keep the shared RTL2832U stream path separate from tuner-specific control.
 - [x] Implement E4000/XTR identity, PLL/tune, zero-IF IQ streaming and native gain/AUTO controls.
@@ -142,7 +140,7 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 
 ## Phase 5 — Reliability + host superpowers
 
-- [ ] Unplug/replug recover without reboot
+- [x] Recover unplug/replug without reboot in the documented Nooelec Tab5 test (ten cycles, v0.9.3). Wider dongle/hub/failure and soak acceptance remains open.
 - [ ] Five-minute soak artifacts (960k / 2.048M)
 - [ ] Adaptive URB size/count from passport
 - [ ] Auto rate downshift when health = USB_STARVING

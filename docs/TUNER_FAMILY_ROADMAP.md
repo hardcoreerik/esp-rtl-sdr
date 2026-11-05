@@ -39,7 +39,7 @@ verified until real reception and lifecycle tests have been run on that hardware
 |---|---|---|
 | R820T / R820T2 / R860 | Preserve and consolidate the current profile-specific implementation | Existing hardware coverage remains the regression baseline |
 | R828D / R828S | Keep separate board profiles and RF-routing policy | Existing V4/V4L behavior must remain unchanged |
-| E4000 | Experimental implementation, initially targeting Nooelec SMArTee XTR v5 | Host math/profile tests and ESP-IDF build first; physical RF acceptance pending |
+| E4000 | Implemented XTR profile with native manual gain/AUTO | First Tab5 FM/RDS and targeted gain evidence recorded; full band-edge, soak and current-image acceptance remain open |
 | FC0012 | Add tuner-specific identification, PLL and RF path | Public datasheet-derived host tests; hardware validation later |
 | FC0013 | Add tuner-specific identification, PLL and RF path | Public datasheet-derived host tests; hardware validation later |
 | FC2580 | Add tuner-specific identification, PLL and RF path | Public datasheet-derived host tests; hardware validation later |
@@ -57,8 +57,9 @@ The initial E4000 implementation is intentionally narrow:
 - Use the E4000's own register map and fractional-N PLL plan.
 - Reuse the existing RTL2832U USB and IQ streaming engine.
 - Limit RF requests to the published 64 MHz–1.7 GHz tuner range.
-- Do not expose tuner gain, tuner AGC, tuner bandwidth, HF upconverter,
-  direct-sampling or bias-tee capabilities until implemented and justified.
+- E4000 manual gain and tuner AUTO are implemented from first-party captures.
+  Do not expose unsupported RTL AGC, tuner bandwidth, HF upconverter,
+  direct-sampling or bias-tee capabilities.
 - Treat the 28.8 MHz tuner reference as an experimental board assumption.
 - Do not alter the current R820-family transfer tables or profile selection
   rules for already-known dongles.
@@ -69,5 +70,5 @@ A new tuner profile is a public capability addition and should ship in a new
 versioned driver release, not by changing the source behind an existing pinned
 OrcSDR dependency. The current plan is to target the next minor pre-1.0 driver
 release after CI and review pass. OrcSDR can then pin that exact release and
-enable the experimental profile without changing the version used by existing
-users.
+enable an implemented profile with appropriately scoped validation claims
+without changing the version used by existing users.

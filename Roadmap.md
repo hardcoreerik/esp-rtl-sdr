@@ -2,6 +2,8 @@
 
 Evidence labels match `PROJECT_TRUTH.md`. Vision: `docs/VISION.md`.
 
+**Current state (2026-11-04):** Blog V4, V4 Lite, V3c, Nooelec NESDR SMArt V5 and E4000/XTR device profiles are implemented. E4000 can already stream and tune in OrcSDR on frequencies it supports (maintainer confirmation); out-of-range bands are deliberately rejected by OrcSDR. Future roadmap items target more tuner families, extended RF calibration and robust cross-device/host behavior—not first implementation of those five receiver models. Completed early phases below are retained for release history.
+
 ---
 
 ## North star
@@ -11,7 +13,7 @@ A stand-alone ESP-IDF component that:
 1. Streams reliable CU8 IQ from RTL2832U-class dongles on ESP32-P4 HS USB.
 2. Exposes discoverable API (freq, rate, gain, ppm, bias as capabilities).
 3. Acts as a **dongle nervous system**: intent, health, on-host passport.
-4. Supports multiple measured profiles (Blog V4 first).
+4. Supports multiple model-aware profiles (Blog V4 was first, with V4L, V3c, Nooelec V5 and E4000/XTR since added).
 5. Earns trust via docs, soak logs, fail-closed behavior.
 
 ---
@@ -81,16 +83,16 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 - [x] Runtime constants documented (ring/cores/health period)
 - [x] Commercial licensing process clarified
 - [x] GitHub Release + tracking issues
-- [ ] Phase 3 gain/bias CAP (lab capture — not closable by docs)
+- [x] Implement gain/bias capabilities where supported using first-party capture evidence; wider P4 gain/bias and electrical measurements remain a separate acceptance task.
 - [ ] Filled soak log from this tree (lab run)
 
 ---
 
-## Phase 3 — Gain / bias (next hardware)
+## Phase 3 — Gain / bias (implemented; physical qualification continues)
 
 - [x] USB capture per `docs/GAIN_BIAS_CAPTURE.md` (lab 2026-08-12)
 - [x] Enable `CAP_GAIN` / `CAP_BIAS_TEE` only after measured sequences (0.7.5)
-- [ ] Update PROJECT_TRUTH to Hardware-verified after P4 re-soak
+- [ ] Update specific new gain/bias RF evidence after repeatable P4 re-soak; implementation is already documented.
 
 ---
 
@@ -125,6 +127,8 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 
 ## Phase 4 — Tuner-family expansion + RF path depth
 
+All five current profiles already operate at the driver layer. E4000/XTR has initial Tab5 FM/RDS logs and maintainer-confirmed in-range OrcSDR operation. The remaining tasks concern **new families, measured performance and long-run recovery**, not a missing E4000 driver.
+
 - [x] Keep the shared RTL2832U stream path separate from tuner-specific control.
 - [x] Implement E4000/XTR identity, PLL/tune, zero-IF IQ streaming and native gain/AUTO controls.
 - [x] Record initial ESP32-P4 Tab5 FM/RDS reception with the E4000 profile (2026-10-31).
@@ -142,7 +146,7 @@ External review @ v0.7.3. Map: `docs/REVIEW_GAPS_2026-08.md`.
 
 ## Phase 5 — Reliability + host superpowers
 
-- [ ] Unplug/replug recover without reboot
+- [x] Recover unplug/replug without reboot in the documented Nooelec Tab5 test (ten cycles, v0.9.3). Wider dongle/hub/failure and soak acceptance remains open.
 - [ ] Five-minute soak artifacts (960k / 2.048M)
 - [ ] Adaptive URB size/count from passport
 - [ ] Auto rate downshift when health = USB_STARVING

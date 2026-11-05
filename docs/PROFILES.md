@@ -43,7 +43,7 @@ The profile deliberately bypasses the R828D/R820-family initialization, tune tab
 | Tuner | R828D @ I2C `0x74` |
 | HF | RF<28.8 MHz -> LO+28.8e6; RF<=28.8 MHz -> Cable-2 + GPIO5-low |
 | Caps | Full library set including STREAM, HF_UPCONVERTER, GAIN, BIAS_TEE |
-| Hardware | Maintainer can soak Blog V4; GPIO/RF acceptance still open |
+| Hardware | Blog V4 has Tab5 FM/RDS and 7.074 MHz FT8 acceptance, plus observed band-select/retune cycles; analog gain calibration, GPIO electrical measurements and all-band soak are separate evidence tasks. |
 | Tuner bandwidth | Live bandwidth AUTO, 200k, 300k, 500k, 1.0M, 1.8M, 2.4M, AUTO **hardware-tested** on the M5 Tab5 at 96.1 MHz (2026-09-28, with the read-after-write fix: one cold boot and one unplug/replug): the carrier stays within +/-1.4 kHz of the request at every stage and final AUTO matches the cold-boot passband within 0.4 dB. **Not measured before the fix**; the V4L, which shares these plan words, shifted -312..+386 kHz without it. Plan values are vendor-driver control choices derived from captures, not measured analog passbands. See `docs/captures/v3c_live_bandwidth_2026-09-28.md`. |
 
 ### `blog_v4l` (RTL-SDR Blog V4 Lite / R828S) — IMPLEMENTED; TAB5 TESTED

@@ -41,6 +41,7 @@ jobs:
           ctest --test-dir build --output-on-failure
           ./build/esp_rtl_sdr_host_tests
           python3 ../scripts/test_nooelec_runtime_trace.py
+          python3 -m unittest discover -s ../../tools/lab -p test_observe_orcsdr.py
 
       - name: Configure & build (Windows)
         if: runner.os == 'Windows'
@@ -50,6 +51,8 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Debug
           cmake --build build --config Debug
           ctest --test-dir build -C Debug --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s ../../tools/lab -p test_observe_orcsdr.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   truth-hygiene:

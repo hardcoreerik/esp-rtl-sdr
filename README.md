@@ -9,7 +9,7 @@
 
 **Not a librtlsdr port.** Clean-room V4/V4L/V3c/Nooelec V5 profiles · implemented E4000/XTR profile · standalone ESP-IDF USB/IQ API · fail-closed lifecycle
 
-**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. This is **0.9.4**, pre-1.0 — early, public, honest. See the [0.9.4 release notes](docs/releases/v0.9.4.md) for the capture-derived Nooelec profile and its remaining hardware acceptance checks.
+**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. See [status terminology](docs/STATUS_TERMINOLOGY.md) and the [2026-11-04 documentation audit](docs/DOCUMENTATION_STATUS_AUDIT_2026-11-04.md) for the difference between implementation and physical acceptance. This is **0.9.4**, pre-1.0 — early, public, honest. See the [0.9.4 release notes](docs/releases/v0.9.4.md) for the capture-derived Nooelec profile and its remaining hardware acceptance checks.
 
 Release numbers and `alpha` / `beta` / `rc` meanings are defined in
 [`docs/VERSIONING.md`](docs/VERSIONING.md).

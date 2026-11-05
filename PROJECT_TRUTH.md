@@ -6,11 +6,9 @@ wins for *what is true right now*.
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
 
-Snapshot date: **2026-10-29**
-Version: **0.9.4** (pre-1.0. Prior **hardware verification** on the M5 Tab5 through OrcSDR covers Blog V4, V4L and V3c streaming, hotplug and swaps, PC-measured gain/tuner AGC/RTL AGC/bias controls, V4 and V4L HF upconverter routes, V3c direct-Q HF, and the V4L/V4 direct HF route on CB; it is not a fresh RF test of this release. Concurrent multi-handle USB session **Implemented** / host-test verified, plus bounded standalone Waveshare V4+V3/R820T2 hardware verification on 2026-10-29; universal reentry/hotplug qualification remains open. Absolute gain calibration, analog filter passbands, loaded bias-tee current and true LF reception are unmeasured. The Nooelec SMArt v5 profile is **Implemented from first-party PC captures (2026-09-30)** and merged in PR #39; host CI and the full ESP-IDF 5.5.4 P4 compile passed. Nooelec is implemented, not experimental; standalone Tab5 streaming/control checks passed on 2026-10-29. Per-band RF/calibration qualification remains separate. The maintainer explicitly authorized version `0.9.2` and tag `v0.9.2`.)
-This branch adds an **experimental E4000 profile**; XTR v5 physical acceptance remains pending.
-
-This branch adds an **experimental E4000 profile**; XTR v5 physical acceptance remains pending.
+Snapshot date: **2026-11-04** (documentation reconciliation; the hardware evidence retains its original dates)
+Version: **0.9.4** (pre-1.0). Blog V4, V4L, V3c and Nooelec SMArt V5 profiles are implemented, with documented M5Stack Tab5 streaming/control and receiver RF evidence across the OrcSDR and standalone programs. The E4000/XTR profile is also **implemented**; an initial Tab5 FM/RDS reception result is recorded, while complete band, gain, soak and RF-calibration acceptance remains open. Absolute gain calibration, analog passbands, loaded bias-tee current and LF reception at all endpoints are not broadly measured. See the dated evidence entries and [receiver profiles](docs/PROFILES.md); support implementation and measurement coverage are separate claims.
+The **E4000 profile is implemented** with model-specific probe, zero-IF tuning, IQ streaming, a captured manual gain ladder and tuner AUTO. The October 31 Tab5 record includes initial FM audio/RDS reception; remaining physical acceptance is explicitly scoped below.
 
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
 Remote: **https://github.com/hardcoreerik/esp-rtl-sdr**  
@@ -73,7 +71,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Area | State | Boundary |
 |---|---|---|
 | Lifecycle install/start/stop/uninstall | **Implemented** | |
-| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4 fully; Nooelec SMArt v5 is implemented and passed standalone Tab5 streaming/control smoke on 2026-10-29; Blog V3/V3c streams without crash (hardware-verified 2026-09-11), tune/gain accuracy still **provisional**; E4000 streaming is not hardware-verified |
+| Continuous bulk IQ (multi-URB) | **Implemented** | Blog V4, V4L, V3c and Nooelec SMArt V5 have documented Tab5 streaming; standalone Nooelec tests passed on 2026-10-29. E4000 also produced initial Tab5 FM/RDS reception on a dated image, but complete current-release multi-band/long-soak acceptance is still open. |
 | In-stream `retune_hz` | **Implemented** | Drain bulk before EP0; **async from callback** (0.7.3) |
 | Metrics | **Implemented** | `get_metrics` |
 | Continuous sample rates (hardware windows) | **Implemented** | 225001–300000 ∪ 900001–3.2M. quantize mirrors resampler bit 27 into bit 28 before reporting Hz (low band was ~2×; #24) |
@@ -83,7 +81,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | ESP-IDF P4 compile CI | **Implemented** | `examples/p4_serial_smoke` idf.py build esp32p4 |
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
-| E4000 profile | **Experimental implementation / hardware acceptance pending** | Host-tested PLL math and profile selection; Nooelec SMArTee XTR v5 has not been tested on ESP32-P4. Tuning assumes 28.8 MHz reference and uses zero-IF. Gain, AGC, bandwidth, bias tee, direct sampling and HF upconverter are not exposed. |
+| E4000 profile | **Implemented / initial Tab5 RF-verified** | Nooelec XTR/E4000 detection, zero-IF tune/stream, PLL and native gain control path are implemented. The 2026-10-31 COM39 report records 2.4 MS/s IQ, user-heard FM and KZEL RDS. Manual gain steps and tuner AUTO exist; tuner bandwidth, RTL AGC, bias tee, direct sampling and HF upconversion are not exposed. Longer soak, RF calibration, band edges, updated image and full gain/AGC acceptance remain open. [Detailed E4000 record](docs/E4000_EXPERIMENTAL.md). |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
 | Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; P4 re-soak open |
@@ -102,7 +100,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Nooelec NESDR SMArt v5 `0bda:2838` | **Implemented** | Exact `Nooelec` + product contains `NESDR SMArt v5`; serial is evidence, not a whitelist. I2C `0x34`; model bounds 100 kHz–1750 MHz; Q below captured 24 MHz cutoff. [Capture record](docs/captures/nooelec_v5_2026-09-30.md), [merge/acceptance notes](docs/nooelec_v5_merge_notes.md). |
 | Nooelec cold tuning / variable IF | **Implemented; host profile verified and P4 source compiled** | Cold/reinitialized filter `d3/6b` with matching PLL/demod IF 3.570 MHz; explicit native bandwidth AUTO uses `c3/8f`, 1.815 MHz. v0.9.1 left the demod at 1.815 MHz while calculating the Nooelec PLL with 3.570 MHz; its +1.755 MHz effective RF shift is consistent with the user receiving 99.1 at dial 97.3. Physical before/after acceptance remains open. |
 | Nooelec gain / AGC / bandwidth | **Implemented** | All 29 nominal native/FM gain pairs captured; AUTO preserves gain nibbles; RTL AGC includes settle read. Seven native bandwidth choices at 2.4 MS/s keep PLL/demod IF paired. No effective tuner gain or bandwidth claim in Q mode; setters reject it. No bias tee or HF upconverter capability. |
-| Nooelec Q-route RF evidence | **PC-measured; P4 RF acceptance pending** | Exact NCO points, Q enable/disable and FM↔HF restoration captured. FM dipole runs and independently powered MLA-30+ AM1280/AM1600 IQ/WAV recorded, including the user-confirmed 10-second AM1600 WAV. Captured PC native route starts at 24 MHz, with a PLL-not-locked warning there; manufacturer rates native operation from 25 MHz. |
+| Nooelec Q-route RF evidence | **Implemented / bounded RF reception evidence** | First-party PC captures define Q/NCO transition, and owner accepted 7.074 MHz FT8 reception through OrcSDR on 2026-10-09. Full LF/AM gain calibration and every-band P4 test remain open; 24 MHz PC boundary reported a tuner PLL-lock warning. |
 | Blog V3 / V3c / R820T2 / R860 identity probe | **Hardware-verified** (2026-09-11) | Exact V3 descriptors or completed chip-id (`0x96`/`0x69`) after `run_demod_bringup()` fix; identified a real V3c unit (bare `RTL2838UHIDIR` descriptor) reliably across repeated cold-boot and hot-swap cycles |
 | Blog V3 IQ streaming (device up, no crash) | **Hardware-verified** (2026-09-11) | Streams without crash across repeated V4↔V3-family hot-swap and cold-boot testing on a real V3c unit |
 | Blog V3 tune accuracy | **Hardware-verified on V3c; gain remains separate** | Measured 28.8 MHz crystal; tuner PLL and RTL2832 demodulator matched at 3.570 MHz using official-capture `38/11/12`. The exact candidate received the expected stations at displayed 96.100 and 99.100 MHz; 99.1 locked matching RDS with +13 kHz auto-centering and zero drops. V3c reattach restored the matched IF and 99.1 RDS, and a battery-only cold boot received the saved station correctly (user-observed; no COM17 by design). Blog V4 repeated both frequencies with matching RDS and its unchanged 1.814972 MHz IF. A sampled V3c 96.1 serial status had not yet locked RDS. |
@@ -112,7 +110,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | Re-verify from *this* tree on hardware | **Planned** | |
 | Gain / bias-T hardware | **Implemented** (tables from PC USBPcap) | Lab 2026-08-12; **not** yet Hardware-verified from *this* tree on P4; no multimeter DC |
 | Blog V4 HF/LF upconverter path CAP | **Implemented; sub-500 kHz experimental (unreleased)** | Exact-Hz RF requests from 24 kHz; RF&lt;28.8 MHz → tuner RF+28.8e6; RF≤28.8 MHz → Cable-2/GPIO5-low. Host tests cover 24 kHz, DDH47 147.300 kHz, exact-Hz preservation, band edges, and VHF/UHF regression. Physical LF reception remains open. |
-| Blog V3/V3c direct-sampling LF/HF | **Implemented from first-party V3c capture; experimental (unreleased)** | Below 24 MHz, uses Q-branch direct sampling and the captured exact-Hz RTL2832 NCO sequence; both normal/direct hot transitions are implemented. PC-side V3c control/IQ captures cover 60 kHz, 135.6 kHz, 147.3 kHz, 472.5 kHz, 1.000123 MHz, 10 MHz, 20 MHz, and 23.999999 MHz. ESP32-P4 RF reception/decoding remains open. Tuner gain is unavailable while bypassed. Nooelec now has its own independent 2026-09-30 evidence and the model bounds recorded above. |
+| Blog V3/V3c direct-sampling LF/HF | **Implemented / RF acceptance frequency-specific** | PC controls/IQ captured Q-route points from LF through 23.999999 MHz, and owner accepted 7.074 MHz FT8 through OrcSDR on 2026-10-09. Direct sampling bypasses tuner gain. Not every LF edge or signal quality has been qualified. |
 | R828D stage gain / input / notches | **Planned** | |
 | Adaptive USB URB | **Planned** | |
 | Beacon ppm learn | **Planned** | |
@@ -257,4 +255,4 @@ smaller (139264 versus245760bytes), so buffering-margin qualification remains.
 
 ## 0.9.4 release boundary
 
-Experimental E4000 gains and hardware offset are implemented; startup gain-history correction passed one fixed-14 dB raw restart pair (0.088 dB difference versus prior ~1.85 dB). Broader gain/AUTO serial smoke timed out; RF calibration and serial reliability remain open. Installed-device control reads now use the disconnect-safe mutex path. No SDK HAL patch is included or applied. Maintainer explicitly requested version/tag v0.9.4 despite the additive pre-1.0 API.
+E4000 gains and hardware offset are implemented; startup gain-history correction passed one fixed-14 dB raw restart pair (0.088 dB difference versus prior ~1.85 dB). Broader gain/AUTO serial smoke timed out; RF calibration and serial reliability remain open. Installed-device control reads now use the disconnect-safe mutex path. No SDK HAL patch is included or applied. Maintainer explicitly requested version/tag v0.9.4 despite the additive pre-1.0 API.

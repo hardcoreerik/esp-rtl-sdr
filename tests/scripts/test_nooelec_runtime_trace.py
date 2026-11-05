@@ -80,6 +80,7 @@ struct esp_rtl_sdr_handle {
     bool e4000_offset_requested = false;
     uint32_t e4000_rate_sps = 2400000, e4000_offset_applied_hz = 0;
     bool ctrl_stall = false, bias_tee_want = false, tuner_auto_applied = false;
+    bool rtl_agc_want = false;
     uint32_t tuner_reg_known = 0;
     uint8_t tuner_reg_val[32] = {}, tuner_reg05_low_bits = 3, tuner_reg07 = 0x75;
     esp_rtl_sdr_gain_mode_t gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
@@ -98,6 +99,7 @@ static esp_err_t check_not_reentrant(esp_rtl_sdr_handle *) { return api_reentran
 constexpr size_t kDemodBringupRecordCount = 86;
 static std::vector<RtlControlRecord> wire;
 static size_t fail_transfer = 0;
+static bool fail_all_transfers = false;
 static uint8_t e4000_registers[256] = {};
 static uint8_t e4000_pointer = 0;
 static int ignored_e4000_write = -1;
@@ -106,6 +108,7 @@ static esp_err_t wire_submit(esp_rtl_sdr_handle *, uint8_t type, uint8_t,
     uint16_t value, uint16_t index, const uint8_t *data, uint8_t length, bool, uint8_t *response=nullptr, uint16_t response_length=0) {
     CHECK(length <= 8);
     RtlControlRecord r{value, index, type, length, {}};
+    if (fail_all_transfers) { wire.push_back(r); return ESP_FAIL; }
     if (response) {
         CHECK(response_length==1 && length==1 && index==0x0600);
         wire.push_back(r);
@@ -150,6 +153,7 @@ static esp_err_t ctrl_transfer_locked(esp_rtl_sdr_handle *h,void *dev,uint8_t bm
  return wire_submit(h,bm,req,value,index,data,static_cast<uint8_t>(len),stall,response,response_len);
 }
 // ACTUAL_DRIVER_FUNCTIONS
+// ACTUAL_START_RESTORE
 static int last_tuner(uint8_t reg) {
     for (auto i = wire.rbegin(); i != wire.rend(); ++i) {
         if (i->request_type != 0x40 || i->index != 0x0610 || i->value != 0x0034 || i->length < 2) continue;
@@ -196,6 +200,27 @@ static void q_route() {
 }
 int main() {
     esp_rtl_sdr_handle h;
+    for (auto profile : {RtlProfileId::BlogV4, RtlProfileId::BlogV3,
+                         RtlProfileId::BlogV4L, RtlProfileId::NooelecSmartV5,
+                         RtlProfileId::E4000}) {
+        h = {}; h.profile = profile;
+        h.device_caps = rtl_profile_device_capabilities(profile);
+        wire.clear();
+        CHECK(actual_start_restore(&h) == ESP_OK);
+        CHECK(wire.empty()); // default OFF requires no extra startup writes
+        h.rtl_agc_want = true;
+        CHECK(actual_start_restore(&h) == ESP_OK);
+        const bool settle = profile == RtlProfileId::E4000 || profile == RtlProfileId::NooelecSmartV5;
+        CHECK(wire.size() == (settle ? 2u : 1u));
+        CHECK(same(wire[0], measured_v4_demod_reg_write(0x19, 0x25)));
+        if (settle) CHECK(same(wire[1], kBlogV3TunerRepeaterOn[1]));
+        CHECK(h.rtl_agc_want);
+        wire.clear(); fail_all_transfers = true;
+        CHECK(actual_start_restore(&h) == ESP_FAIL);
+        CHECK(h.rtl_agc_want); // failed restore must not silently rewrite the request
+        fail_all_transfers = false;
+    }
+    h = {};
     CHECK(run_v3_tuner_reinit(&h) == ESP_OK);
     gain(0x83, 0x75, 0xf0); CHECK(last_tuner(10) == 0xd3 && last_tuner(11) == 0x6b);
     CHECK(h.tuner_reg05_low_bits == 3 && h.tuner_reg07 == 0x75);
@@ -269,6 +294,15 @@ int main() {
             pll_1a_seen = true;
     CHECK(pll_1a_seen);
     h = {}; h.profile=RtlProfileId::E4000; wire.clear();
+    // First-party XTR capture: frames 2185/2187, 2191/2193, 2195/2199.
+    for (bool enabled : {false, true, false}) {
+        wire.clear();
+        CHECK(apply_rtl_agc_records(&h, enabled) == ESP_OK);
+        CHECK(wire.size() == 2);
+        CHECK(same(wire[0], measured_v4_demod_reg_write(0x19, enabled ? 0x25 : 0x05)));
+        CHECK(same(wire[1], kBlogV3TunerRepeaterOn[1]));
+    }
+    wire.clear();
     uint8_t read_value=0;disconnect_on_lock=&h;
     CHECK(ctrl_submit(&h,0xc0,0,0xc8,0x0600,nullptr,1,false,&read_value,1)==ESP_RTL_SDR_ERR_USB);
     CHECK(wire.empty() && control_lock_depth==0);
@@ -469,12 +503,29 @@ int main() {
 '''
 
 
-def main():
-    source = (ROOT / "src/esp_rtl_sdr.cpp").read_text(encoding="utf-8")
+def build_harness(source):
     functions = [extract(source, name) for name in FUNCTIONS]
     code = HARNESS.replace("// ACTUAL_DRIVER_FUNCTIONS", "\n".join(
         declaration for declaration, _ in functions) + "\n" + "\n".join(
         definition for _, definition in functions))
+    # Execute the actual start() fragment after frontend setup, before the first
+    # bulk allocation/submission. This tests startup wiring as well as the setter.
+    start = extract(source, "esp_rtl_sdr_start")[1]
+    marker = 'trace_e4000_start_state(handle,"after_tune");'
+    if start.count(marker) != 1:
+        raise RuntimeError("Startup restore anchor changed")
+    tail = start.split(marker, 1)[1]
+    if "ret = alloc_bulk_pool" not in tail:
+        raise RuntimeError("Startup bulk allocation anchor changed")
+    fragment = tail.split("ret = alloc_bulk_pool", 1)[0]
+    wrapper = ('static esp_err_t actual_start_restore(esp_rtl_sdr_handle *handle) {\n'
+               'esp_err_t ret = ESP_OK; do {\n' + fragment + '\n} while (false); return ret;\n}\n')
+    return code.replace("// ACTUAL_START_RESTORE", wrapper)
+
+
+def main():
+    source = (ROOT / "src/esp_rtl_sdr.cpp").read_text(encoding="utf-8")
+    code = build_harness(source)
     with tempfile.TemporaryDirectory(prefix="nooelec-runtime-") as folder:
         cpp, binary = Path(folder) / "trace.cpp", Path(folder) / "trace"
         cpp.write_text(code, encoding="utf-8")

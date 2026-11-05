@@ -9,6 +9,8 @@
 
 ## Unreleased
 
+- Enable RTL2832U digital AGC for E4000 receivers using captured XTR control transfers. Restore the requested ON state after initialization and before IQ streaming resumes.
+
 ### Added — experimental E4000 tuner profile
 
 - Add a separate E4000 profile targeting the Nooelec SMArTee XTR v5, including

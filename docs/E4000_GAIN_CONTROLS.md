@@ -4,7 +4,10 @@ This implementation uses first-party XTR PC API/USB controls. No vendor driver
 source was imported. E4000 remains experimental; physical acceptance of this
 new gain implementation is pending. Existing gain APIs are reused, with
 `CAP_GAIN` and `CAP_GAIN_AUTO` advertised only for profiles implementing them.
-RTL2832U digital AGC remains a separate unsupported E4000 capability.
+RTL2832U digital AGC is a separate control from E4000 tuner AUTO. The XTR
+PC capture recorded OFF/ON/OFF in frames 2185/2191/2195, each followed by
+a settle read. The driver restores requested RTL-AGC ON before streaming
+after a receiver restart.
 
 Nominal manual steps, in dB:
 `-1, 1.5, 4, 6.5, 9, 11.5, 14, 16.5, 19, 21.5, 24, 29, 34, 42`.

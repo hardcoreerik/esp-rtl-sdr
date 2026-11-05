@@ -5,6 +5,7 @@ wins for *what is true right now*.
 
 Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc):
 claims need evidence labels; oversell is a bug; retract rather than spin.
+The [status terminology](docs/STATUS_TERMINOLOGY.md) separates implemented device profiles from specific physical acceptance and calibration claims.
 
 Snapshot date: **2026-11-04** (documentation reconciliation; the hardware evidence retains its original dates)
 Version: **0.9.4** (pre-1.0). Blog V4, V4L, V3c and Nooelec SMArt V5 profiles are implemented, with documented M5Stack Tab5 streaming/control and receiver RF evidence across the OrcSDR and standalone programs. The E4000/XTR profile is also **implemented**; an initial Tab5 FM/RDS reception result is recorded, while complete band, gain, soak and RF-calibration acceptance remains open. Absolute gain calibration, analog passbands, loaded bias-tee current and LF reception at all endpoints are not broadly measured. See the dated evidence entries and [receiver profiles](docs/PROFILES.md); support implementation and measurement coverage are separate claims.

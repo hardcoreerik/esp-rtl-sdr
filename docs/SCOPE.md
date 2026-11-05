@@ -5,18 +5,20 @@ This project **fails closed** on unsupported hardware. Narrow support is a
 
 ---
 
-## Supported today (claimed)
+## Implemented profiles and measured support
 
 | Piece | Status | Notes |
 |---|---|---|
 | **MCU** | ESP32-**P4** High-Speed USB Host | e.g. M5Stack Tab5, Waveshare P4 kits |
-| **Dongle** | RTL-SDR **Blog V4** (primary) | Exact `RTLSDRBlog` / `Blog V4` |
-| **Nooelec** | NESDR SMArt v5 implemented profile | Exact descriptors; 2026-09-30 control/IQ evidence, 100 kHz–1750 MHz with direct-Q HF; Standalone P4 streaming/control checks passed; per-band RF/calibration qualification remains separate. See [capture record](captures/nooelec_v5_2026-09-30.md). |
-| **V3** | Provisional stream | R820T2 remap; community soak; not Hardware-verified |
+| **Dongle** | RTL-SDR **Blog V4** | Primary tested receiver; exact `RTLSDRBlog` / `Blog V4` identity. |
+| **Blog V4L** | Implemented / hardware-tested | Distinct V4 Lite tuner/HF route; Tab5 tuning, streaming and RF reception records exist. |
+| **Nooelec** | NESDR SMArt V5 implemented / hardware-tested | Exact descriptor profile; P4 streaming/control accepted and 7.074 MHz FT8 decoded through OrcSDR; calibration and full-band coverage remain separate. See [capture record](captures/nooelec_v5_2026-09-30.md). |
+| **E4000 / Nooelec XTR** | Implemented / initial P4 FM/RDS RF-validated | 64 MHz–1.7 GHz E4000 zero-IF path, 14 manual gain steps and tuner AUTO implemented. Initial Tab5 2.4 MS/s FM/RDS acceptance is recorded; extended hardware and long-soak qualification remains open. |
+| **V3c** | Implemented / hardware-tested | Native tuning, streaming, hotplug and HF Q route implemented; gain calibration remains separate. Earlier V3 hardware variants require individual evidence. |
 | **IQ** | Continuous CU8 multi-URB | CAP_STREAM |
 | **Tooling** | ESP-IDF ≥ 5.5, `esp32p4` | CI builds smoke on 5.5.4 |
 
-Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
+Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md). E4000 implementation details: [E4000 profile](E4000_PROFILE.md).
 
 ---
 
@@ -26,7 +28,6 @@ Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
 |---|---|---|
 | ESP32-S2/S3 Full-Speed USB Host | **Deferred** | FS bulk economics differ; lower continuous SPS; needs separate URB + soak story |
 | Generic RTL2832U / R820T sticks | **Deferred** | Identity + EP0 sequences not measured in *this* clean-room profile |
-| E4000 / Nooelec SMArTee XTR v5 | **Experimental; not hardware-verified** | Separate E4000 profile is implemented for 64 MHz–1.7 GHz tuning/streaming; 28.8 MHz reference is assumed; gain/bias/HF features are not exposed |
 | librtlsdr ABI drop-in | **Deferred** | Never a goal — different API and license gravity |
 | Production warranty | **None** | 0.x |
 

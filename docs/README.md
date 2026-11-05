@@ -11,6 +11,8 @@ When docs disagree, PROJECT_TRUTH wins.
 |---|---|
 | [AI_DEVELOPMENT_DISCLOSURE.md](AI_DEVELOPMENT_DISCLOSURE.md) | Human-directed, AI-assisted; trust rituals |
 | [DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) | Accuracy rules; no planned-as-done |
+| [STATUS_TERMINOLOGY.md](STATUS_TERMINOLOGY.md) | Implementation, verification and experimental wording policy |
+| [DOCUMENTATION_STATUS_AUDIT_2026-11-04.md](DOCUMENTATION_STATUS_AUDIT_2026-11-04.md) | Cross-page current-status correction record |
 | [CLEAN_ROOM.md](CLEAN_ROOM.md) | Clean-room USB rules |
 | [../SECURITY.md](../SECURITY.md) | Vulnerability reporting |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | PR / clean-room checklist |
@@ -27,7 +29,7 @@ When docs disagree, PROJECT_TRUTH wins.
 | [EXAMPLES.md](EXAMPLES.md) | Usage recipes (FM/ADS-B/WX/sync/passport) |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common failures |
 | [KCONFIG.md](KCONFIG.md) | menuconfig options |
-| [SCOPE.md](SCOPE.md) | Intentional HW scope (P4 + Blog V4) |
+| [SCOPE.md](SCOPE.md) | Implemented ESP32-P4 hardware and tuner profiles; open platform scope |
 | [SOAK.md](SOAK.md) | Hardware soak procedure |
 | [lab/SOAK_LOG_TEMPLATE.md](lab/SOAK_LOG_TEMPLATE.md) | Fill-in soak log |
 | [RUNTIME_CONSTANTS.md](RUNTIME_CONSTANTS.md) | Ring depth, cores, health period |
@@ -44,7 +46,8 @@ When docs disagree, PROJECT_TRUTH wins.
 | [Test_reports/ESP_RTL_SDR_0_7_8_DROP_IN_TEST_REPORT_2026-08-26.md](Test_reports/ESP_RTL_SDR_0_7_8_DROP_IN_TEST_REPORT_2026-08-26.md) | Tab5 L4 matrix + false-REENTRANT / pull-ring findings |
 | [PHASE3_CAPTURE_REPORT.md](PHASE3_CAPTURE_REPORT.md) | Plain-English report: bias+gain lab captures and why they matter |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
-| [PROFILES.md](PROFILES.md) | Dongle profiles |
+| [PROFILES.md](PROFILES.md) | Dongle profiles and acceptance status |
+| [E4000_PROFILE.md](E4000_PROFILE.md) | Implemented E4000/XTR driver profile, recorded reception and remaining qualification |
 | [PORTING.md](PORTING.md) | Board BSP vs driver |
 | [CLEAN_ROOM.md](CLEAN_ROOM.md) | Measurement rules |
 | [archive/](archive/README.md) | Point-in-time handoffs and notes (not maintained) |

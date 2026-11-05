@@ -81,7 +81,7 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | CI truth/version hygiene | **Implemented** | `.github/workflows/ci.yml` |
 | ESP-IDF P4 compile CI | **Implemented** | `examples/p4_serial_smoke` idf.py build esp32p4 |
 | Full USB/RF CI | **No** | Needs P4 + dongle (lab only) |
-| E4000 profile | **Implemented / initial Tab5 RF-verified** | Nooelec XTR/E4000 detection, zero-IF tune/stream, PLL and native gain control path are implemented. The 2026-10-31 COM39 report records 2.4 MS/s IQ, user-heard FM and KZEL RDS. Manual gain steps and tuner AUTO exist; tuner bandwidth, RTL AGC, bias tee, direct sampling and HF upconversion are not exposed. Longer soak, RF calibration, band edges, updated image and full gain/AGC acceptance remain open. [Detailed E4000 record](docs/E4000_EXPERIMENTAL.md). |
+| E4000 profile | **Implemented / initial Tab5 RF-verified** | Nooelec XTR/E4000 detection, zero-IF tune/stream, PLL and native gain control path are implemented. The 2026-10-31 COM39 report records 2.4 MS/s IQ, user-heard FM and KZEL RDS. Manual gain steps and tuner AUTO exist; tuner bandwidth, RTL AGC, bias tee, direct sampling and HF upconversion are not exposed. Longer soak, RF calibration, band edges, updated image and full gain/AGC acceptance remain open. [Detailed E4000 record](docs/E4000_PROFILE.md). |
 | `apply_need()` intent presets | **Implemented** | FM/ADSB/WX/HF/MAX_STABLE/LISTEN |
 | `get_health()` / `EVT_HEALTH` | **Implemented** | Poll + delivery emit (change/periodic) |
 | Gain / bias public API | **Implemented (measured V4)** | CAP_GAIN + CAP_BIAS_TEE **on**; P4 re-soak open |

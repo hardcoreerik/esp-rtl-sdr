@@ -129,7 +129,7 @@ RTL2832U bulk IN 0x81 (HS, 512 B MPS)
 ## Sample rate and frequency policy
 
 - Sample rates are supported within documented continuous hardware windows (225001–300000 and 900001–3.2 million SPS), quantized to actual RTL2832 rates; recommended `ESP_RTL_SDR_RATE_*` constants are convenient presets, **not** the only supported rates.
-- Frequency for `CUSTOM_HZ` is validated and quantized to the selected receiver's declared tuning range and PLL constraints; out-of-range requests must not silently pretend to tune.
+- Frequency for `CUSTOM_HZ` is quantized to the driver's global frequency quantum. Start/retune operations then validate against the selected receiver's RF range, and PLL planning may reject further requests; out-of-range input must not silently appear to tune.
 - New rate/tuner windows require measured profile support and host/device acceptance, not guesses from a different dongle.
 
 ---

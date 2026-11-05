@@ -18,7 +18,7 @@ This project **fails closed** on unsupported hardware. Narrow support is a
 | **IQ** | Continuous CU8 multi-URB | CAP_STREAM |
 | **Tooling** | ESP-IDF ≥ 5.5, `esp32p4` | CI builds smoke on 5.5.4 |
 
-Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md).
+Evidence labels: [`../PROJECT_TRUTH.md`](../PROJECT_TRUTH.md). E4000 implementation details: [E4000 profile](E4000_PROFILE.md).
 
 ---
 

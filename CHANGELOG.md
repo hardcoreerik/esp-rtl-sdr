@@ -1,3 +1,7 @@
+# Changelog — esp-rtl-sdr
+
+> **Current-status clarification (2026-11-04, documentation only):** V4, V4L, V3c, Nooelec SMArt V5 and E4000/XTR are all implemented driver profiles. The maintainer confirms E4000 works **in OrcSDR within its tuning range**, with invalid out-of-range dashboard tune requests correctly suppressed. Broader RF calibration and long-soak evidence are still needed. The v0.9.4 E4000 release was **historically described as experimental**; its original wording below is preserved to record what was known at publication. This clarification is not a new driver release or a retroactive v0.9.4 qualification. See [current driver truth](PROJECT_TRUTH.md) and [profiles](docs/PROFILES.md).
+
 ## 0.9.4 (2026-11-02)
 
 - Experimental SMArt XTR/E4000 bring-up, manual/tuner AUTO gain and opt-in offset tuning.

@@ -2,7 +2,7 @@
 
 Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.md`.
 
-| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.9.3 | Phase |
+| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.9.4 | Phase |
 |---|---|---|---|---|
 | 1 | Open / close | `rtlsdr_open` | `install` / `uninstall` | **Done** |
 | 2 | Async IQ | `read_async` | `start` + `EVT_IQ_BLOCK` | **Done** |
@@ -10,7 +10,7 @@ Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.m
 | 4–5 | Center freq | set/get | set/get + retune | **Done** |
 | 6 | Sample rate | many rates | continuous in HW windows + quantize | **Done** (0.7) |
 | 7 | Get sample rate | yes | exact programmed SPS | **Done** |
-| 8–9 | Tuner gain | modes / steps | V4 28-step, V4L/V3c/Nooelec 29-step nominal manual ladders; board-specific Tuner AUTO and RTL AGC. V3c/Nooelec HF direct-Q bypasses tuner gain. Nooelec 2026-09-30 PC captures match every native manual pair and AUTO mode bits. | **Driver implemented; Nooelec P4 acceptance open** |
+| 8–9 | Tuner gain | modes / steps | V4/V4L/V3c/Nooelec use model-specific gain tables and tuner AUTO as supported; E4000 has a captured 14-step nominal gain ladder plus tuner AUTO. V3c/Nooelec Q-mode bypasses tuner gain. | **Implemented; calibration/physical acceptance varies by model** |
 | 11 | ppm | yes | software LO offset | **Done** |
 | 12 | Bias-T | common | V4/V4L/user-tested V3c GPIO ON/OFF and no-load DC measured; OFF default/stop/reattach. BlogV3 identity is generic, so UI must warn before explicit enable. **Nooelec SMArt v5 has no bias tee and rejects this API.** Loaded current unmeasured. | **Driver implemented; P4 acceptance open** |
 | 12a | Tuner bandwidth | profile | At 2.4 MS/s, seven V4/V4L/V3c native-route and four V4/V4L HF-route width requests are mapped with paired PLL/demod IF. V3c boots on its proven 3.57 MHz IF and returns to that IF, with its boot filter registers, when AUTO is selected; every demod IF write is followed by a read. V3c direct-Q HF remains unsupported. Live EP0 failure rolls back or faults. Analog passbands unmeasured. | **Hardware-verified on the M5 Tab5 (V3c, V4L, V4, 96.1 MHz, 2026-09-28: see `docs/captures/v3c_live_bandwidth_2026-09-28.md`); other stations and long soak open** |
@@ -23,7 +23,7 @@ Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.m
 | 25 | Intent / mission presets | no | `apply_need` | **Done (novel)** |
 | 26 | On-host rate passport | no | `probe_rates` | **Done (novel)** |
 | 27 | Health narrative | no | `get_health` | **Done (novel)** |
-| 23 | Any RTL + any tuner | large table | profile-based; V4 only | 4 |
+| 23 | Any RTL + any tuner | large table | **Profile-based** V4, V4L, V3c, Nooelec V5 and E4000/XTR implemented; unknown identities fail closed. | **Five named model profiles; not universal RTL coverage** |
 | 24 | Clean-room | N/A | **Yes** | Policy |
 
 Novel rows (25–27) are **not** librtlsdr parity — they are deliberate ESP-native

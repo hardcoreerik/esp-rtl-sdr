@@ -1,8 +1,9 @@
-# E4000 tuner gain candidate
+# E4000 tuner gain controls — implemented, RF acceptance in progress
 
 This implementation uses first-party XTR PC API/USB controls. No vendor driver
-source was imported. E4000 remains experimental; physical acceptance of this
-new gain implementation is pending. Existing gain APIs are reused, with
+source was imported. The manual gain ladder and tuner AUTO are implemented in
+the driver; broader physical gain accuracy and control acceptance remain open.
+Existing gain APIs are reused, with
 `CAP_GAIN` and `CAP_GAIN_AUTO` advertised only for profiles implementing them.
 RTL2832U digital AGC is a separate control from E4000 tuner AUTO. The XTR
 PC capture recorded OFF/ON/OFF in frames 2185/2191/2195, each followed by

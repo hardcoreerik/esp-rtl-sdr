@@ -6353,7 +6353,6 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
     if (do_rtl) {
         const esp_err_t rerr = apply_rtl_agc_records(h, rtl_en);
         if (rerr == ESP_OK) {
-            h->rtl_agc_want = rtl_en;
             ESP_LOGI(TAG, "RTL AGC %s [measured demod 0x19, async]", rtl_en ? "ON" : "OFF");
         } else {
             ESP_LOGW(TAG, "RTL AGC EP0 failed: %s", esp_rtl_sdr_err_to_name(rerr));

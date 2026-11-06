@@ -20,19 +20,19 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 
 ## Active profiles
 
-### `e4000_experimental` (Nooelec SMArTee XTR v5 / E4000) — EXPERIMENTAL; HARDWARE ACCEPTANCE PENDING
+### `e4000_experimental` (internal ID; Nooelec XTR / E4000) — IMPLEMENTED; EXTENDED ACCEPTANCE OPEN
 
 | Field | Value |
 |---|---|
-| Status | **Implemented experimentally; not hardware-verified on ESP32-P4** |
+| Status | **Implemented**; initial Tab5 FM audio/RDS and IQ streaming recorded 2026-10-31, with broader current-release RF/gain/soak acceptance remaining open. Internal profile name is historical, not a marketing status label. |
 | USB | Exact `0bda:2838` + `Nooelec` / product contains `SMArTee XTR v5`; other shared-ID descriptors require E4000 register-0x02 ID `0x40`. Other VID/PID pairs are not accepted yet |
 | Tuner | E4000 at RTL2832U control I2C value `0x64` |
 | Clock / RF | Assumes a 28.8 MHz tuner reference; published E4000 range **64 MHz–1.7 GHz** |
 | Path | Shared RTL2832U demodulator and IQ streaming; E4000-specific zero-IF tuning and RF filter selection |
-| Caps | STREAM/RETUNE and common driver services only. No tuner gain, tuner AGC, RTL AGC, tuner bandwidth, direct sampling, HF upconverter or bias tee |
-| Evidence | PLL math/profile selection have host tests. No XTR v5 ESP32-P4 capture, PLL-lock record or RF reception acceptance exists yet. See [E4000 experimental notes](E4000_EXPERIMENTAL.md). |
+| Caps | STREAM/RETUNE, manual tuner gain (`CAP_GAIN`, 14 nominal steps including -1 dB) and tuner AUTO (`CAP_GAIN_AUTO`) are implemented, along with RTL digital AGC (`CAP_RTL_AGC`). Tuner bandwidth, direct sampling, HF upconverter and bias tee remain unavailable. |
+| Evidence | Host profile/PLL/actual-tune checks, first-party PC captures, initial Tab5 2.4 MS/s streaming with FM audio and KZEL RDS; targeted gain-history comparison on COM39. A complete full-band hardware/soak acceptance matrix is not recorded. See [E4000 profile](E4000_PROFILE.md) and [gain controls](E4000_GAIN_CONTROLS.md). |
 
-The profile deliberately bypasses the R828D/R820-family initialization, tune tables, and the two R828D gain writes embedded in the shared sample-rate slice. It uses a fixed, conservative IF-filter configuration and no gain controls. The E4000 tuner clock is an assumption until confirmed on hardware; divider fallbacks outside the datasheet's nominal VCO range are logged.
+The profile deliberately bypasses the R828D/R820-family initialization, tune tables, and the two R828D gain writes embedded in the shared sample-rate slice. It uses a fixed, conservative IF-filter configuration and a captured 14-step manual gain ladder plus tuner AUTO. The E4000 tuner clock is an assumption until confirmed on hardware; divider fallbacks outside the datasheet's nominal VCO range are logged.
 
 ### `blog_v4` (RTL-SDR Blog V4 / R828D) — PRIMARY
 
@@ -43,14 +43,18 @@ The profile deliberately bypasses the R828D/R820-family initialization, tune tab
 | Tuner | R828D @ I2C `0x74` |
 | HF | RF<28.8 MHz -> LO+28.8e6; RF<=28.8 MHz -> Cable-2 + GPIO5-low |
 | Caps | Full library set including STREAM, HF_UPCONVERTER, GAIN, BIAS_TEE |
-| Hardware | Maintainer can soak Blog V4; GPIO/RF acceptance still open |
+| Hardware | Blog V4 has Tab5 FM/RDS and 7.074 MHz FT8 acceptance, plus observed band-select/retune cycles; analog gain calibration, GPIO electrical measurements and all-band soak are separate evidence tasks. |
 | Tuner bandwidth | Live bandwidth AUTO, 200k, 300k, 500k, 1.0M, 1.8M, 2.4M, AUTO **hardware-tested** on the M5 Tab5 at 96.1 MHz (2026-09-28, with the read-after-write fix: one cold boot and one unplug/replug): the carrier stays within +/-1.4 kHz of the request at every stage and final AUTO matches the cold-boot passband within 0.4 dB. **Not measured before the fix**; the V4L, which shares these plan words, shifted -312..+386 kHz without it. Plan values are vendor-driver control choices derived from captures, not measured analog passbands. See `docs/captures/v3c_live_bandwidth_2026-09-28.md`. |
 
-### `nooelec_smart_v5` (NESDR SMArt v5 / R820-family) — PC-CAPTURED; P4 ACCEPTANCE PENDING
+### `blog_v4l` (RTL-SDR Blog V4 Lite / R828S) — IMPLEMENTED; TAB5 TESTED
+
+V4L has its own accepted device profile with a 28.8 MHz HF upconverter route, native tuner bandwidth/gain controls and optional 24–28.8 MHz direct tuner route. Tab5 streaming, frequency changes, bandwidth cycling, hotplug and 7.074 MHz FT8 reception have been exercised; the radio's analog filters, exact sensitivity and long-soak behavior are not universally characterized. See [OrcSDR receiver evidence](https://github.com/hardcoreerik/OrcSDR/blob/main/PROJECT_STATUS.md).
+
+### `nooelec_smart_v5` (NESDR SMArt V5 / R820-family) — IMPLEMENTED; TAB5 TESTED
 
 | Field | Value |
 |---|---|
-| Status | **Implemented from first-party PC captures (2026-09-30)**; host profile checks and ESP32-P4 source compilation are separate from pending P4 reception/soak acceptance |
+| Status | **Implemented** from first-party PC captures; standalone P4 streaming/control passed on 2026-10-29 and integrated OrcSDR 7.074 MHz FT8 reception was accepted 2026-10-09. Per-band/calibration and long-soak claims remain separate. |
 | USB | Shared `0bda:2838` + exact `Nooelec` + product contains `NESDR SMArt v5` |
 | Tuner | R820-family @ I2C `0x34`; the PC oracle reports tuner type 5 / R820T, which does not establish exact silicon. Nooelec's public datasheet names R860. |
 | RF / HF | Model bounds **100 kHz–1750 MHz**. Automatic Q-branch direct sampling below **24 MHz**, native tuner above; no V4 upconverter, triplexer, or board GPIO. The 24 MHz route cutoff matches the PC capture, whose boundary tune warned that the PLL was not locked; the manufacturer rates native operation from 25 MHz. No RF acceptance claim at 24 MHz. |

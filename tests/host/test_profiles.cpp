@@ -232,6 +232,7 @@ static void test_frequency_policy(void)
     EXPECT_TRUE(rtl_profile_supports_stream(RtlProfileId::E4000));
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_STREAM) != 0);
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_GAIN) != 0);
+    EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_RTL_AGC) != 0);
     EXPECT_TRUE((rtl_profile_device_capabilities(RtlProfileId::E4000) & ESP_RTL_SDR_CAP_BIAS_TEE) == 0);
     EXPECT_TRUE(!rtl_profile_supports_rf_hz(RtlProfileId::Unknown, 100000000u));
 

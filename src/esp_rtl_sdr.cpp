@@ -1489,6 +1489,7 @@ static esp_err_t run_v3_enter_direct(esp_rtl_sdr_handle *h, uint32_t frequency_h
     return err;
 }
 
+static esp_err_t apply_rtl_agc_records(esp_rtl_sdr_handle *h, bool enable);
 static esp_err_t apply_r820t2_gain_records(esp_rtl_sdr_handle *h, int tenth_db,
                                            int *applied_tenth);
 static esp_err_t apply_tuner_agc_auto_records(esp_rtl_sdr_handle *h);
@@ -4757,6 +4758,15 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         }
 
         trace_e4000_start_state(handle,"after_tune");
+        // Initialization disables RTL digital AGC. Restore the retained request
+        // after rate/tuner setup, before any IQ transfer can be submitted.
+        if (handle->rtl_agc_want &&
+            (handle->device_caps & ESP_RTL_SDR_CAP_RTL_AGC) != 0) {
+            ret = apply_rtl_agc_records(handle, true);
+            if (ret != ESP_OK) {
+                break;
+            }
+        }
         ret = alloc_bulk_pool(handle, static_cast<uint32_t>(handle->cfg.transfer_count),
                               static_cast<uint32_t>(handle->cfg.transfer_bytes));
         if (ret != ESP_OK) {
@@ -6206,8 +6216,9 @@ static esp_err_t apply_rtl_agc_records(esp_rtl_sdr_handle *h, bool enable)
     esp_err_t err = ESP_FAIL;
     for (int pass = 0; pass < 3; ++pass) {
         err = run_record(h, rec, false);
-        if (err == ESP_OK && h->profile == RtlProfileId::NooelecSmartV5) {
-            /* Nooelec 2026-09-30 RTL AGC captures settle each demod write. */
+        if (err == ESP_OK && (h->profile == RtlProfileId::NooelecSmartV5 ||
+                             h->profile == RtlProfileId::E4000)) {
+            /* V5 2026-09-30 and XTR 2026-10-31 captures settle each write. */
             err = run_record(h, kBlogV3TunerRepeaterOn[1], false);
         }
         if (err == ESP_OK) {
@@ -6342,7 +6353,6 @@ static esp_err_t apply_pending_sideband_ep0(esp_rtl_sdr_handle *h)
     if (do_rtl) {
         const esp_err_t rerr = apply_rtl_agc_records(h, rtl_en);
         if (rerr == ESP_OK) {
-            h->rtl_agc_want = rtl_en;
             ESP_LOGI(TAG, "RTL AGC %s [measured demod 0x19, async]", rtl_en ? "ON" : "OFF");
         } else {
             ESP_LOGW(TAG, "RTL AGC EP0 failed: %s", esp_rtl_sdr_err_to_name(rerr));

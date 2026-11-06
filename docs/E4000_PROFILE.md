@@ -38,7 +38,7 @@ every E4000-branded receiver has identical RF routing or clocking.
 - RF tuning range: **64 MHz–1.7 GHz**, from the E4000 datasheet.
 - Tuner crystal: currently assumed to be **28.8 MHz** for this profile; confirm
   this on the target board before promoting the profile.
-- RTL AGC, tuner bandwidth, direct sampling, HF
+- Tuner bandwidth, direct sampling, HF
   upconversion and bias tee are **not exposed** by this profile.
 - The E4000's nominal VCO range is 2.6–3.9 GHz. Some edge frequencies require
   a provisional divider fallback outside that nominal window; these are

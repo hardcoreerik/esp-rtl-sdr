@@ -29,7 +29,7 @@ Default until identified (and after detach): **`Unknown`** — never Blog V4.
 | Tuner | E4000 at RTL2832U control I2C value `0x64` |
 | Clock / RF | Assumes a 28.8 MHz tuner reference; published E4000 range **64 MHz–1.7 GHz** |
 | Path | Shared RTL2832U demodulator and IQ streaming; E4000-specific zero-IF tuning and RF filter selection |
-| Caps | STREAM/RETUNE, manual tuner gain (`CAP_GAIN`, 14 nominal steps including -1 dB) and tuner AUTO (`CAP_GAIN_AUTO`) are implemented. No RTL AGC, tuner bandwidth, direct sampling, HF upconverter or bias tee. |
+| Caps | STREAM/RETUNE, manual tuner gain (`CAP_GAIN`, 14 nominal steps including -1 dB) and tuner AUTO (`CAP_GAIN_AUTO`) are implemented, along with RTL digital AGC (`CAP_RTL_AGC`). Tuner bandwidth, direct sampling, HF upconverter and bias tee remain unavailable. |
 | Evidence | Host profile/PLL/actual-tune checks, first-party PC captures, initial Tab5 2.4 MS/s streaming with FM audio and KZEL RDS; targeted gain-history comparison on COM39. A complete full-band hardware/soak acceptance matrix is not recorded. See [E4000 profile](E4000_PROFILE.md) and [gain controls](E4000_GAIN_CONTROLS.md). |
 
 The profile deliberately bypasses the R828D/R820-family initialization, tune tables, and the two R828D gain writes embedded in the shared sample-rate slice. It uses a fixed, conservative IF-filter configuration and a captured 14-step manual gain ladder plus tuner AUTO. The E4000 tuner clock is an assumption until confirmed on hardware; divider fallbacks outside the datasheet's nominal VCO range are logged.

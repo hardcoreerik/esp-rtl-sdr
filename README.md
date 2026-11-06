@@ -3,13 +3,13 @@
 **Make RTL2832U SDR dongles first-class peripherals on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-![Status](https://img.shields.io/badge/version-0.9.4-blue)
+![Status](https://img.shields.io/badge/version-0.9.5-blue)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
 ![Target](https://img.shields.io/badge/ESP32--P4-HS_USB-green)
 
 **Not a librtlsdr port.** Five implemented profiles: Blog V4, V4L, V3c, Nooelec SMArt V5 and E4000/XTR · standalone ESP-IDF USB/IQ API · fail-closed lifecycle
 
-**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. See [status terminology](docs/STATUS_TERMINOLOGY.md) and the [2026-11-04 documentation audit](docs/DOCUMENTATION_STATUS_AUDIT_2026-11-04.md) for the difference between implementation and physical acceptance. This is **0.9.4**, pre-1.0 — early, public, honest. See the [0.9.4 release notes](docs/releases/v0.9.4.md) for the capture-derived Nooelec profile and its remaining hardware acceptance checks.
+**Status authority:** [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) wins if anything here disagrees. See [status terminology](docs/STATUS_TERMINOLOGY.md) and the [2026-11-04 documentation audit](docs/DOCUMENTATION_STATUS_AUDIT_2026-11-04.md) for the difference between implementation and physical acceptance. This is **0.9.5**, pre-1.0 — early, public, honest. See the [0.9.4 release notes](docs/releases/v0.9.4.md) for the capture-derived Nooelec profile and its remaining hardware acceptance checks.
 
 Release numbers and `alpha` / `beta` / `rc` meanings are defined in
 [`docs/VERSIONING.md`](docs/VERSIONING.md).

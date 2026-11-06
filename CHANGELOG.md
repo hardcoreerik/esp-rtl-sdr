@@ -13,6 +13,8 @@
 
 ## Unreleased
 
+## 0.9.5 (2026-11-05)
+
 - Enable RTL2832U digital AGC for E4000 receivers using captured XTR control transfers. Restore the requested ON state after initialization and before IQ streaming resumes.
 
 ### Added — experimental E4000 tuner profile

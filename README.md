@@ -2,6 +2,8 @@
 
 **Make RTL2832U SDR dongles first-class peripherals on ESP32-P4** — continuous I/Q over USB Host, with a real embedded driver API.
 
+**Standalone ESP-IDF component.** Applications can use this driver as a dependency, but their firmware, dashboards, signal processing and protocol decoders are separate from this repository.
+
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 ![Status](https://img.shields.io/badge/version-0.9.5-blue)
 [![GitHub](https://img.shields.io/badge/github-esp--rtl--sdr-black)](https://github.com/hardcoreerik/esp-rtl-sdr)
@@ -69,8 +71,8 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | Item | Notes |
 |---|---|
 | **MCU** | **ESP32-P4** with High-Speed USB Host (e.g. M5Stack Tab5, Waveshare P4 kit) |
-| **Dongle** | RTL-SDR Blog **V4, V4 Lite (V4L), V3c**, **Nooelec NESDR SMArt V5** and **Nooelec XTR/E4000** each have implemented, model-aware driver profiles. E4000 is maintainer-confirmed working in OrcSDR **within its supported 64 MHz–1.7 GHz tuner range**; out-of-range dashboard requests do not tune. Initial Tab5 E4000 FM/RDS evidence exists; broad gain and RF/soak calibration remains open. See [profiles](docs/PROFILES.md) and [project truth](PROJECT_TRUTH.md). Unknown devices sharing `0bda:2838` are not accepted by identity alone. |
-| **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (OrcSDR Tab5 uses 5.5.4) |
+| **Dongle** | RTL-SDR Blog **V4, V4 Lite (V4L), V3c**, **Nooelec NESDR SMArt V5** and **Nooelec XTR/E4000** each have implemented, model-aware driver profiles. E4000's published tuner range is **64 MHz–1.7 GHz**; initial Tab5 FM/RDS reception is recorded, while band-edge, gain, RF calibration and long-soak validation remain open. See [profiles](docs/PROFILES.md) and [project truth](PROJECT_TRUTH.md). Unknown devices sharing `0bda:2838` are not accepted by identity alone. |
+| **Tooling** | ESP-IDF **≥ 5.5** with `esp32p4` support (5.5.4 used in documented Tab5 testing) |
 | **Antenna** | For RF; compile/smoke works without RF |
 
 **Not claimed yet:** ESP32-S2/S3 Full-Speed hosts, generic/random RTL dongles, full-band/long-soak E4000 qualification, calibrated RF performance on every receiver, or a production warranty.
@@ -86,9 +88,9 @@ We are **not** chasing full librtlsdr feature parity (tuner IF filter still open
 | RTL-SDR Blog **V4 Lite** | R828S, HF upconverter and model controls | Tab5 streaming, FT8 and tuner/control evidence |
 | RTL-SDR Blog **V3c** | R820-family, Q direct sampling and native tuning | Tab5 streaming/RDS/FT8 evidence; earlier V3 boards not blanket-qualified |
 | **Nooelec NESDR SMArt V5** | R820-family, Q direct sampling and native controls | Tab5 IQ/FT8 and control evidence |
-| **Nooelec XTR / E4000** | Zero-IF tuning, manual gain ladder and tuner AUTO | **Working in-range within OrcSDR**, initial Tab5 FM/RDS recorded; full band/gain/soak characterization open |
+| **Nooelec XTR / E4000** | Zero-IF tuning, manual gain ladder and tuner AUTO | Initial Tab5 FM/RDS reception recorded; full band/gain/soak characterization open |
 
-The driver supplies **IQ and hardware controls**, not OrcSDR's digital decoders. For the distinct native P4 protocol implementations—ADS-B, P25, Meshtastic, POCSAG, FT8/FT4, JS8, SSTV, ACARS/VDL2, RDS and more—see the [OrcSDR native decoder inventory](https://github.com/hardcoreerik/OrcSDR/blob/main/docs/NATIVE_DECODER_INVENTORY.md).
+This driver supplies **I/Q samples and hardware controls**. Demodulation, signal processing, protocol decoding, visualization and networking belong to the application that integrates it; they are not features of this component.
 
 ## Quick start — try the smoke app
 
@@ -261,7 +263,7 @@ Design contract: [`docs/API.md`](docs/API.md) · header: [`include/esp_rtl_sdr.h
 | `set_tuner_gain_mode(MANUAL\|AUTO)` | MANUAL ladder; AUTO measured R828D AGC (`CAP_GAIN_AUTO`, 0.7.8+). Streaming = async EP0. |
 | `set/get_rtl_agc` | RTL2832 digital AGC (`CAP_RTL_AGC`); not tuner AUTO. **get** = requested shadow, not readback. |
 | `set/get_bias_tee` | Measured SYS EP0 (CAP_BIAS_TEE); need claimed stream |
-| HF/LF (profile-specific) | Blog V4/V4L use the RF+28.8 MHz HF upconverter path; Blog V3/V3c use Q-branch direct sampling below 24 MHz, which bypasses tuner gain. Nooelec SMArt V5 accepts 100 kHz–1750 MHz with Q below the captured 24 MHz cutoff, and [40 m FT8 reception has been observed through OrcSDR](https://github.com/hardcoreerik/OrcSDR/blob/main/docs/user-guide/dashboards/ft8.md). E4000 has a separate zero-IF tuner profile for approximately **64 MHz–1.7 GHz** with manual tuner gain/AUTO implemented, but no LF/HF, tuner bandwidth, bias tee or RTL AGC exposed; model/range-specific hardware acceptance is ongoing. |
+| HF/LF (profile-specific) | Blog V4/V4L use the RF+28.8 MHz HF upconverter path; Blog V3/V3c use Q-branch direct sampling below 24 MHz, which bypasses tuner gain. Nooelec SMArt V5 accepts 100 kHz–1750 MHz with Q below the captured 24 MHz cutoff; 7.074 MHz FT8 reception has been observed in an ESP32-P4 application, while standalone LF/RF calibration remains open. E4000 has a separate zero-IF tuner profile for approximately **64 MHz–1.7 GHz** with manual tuner gain/AUTO implemented, but no LF/HF, tuner bandwidth, bias tee or RTL AGC exposed; model/range-specific hardware acceptance is ongoing. |
 
 Evidence: [`docs/PHASE3_CAPTURE_REPORT.md`](docs/PHASE3_CAPTURE_REPORT.md), [`docs/AGC_IF_CAPTURE.md`](docs/AGC_IF_CAPTURE.md), and the checked-in clean-room transfer table. The 0.7.15 routing composition is host/build verified only; P4 GPIO and RF acceptance remain open.
 
@@ -319,7 +321,7 @@ Details: [`PROJECT_TRUTH.md`](PROJECT_TRUTH.md) · story: [`docs/archive/DEVELOP
 
 ## Project credits
 
-Created and maintained by [Erik / hardcoreerik](https://github.com/hardcoreerik), with AI-assisted development (Claude Sonnet, OpenAI Codex, Grok Build) — same honesty model as [TheOrc](https://github.com/hardcoreerik/TheOrc).
+Created and maintained by [Erik / hardcoreerik](https://github.com/hardcoreerik), with AI-assisted development (Claude Sonnet, OpenAI Codex, Grok Build).
 
 See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 
@@ -350,11 +352,9 @@ See [`docs/AI_DEVELOPMENT_DISCLOSURE.md`](docs/AI_DEVELOPMENT_DISCLOSURE.md).
 
 ---
 
-## Ecosystem
+## Project boundaries
 
-- **[OrcSDR](https://github.com/hardcoreerik/OrcSDR)** — ESP32-P4 SDR application (optional consumer)
-- **[TheOrc](https://github.com/hardcoreerik/TheOrc)** — local-first multi-agent tools (truth culture)
-- **This repo** — driver only; builds without OrcSDR
+**esp_rtl_sdr is an independent USB Host SDR driver**, not an SDR application. It has its own source, versioning, tests and release lifecycle, and can be integrated into any compatible ESP-IDF project. Consuming applications maintain their own DSP, decoders, interfaces and release schedules. No particular consuming application is required to build or use this component.
 
 ---
 
@@ -369,6 +369,6 @@ https://github.com/hardcoreerik/esp-rtl-sdr
 
 ## Support development
 
-If this project is useful to you, consider supporting its development. Across ORC projects, support helps fund development time, hardware testing, receiver compatibility, and decoder work.
+If this driver is useful to you, consider supporting its development. Contributions help fund hardware testing, receiver-profile compatibility, driver maintenance and documentation.
 
 [GitHub Sponsors](https://github.com/sponsors/hardcoreerik) · [Ko-fi](https://ko-fi.com/hardcoreerik) · [PayPal](https://paypal.me/hardcoreerik)

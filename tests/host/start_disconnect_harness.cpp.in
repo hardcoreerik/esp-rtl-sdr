@@ -1,0 +1,139 @@
+#include "esp_rtl_sdr.h"
+#include <atomic>
+#include <cstdio>
+#include <stdexcept>
+#include <cstring>
+
+#define RTL_LOGW(...) ((void)0)
+#define ESP_LOGI(...) ((void)0)
+enum class RtlProfileId { Unknown, Supported };
+struct esp_rtl_sdr_handle {
+    std::atomic<bool> device_gone{false}, start_inflight{false};
+    std::atomic<bool> ep0_sideband_busy{false};
+    void *dev = reinterpret_cast<void *>(1), *probe_q = nullptr;
+    uint8_t open_addr = 1;
+    bool streaming = false;
+    esp_rtl_sdr_state_t state = ESP_RTL_SDR_STATE_IDLE;
+    RtlProfileId profile = RtlProfileId::Supported;
+    esp_rtl_sdr_device_info_t info{};
+    esp_rtl_sdr_config_t cfg{};
+    uint32_t bulk_num = 3, bulk_len = 32768, tuner_reg_known = 0;
+    esp_err_t error = ESP_OK;
+    esp_rtl_sdr_handle() { info.present = true; }
+};
+static bool api_locked;
+static int lock_calls, fail_lock_call, closed, stopped, replacement_cleanup, started, disconnected, rescans, checks;
+static void expect(bool ok, const char *name) {
+    ++checks;
+    if (!ok) throw std::runtime_error(name);
+}
+struct HandleLock {
+    bool owned = false;
+    explicit HandleLock(esp_rtl_sdr_handle *, unsigned = 0) {
+        ++lock_calls;
+        if (!api_locked && lock_calls != fail_lock_call) owned = api_locked = true;
+    }
+    ~HandleLock() { release(); }
+    bool ok() const { return owned; }
+    void release() { if (owned) api_locked = owned = false; }
+};
+// ACTUAL_START_SCOPE
+static esp_err_t check_not_reentrant(esp_rtl_sdr_handle *) { return ESP_OK; }
+static void set_error_unlocked(esp_rtl_sdr_handle *h, esp_err_t error) { h->error = error; }
+static bool rtl_profile_supports_stream(RtlProfileId) { return true; }
+static bool rtl_profile_supports_rf_hz(RtlProfileId, uint32_t) { return true; }
+static bool release_after_unplug(esp_rtl_sdr_handle *h) {
+    h->ep0_sideband_busy = true;
+    return true;
+}
+static void close_opened_device(esp_rtl_sdr_handle *h) { ++closed; h->dev = nullptr; }
+static void clear_profile_runtime_state(esp_rtl_sdr_handle *h) { h->profile = RtlProfileId::Unknown; }
+static int xQueueSend(void *, const uint8_t *, unsigned) { ++rescans; return 1; }
+static void emit_after_unlock(esp_rtl_sdr_handle *, esp_rtl_sdr_event_t event, const void *payload,
+                              esp_rtl_sdr_event_cb_t cb, void *ctx) {
+    expect(!api_locked, "callback must run outside API mutex");
+    cb(event, payload, ctx);
+}
+static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, unsigned) {
+    ++stopped;
+    if (h->dev == reinterpret_cast<void *>(2)) ++replacement_cleanup;
+    h->streaming = false;
+    return ESP_OK;
+}
+// ACTUAL_DISCONNECT
+static void bind_replacement(esp_rtl_sdr_handle *h) {
+    h->dev = reinterpret_cast<void *>(2);
+    h->info.present = true; h->profile = RtlProfileId::Supported; h->open_addr = 2;
+}
+enum class Scenario { Success, AttachedUsbFailure, DisconnectInit, DisconnectCommit };
+static esp_err_t platform_init(esp_rtl_sdr_handle *h, Scenario scenario) {
+    if (scenario == Scenario::AttachedUsbFailure) return ESP_RTL_SDR_ERR_USB;
+    if (scenario == Scenario::DisconnectInit || scenario == Scenario::DisconnectCommit) {
+        h->device_gone = true;
+        // Exactly the captured ordering: a client tick occurs before startup returns.
+        if (complete_pending_disconnect(h)) bind_replacement(h);
+        return scenario == Scenario::DisconnectInit ? ESP_RTL_SDR_ERR_USB : ESP_OK;
+    }
+    return ESP_OK;
+}
+static esp_err_t actual_start_phases(esp_rtl_sdr_handle *handle, Scenario scenario) {
+    const uint32_t freq = 146520000, exact_sps = 2400000;
+    // ACTUAL_START_ADMISSION
+    esp_err_t ret = ESP_OK;
+    do {
+        ret = platform_init(handle, scenario);
+        if (ret != ESP_OK) break;
+        handle->streaming = true;
+        // ACTUAL_START_COMMIT
+    } while (0);
+    // ACTUAL_START_FAILURE
+}
+static void callback(esp_rtl_sdr_event_t event, const void *, void *) {
+    if (event == ESP_RTL_SDR_EVT_STREAM_STARTED) ++started;
+    if (event == ESP_RTL_SDR_EVT_DISCONNECTED) ++disconnected;
+}
+static void reset() {
+    api_locked = false;
+    lock_calls = fail_lock_call = closed = stopped = replacement_cleanup = started = disconnected = rescans = 0;
+}
+static void interrupted(Scenario scenario) {
+    reset();
+    esp_rtl_sdr_handle h; h.cfg.event_cb = callback;
+    expect(actual_start_phases(&h, scenario) == ESP_RTL_SDR_ERR_NO_DEVICE, "canceled start returns NO_DEVICE");
+    expect(!h.start_inflight, "start fence released on failure");
+    expect(closed == 0 && replacement_cleanup == 0, "client must not close/rebind during start cleanup");
+    expect(h.device_gone && h.dev == reinterpret_cast<void *>(1), "old attachment retained until cleanup settles");
+    expect(started == 0, "no successful start event after cancellation");
+    expect(complete_pending_disconnect(&h), "teardown progresses after start settles");
+    expect(h.state == ESP_RTL_SDR_STATE_IDLE && !h.device_gone && !h.dev, "disconnect clears old failure");
+    expect(disconnected == 1 && rescans == 1 && !h.ep0_sideband_busy, "disconnect event, rescan and EP0 release");
+    bind_replacement(&h);
+    expect(actual_start_phases(&h, Scenario::Success) == ESP_OK, "replacement starts");
+    expect(started == 1 && h.state == ESP_RTL_SDR_STATE_STREAMING && !h.start_inflight, "replacement remains streaming");
+}
+int main() {
+    try {
+        interrupted(Scenario::DisconnectInit);
+        interrupted(Scenario::DisconnectCommit);
+        reset();
+        esp_rtl_sdr_handle h; h.cfg.event_cb = callback;
+        expect(actual_start_phases(&h, Scenario::AttachedUsbFailure) == ESP_RTL_SDR_ERR_USB, "attached error preserved");
+        expect(h.state == ESP_RTL_SDR_STATE_FAULT && !h.start_inflight, "real fault remains latched");
+        expect(!complete_pending_disconnect(&h) && closed == 0, "attached fault is not silently cleared");
+        reset();
+        esp_rtl_sdr_handle gone; gone.device_gone = true;
+        expect(actual_start_phases(&gone, Scenario::Success) == ESP_RTL_SDR_ERR_NO_DEVICE, "reject start during teardown");
+        expect(stopped == 0 && !gone.start_inflight, "rejected start never owns USB resources");
+        reset();
+        esp_rtl_sdr_handle retry; retry.device_gone = true; fail_lock_call = 2;
+        expect(!complete_pending_disconnect(&retry), "failed final lock leaves teardown pending");
+        expect(retry.device_gone && !retry.ep0_sideband_busy, "retry does not leak the EP0 window");
+        fail_lock_call = 0;
+        expect(complete_pending_disconnect(&retry) && !retry.device_gone, "teardown retry completes");
+        std::printf("actual start/disconnect checks=%d PASS\n", checks);
+        return 0;
+    } catch (const std::exception &error) {
+        std::printf("FAIL: %s\n", error.what());
+        return 1;
+    }
+}

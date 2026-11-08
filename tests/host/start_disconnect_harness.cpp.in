@@ -77,7 +77,8 @@ static esp_err_t platform_init(esp_rtl_sdr_handle *h, Scenario scenario) {
     return ESP_OK;
 }
 static esp_err_t actual_start_phases(esp_rtl_sdr_handle *handle, Scenario scenario) {
-    const uint32_t freq = 146520000, exact_sps = 2400000;
+    const uint32_t freq = 146520000;
+    [[maybe_unused]] const uint32_t exact_sps = 2400000;
     // ACTUAL_START_ADMISSION
     esp_err_t ret = ESP_OK;
     do {

@@ -354,7 +354,8 @@ struct esp_rtl_sdr_handle {
     usb_device_handle_t dev = nullptr;
     bool iface_claimed = false;
     QueueHandle_t probe_q = nullptr;
-    volatile bool device_gone = false; /* set by DEV_GONE; cleared only after the device is closed */
+    std::atomic<bool> device_gone{false}; /* cleared only after the device is closed */
+    std::atomic<bool> start_inflight{false};
     TaskHandle_t host_task = nullptr;
     TaskHandle_t client_task = nullptr;
     TaskHandle_t delivery_task = nullptr;
@@ -567,6 +568,19 @@ private:
     esp_rtl_sdr_handle *h_ = nullptr;
     bool owned_ = false;
     bool timed_out_ = false;
+};
+
+// Admission is serialized by HandleLock; client teardown waits for this scope.
+class StartInFlight {
+public:
+    explicit StartInFlight(esp_rtl_sdr_handle *h) : flag_(h->start_inflight) {
+        flag_.store(true, std::memory_order_release);
+    }
+    ~StartInFlight() { flag_.store(false, std::memory_order_release); }
+    StartInFlight(const StartInFlight &) = delete;
+    StartInFlight &operator=(const StartInFlight &) = delete;
+private:
+    std::atomic<bool> &flag_;
 };
 
 static bool handle_live(const esp_rtl_sdr_handle *h)
@@ -3461,7 +3475,7 @@ static bool candidate_claimed_by_other(const esp_rtl_sdr_handle *h, uint8_t addr
 /** Open preferred candidate. If fire_events is false, caller emits after unlock. */
 static void open_selected_candidate(esp_rtl_sdr_handle *h, bool fire_events = true)
 {
-    if (h->dev != nullptr || h->candidate_count == 0) {
+    if (h->dev != nullptr || h->device_gone || h->candidate_count == 0) {
         return;
     }
     size_t idx = h->preferred_device_index;
@@ -3522,9 +3536,10 @@ static void open_selected_candidate(esp_rtl_sdr_handle *h, bool fire_events = tr
     }
 }
 
+/** Probe a new address only after the previous attachment has been closed. */
 static void try_open_device(esp_rtl_sdr_handle *h, uint8_t addr)
 {
-    if (h->dev != nullptr) {
+    if (h->dev != nullptr || h->device_gone) {
         return;
     }
     if (candidate_claimed_by_other(h, addr)) {
@@ -3766,6 +3781,50 @@ static void recover_failed_enumeration(esp_rtl_sdr_handle *h)
     }
 }
 
+/**
+ * Close a detached device after its active start attempt has finished unwinding.
+ * Returns false while startup or API-lock contention requires another client tick.
+ */
+static bool complete_pending_disconnect(esp_rtl_sdr_handle *h)
+{
+    HandleLock admission(h, 0);
+    if (!admission.ok() || !h->device_gone ||
+        h->start_inflight.load(std::memory_order_acquire)) {
+        return false;
+    }
+    // A new start rejects device_gone while the client closes this attachment.
+    admission.release();
+    RTL_LOGW(h, "usb disconnected profile=%s addr=%u (other handles unaffected)",
+             rtl_profile_name(h->profile), static_cast<unsigned>(h->open_addr));
+    h->streaming = false;
+    const bool ep0_held = release_after_unplug(h);
+    close_opened_device(h);
+    /* Only now: other tasks keep seeing device_gone until h->dev is closed. */
+    HandleLock final_lock(h, 0);
+    if (!final_lock.ok()) {
+        if (ep0_held) h->ep0_sideband_busy = false;
+        return false;
+    }
+    clear_profile_runtime_state(h);
+    h->info = {};
+    h->info.present = false;
+    h->state = ESP_RTL_SDR_STATE_IDLE;
+    h->device_gone.store(false, std::memory_order_release);
+    if (ep0_held) {
+        h->ep0_sideband_busy = false;
+    }
+    const uint8_t rescan = 0;
+    (void)xQueueSend(h->probe_q, &rescan, 0);
+    esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
+    void *ctx = h->cfg.event_ctx;
+    final_lock.release();
+    if (cb) {
+        emit_after_unlock(h, ESP_RTL_SDR_EVT_DISCONNECTED, nullptr, cb, ctx);
+    }
+    return true;
+}
+
+/** Pump USB completions, finish deferred disconnects, and probe queued attachments. */
 static void client_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
@@ -3773,29 +3832,7 @@ static void client_task_fn(void *arg)
         usb_host_client_handle_events(h->client, pdMS_TO_TICKS(20));
         retry_deferred_closes(h);
         recover_failed_enumeration(h);
-        if (h->device_gone) {
-            RTL_LOGW(h, "usb disconnected profile=%s addr=%u (other handles unaffected)",
-                     rtl_profile_name(h->profile), static_cast<unsigned>(h->open_addr));
-            h->streaming = false;
-            const bool ep0_held = release_after_unplug(h);
-            close_opened_device(h);
-            /* Only now: other tasks keep seeing device_gone until h->dev is closed. */
-            h->device_gone = false;
-            clear_profile_runtime_state(h);
-            h->info = {};
-            h->info.present = false;
-            h->state = ESP_RTL_SDR_STATE_IDLE;
-            if (ep0_held) {
-                h->ep0_sideband_busy = false;
-            }
-            const uint8_t rescan = 0;
-            (void)xQueueSend(h->probe_q, &rescan, 0);
-            esp_rtl_sdr_event_cb_t cb = h->cfg.event_cb;
-            void *ctx = h->cfg.event_ctx;
-            if (cb) {
-                emit_after_unlock(h, ESP_RTL_SDR_EVT_DISCONNECTED, nullptr, cb, ctx);
-            }
-        }
+        (void)complete_pending_disconnect(h);
         uint8_t addr = 0;
         while (xQueueReceive(h->probe_q, &addr, 0) == pdTRUE) {
             if (addr == 0) {
@@ -4565,6 +4602,10 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     return drained ? ESP_OK : ESP_RTL_SDR_ERR_TIMEOUT;
 }
 
+/**
+ * Initialize and start the current attachment, keeping it alive through cleanup.
+ * A disconnect cancels startup; the client closes the old device after this returns.
+ */
 esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                                const esp_rtl_sdr_stream_config_t *stream)
 {
@@ -4632,7 +4673,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_BUSY);
         return ESP_RTL_SDR_ERR_BUSY;
     }
-    if (handle->dev == nullptr || !handle->info.present) {
+    if (handle->dev == nullptr || handle->device_gone || !handle->info.present) {
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_NO_DEVICE);
         return ESP_RTL_SDR_ERR_NO_DEVICE;
     }
@@ -4649,6 +4690,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         return ESP_RTL_SDR_ERR_BAD_FREQ;
     }
     handle->state = ESP_RTL_SDR_STATE_STARTING;
+    StartInFlight start_operation(handle);
 
     /* USB work without holding API mutex across long EP0 sequences */
     lk.release();
@@ -4880,12 +4922,18 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         void *ctx = nullptr;
         {
             HandleLock lk2(handle);
-            if (lk2.ok()) {
-                handle->state = ESP_RTL_SDR_STATE_STREAMING;
-                set_error_unlocked(handle, ESP_OK);
-                cb = handle->cfg.event_cb;
-                ctx = handle->cfg.event_ctx;
+            if (!lk2.ok()) {
+                ret = ESP_RTL_SDR_ERR_TIMEOUT;
+                break;
             }
+            if (handle->device_gone) {
+                ret = ESP_RTL_SDR_ERR_NO_DEVICE;
+                break;
+            }
+            handle->state = ESP_RTL_SDR_STATE_STREAMING;
+            set_error_unlocked(handle, ESP_OK);
+            cb = handle->cfg.event_cb;
+            ctx = handle->cfg.event_ctx;
         }
         if (cb) {
             emit_after_unlock(handle, ESP_RTL_SDR_EVT_STREAM_STARTED, nullptr, cb, ctx);
@@ -4903,6 +4951,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
     (void)stop_stream_internal(handle, 1000);
     HandleLock lk3(handle);
     if (lk3.ok()) {
+        if (handle->device_gone) ret = ESP_RTL_SDR_ERR_NO_DEVICE;
         set_error_unlocked(handle, ret);
         if (ret == ESP_RTL_SDR_ERR_USB) {
             handle->state = ESP_RTL_SDR_STATE_FAULT;

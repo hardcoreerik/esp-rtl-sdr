@@ -151,3 +151,15 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS fifo_harness.cpp.
 add_executable(esp_rtl_sdr_fifo_tests ${CMAKE_CURRENT_BINARY_DIR}/test_actual_fifo.cpp)
 target_include_directories(esp_rtl_sdr_fifo_tests PRIVATE stubs ../../include ../../private)
 add_test(NAME acquisition_fifo COMMAND esp_rtl_sdr_fifo_tests)
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS start_disconnect_harness.cpp.in ../scripts/generate_start_disconnect_test.py)
+execute_process(COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/generate_start_disconnect_test.py
+    ${CMAKE_CURRENT_BINARY_DIR}/test_actual_start_disconnect.cpp
+    RESULT_VARIABLE start_disconnect_generator_result)
+if(NOT start_disconnect_generator_result EQUAL 0)
+    message(FATAL_ERROR "Could not generate start/disconnect regression")
+endif()
+add_executable(esp_rtl_sdr_start_disconnect_tests ${CMAKE_CURRENT_BINARY_DIR}/test_actual_start_disconnect.cpp)
+target_include_directories(esp_rtl_sdr_start_disconnect_tests PRIVATE stubs ../../include)
+add_test(NAME start_disconnect COMMAND esp_rtl_sdr_start_disconnect_tests)

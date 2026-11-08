@@ -5,6 +5,7 @@ root = Path(__file__).resolve().parents[2]
 source = Path(sys.argv[2]).read_text() if len(sys.argv) > 2 else (root / "src/esp_rtl_sdr.cpp").read_text()
 template = (root / "tests/host/start_disconnect_harness.cpp.in").read_text()
 def function(signature):
+    """Extract one top-level C++ function using the driver source brace style."""
     start = source.index(signature)
     return source[start:source.index("\n}", start) + 2]
 if "class StartInFlight {" in source:

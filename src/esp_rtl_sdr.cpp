@@ -3536,6 +3536,7 @@ static void open_selected_candidate(esp_rtl_sdr_handle *h, bool fire_events = tr
     }
 }
 
+/** Probe a new address only after the previous attachment has been closed. */
 static void try_open_device(esp_rtl_sdr_handle *h, uint8_t addr)
 {
     if (h->dev != nullptr || h->device_gone) {
@@ -3780,6 +3781,10 @@ static void recover_failed_enumeration(esp_rtl_sdr_handle *h)
     }
 }
 
+/**
+ * Close a detached device after its active start attempt has finished unwinding.
+ * Returns false while startup or API-lock contention requires another client tick.
+ */
 static bool complete_pending_disconnect(esp_rtl_sdr_handle *h)
 {
     HandleLock admission(h, 0);
@@ -3795,7 +3800,7 @@ static bool complete_pending_disconnect(esp_rtl_sdr_handle *h)
     const bool ep0_held = release_after_unplug(h);
     close_opened_device(h);
     /* Only now: other tasks keep seeing device_gone until h->dev is closed. */
-    HandleLock final_lock(h);
+    HandleLock final_lock(h, 0);
     if (!final_lock.ok()) {
         if (ep0_held) h->ep0_sideband_busy = false;
         return false;
@@ -3819,6 +3824,7 @@ static bool complete_pending_disconnect(esp_rtl_sdr_handle *h)
     return true;
 }
 
+/** Pump USB completions, finish deferred disconnects, and probe queued attachments. */
 static void client_task_fn(void *arg)
 {
     auto *h = static_cast<esp_rtl_sdr_handle *>(arg);
@@ -4596,6 +4602,10 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     return drained ? ESP_OK : ESP_RTL_SDR_ERR_TIMEOUT;
 }
 
+/**
+ * Initialize and start the current attachment, keeping it alive through cleanup.
+ * A disconnect cancels startup; the client closes the old device after this returns.
+ */
 esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
                                const esp_rtl_sdr_stream_config_t *stream)
 {

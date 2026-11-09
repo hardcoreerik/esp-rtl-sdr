@@ -7,8 +7,8 @@ Same discipline as [TheOrc PROJECT_TRUTH](https://github.com/hardcoreerik/TheOrc
 claims need evidence labels; oversell is a bug; retract rather than spin.
 The [status terminology](docs/STATUS_TERMINOLOGY.md) separates implemented device profiles from specific physical acceptance and calibration claims.
 
-Snapshot date: **2026-11-04** (documentation reconciliation; the hardware evidence retains its original dates)
-Version: **0.9.5** (pre-1.0). Blog V4, V4L, V3c and Nooelec SMArt V5 profiles are implemented, with documented M5Stack Tab5 streaming/control and receiver RF evidence across the OrcSDR and standalone programs. The E4000/XTR profile is also **implemented**; an initial Tab5 FM/RDS reception result is recorded, while complete band, gain, soak and RF-calibration acceptance remains open. Absolute gain calibration, analog passbands, loaded bias-tee current and LF reception at all endpoints are not broadly measured. See the dated evidence entries and [receiver profiles](docs/PROFILES.md); support implementation and measurement coverage are separate claims.
+Snapshot date: **2026-11-09** (0.9.6 release; hardware evidence retains its original dates)
+Version: **0.9.6** (pre-1.0). Blog V4, V4L, V3c and Nooelec SMArt V5 profiles are implemented, with documented M5Stack Tab5 streaming/control and receiver RF evidence across the OrcSDR and standalone programs. The E4000/XTR profile is also **implemented**; an initial Tab5 FM/RDS reception result is recorded, while complete band, gain, soak and RF-calibration acceptance remains open. Absolute gain calibration, analog passbands, loaded bias-tee current and LF reception at all endpoints are not broadly measured. See the dated evidence entries and [receiver profiles](docs/PROFILES.md); support implementation and measurement coverage are separate claims.
 The **E4000 profile is implemented** with model-specific probe, zero-IF tuning, IQ streaming, a captured manual gain ladder and tuner AUTO. The October 31 Tab5 record includes initial FM audio/RDS reception; remaining physical acceptance is explicitly scoped below. **Maintainer-confirmed in OrcSDR (2026-11-04):** E4000 works at frequencies its tuner supports. A dashboard targeting an unreachable band (e.g., AM broadcast without an appropriate converter) may open but OrcSDR does **not** send an invalid tune. This is a valid frequency-capability guard, not a failed integration; no E4000 HF reception is implied.
 
 Local repo: `F:\Ai\ESP_RTL_SDR\`  
@@ -34,7 +34,7 @@ Open-source honesty: [docs/AI_DEVELOPMENT_DISCLOSURE.md](docs/AI_DEVELOPMENT_DIS
 | Stand-alone re-soak from this tree on P4 | **Still open** — procedure/template ready ([docs/SOAK.md](docs/SOAK.md)); filled log not yet in tree |
 | Full API reference (params/returns/examples) | **Implemented** — [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
 | Intentional hardware scope documented | **Implemented** — [docs/SCOPE.md](docs/SCOPE.md) |
-| Git tags + published releases | **Implemented** — successive 0.x tags through v0.9.4; [releases](https://github.com/hardcoreerik/esp-rtl-sdr/releases) |
+| Git tags + published releases | **Implemented** — successive 0.x tags through v0.9.6; [releases](https://github.com/hardcoreerik/esp-rtl-sdr/releases) |
 
 If marketing copy contradicts this table, open a `truth:` issue.
 

@@ -1,5 +1,5 @@
 /*
- * ESP-IDF Tab5 / P4 drop-in smoke for esp_rtl_sdr public API (v0.9.3).
+ * ESP-IDF Tab5 / P4 drop-in smoke for esp_rtl_sdr public API (v0.9.6).
  *
  * One USB host install per boot. URB layout is a Kconfig choice so A/B
  * (6x16 KiB vs 3x32 KiB) is two firmware images, not two installs.
@@ -215,6 +215,7 @@ static void drain_task(void *arg)
     vTaskDelete(NULL);
 }
 
+/** Check helper invariants and require this release's reported driver version. */
 static void check_pure_helpers(void)
 {
     uint32_t q = 0;
@@ -229,7 +230,7 @@ static void check_pure_helpers(void)
     smoke_row("rate_4M_reject", !esp_rtl_sdr_is_rate_supported(4000000));
 
     const char *ver = esp_rtl_sdr_get_version_string();
-    smoke_row("version_0_9_3", ver != NULL && strcmp(ver, "0.9.3") == 0);
+    smoke_row("version_0_9_6", ver != NULL && strcmp(ver, "0.9.6") == 0);
 
     const uint32_t caps = esp_rtl_sdr_get_capabilities();
     smoke_row("cap_gain", (caps & ESP_RTL_SDR_CAP_GAIN) != 0);

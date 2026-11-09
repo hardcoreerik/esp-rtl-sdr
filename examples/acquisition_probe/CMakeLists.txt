@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(PROJECT_VER "0.9.3")
+set(PROJECT_VER "0.9.6")
 if(NOT SDKCONFIG)
     set(SDKCONFIG "${CMAKE_BINARY_DIR}/sdkconfig")
 endif()

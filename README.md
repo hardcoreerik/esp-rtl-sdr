@@ -4,7 +4,7 @@ A standalone RTL-SDR USB Host driver for **ESP32-P4**, written for ESP-IDF.
 
 `esp-rtl-sdr` is a clean-room implementation, not a port or wrapper of `librtlsdr`. It handles supported RTL2832U-based USB receivers and provides raw I/Q samples and hardware controls to ESP32-P4 applications.
 
-**Version:** 0.9.5 (pre-1.0) · **License:** AGPL-3.0-only
+**Version:** 0.9.6 (pre-1.0) · **License:** AGPL-3.0-only
 
 ## Why this project exists
 
@@ -149,7 +149,7 @@ The public API covers device detection and selection, streaming, frequency and s
 - [API design contract](docs/API.md) — threading and lifecycle rules
 - [Usage examples](docs/EXAMPLES.md) — integration recipes
 
-The header is the source of truth for available functions while the API reference is being brought up to date with version 0.9.5.
+The header is the source of truth for available functions while the API reference is being brought up to date with version 0.9.6.
 
 ## Current limitations
 

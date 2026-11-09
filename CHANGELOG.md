@@ -13,6 +13,14 @@
 
 ## Unreleased
 
+## 0.9.6 (2026-11-09) — recover interrupted receiver startup
+
+- Fix disconnect teardown racing with active initialization. Canceled starts return NO_DEVICE, cleanup waits for start to unwind, and replacement receivers can initialize without stale operations overwriting their state.
+- Keep disconnect cleanup API-lock attempts nonblocking so the USB client can continue processing events.
+- Add a source-extracted regression with 32 checks and retain focused session, uninstall, allocation and recovery coverage.
+- Refresh version markers and example image versions. E4000/XTR is an implemented profile with manual/tuner AUTO gain, hardware offset tuning and RTL digital AGC inherited from 0.9.5.
+- Separate ESP-IDF USB host assertion fixes are tracked in OrcSDR PR #239. See [release notes](docs/releases/v0.9.6.md) for evidence and validation limits.
+
 ## 0.9.5 (2026-11-05)
 
 - Enable RTL2832U digital AGC for E4000 receivers using captured XTR control transfers. Restore the requested ON state after initialization and before IQ streaming resumes.

@@ -2,7 +2,7 @@
 
 Desktop reference: **librtlsdr / rtl-sdr-blog**. Status matches `PROJECT_TRUTH.md`.
 
-| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.9.4 | Phase |
+| # | Desktop capability | librtlsdr (typical) | esp_rtl_sdr 0.9.6 | Phase |
 |---|---|---|---|---|
 | 1 | Open / close | `rtlsdr_open` | `install` / `uninstall` | **Done** |
 | 2 | Async IQ | `read_async` | `start` + `EVT_IQ_BLOCK` | **Done** |

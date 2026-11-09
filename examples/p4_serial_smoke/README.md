@@ -1,6 +1,6 @@
 # p4_serial_smoke
 
-ESP-IDF app that links **esp_rtl_sdr** and exercises the public 0.7.12 drop-in
+ESP-IDF app that links **esp_rtl_sdr** and exercises the public 0.9.6 drop-in
 contract on ESP32-P4 / Tab5.
 
 The explicitly selected Tab5 profile uses M5Unified's power-expander helper to enable the USB-A rail
@@ -96,10 +96,10 @@ grep CONFIG_ESP_RTL_SDR_SMOKE_URB build-3x32k/sdkconfig
 
 Do not flash until the matching `sdkconfig` grep is correct.
 
-Confirm at boot: `esp_rtl_sdr 0.7.12 soak=usb_soak_960k_6x16k urbs=6x16384`
+Confirm at boot: `esp_rtl_sdr 0.9.6 soak=usb_soak_960k_6x16k urbs=6x16384`
 or `soak=usb_soak_960k_3x32k urbs=3x32768`. App version in
 `build-6x16k/project_description.json` or
-`build-3x32k/project_description.json` must be `0.7.12`.
+`build-3x32k/project_description.json` must be `0.9.6`.
 
 The component is pulled via `components/esp_rtl_sdr/` (stable name wrapping the
 repo root sources). No dongle is required for a successful **compile**.

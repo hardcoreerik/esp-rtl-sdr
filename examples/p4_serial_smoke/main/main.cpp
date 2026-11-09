@@ -215,6 +215,7 @@ static void drain_task(void *arg)
     vTaskDelete(NULL);
 }
 
+/** Check helper invariants and require this release's reported driver version. */
 static void check_pure_helpers(void)
 {
     uint32_t q = 0;

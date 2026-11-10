@@ -58,6 +58,22 @@ typedef struct { int value; } esp_rtl_sdr_example_t;
         self.write("docs/API_REFERENCE.md", self.reference.replace("`0.9.6`", "`0.9.6-rc1`"))
         self.assertFalse(check(self.root)[0])
 
+    def test_pointer_typedef_requires_reference(self):
+        header = self.root / "include/esp_rtl_sdr.h"
+        self.write("include/esp_rtl_sdr.h", header.read_text(encoding="utf-8") +
+                   "typedef struct esp_rtl_sdr_handle *esp_rtl_sdr_handle_t;\n")
+        self.assertTrue(any("missing public symbol esp_rtl_sdr_handle_t" in e for e in check(self.root)[0]))
+        self.write("docs/API_REFERENCE.md", self.reference + "esp_rtl_sdr_handle_t\n")
+        self.assertFalse(check(self.root)[0])
+
+    def test_callback_typedef_requires_reference(self):
+        header = self.root / "include/esp_rtl_sdr_acquisition.h"
+        self.write("include/esp_rtl_sdr_acquisition.h", header.read_text(encoding="utf-8") +
+                   "typedef void (*esp_rtl_sdr_event_cb_t)(int event, const void *payload);\n")
+        self.assertTrue(any("missing public symbol esp_rtl_sdr_event_cb_t" in e for e in check(self.root)[0]))
+        self.write("docs/API_REFERENCE.md", self.reference + "esp_rtl_sdr_event_cb_t\n")
+        self.assertFalse(check(self.root)[0])
+
 
 if __name__ == "__main__":
     unittest.main()

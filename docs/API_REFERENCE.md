@@ -63,19 +63,30 @@ Best-in-class API docs (Stripe, ESP-IDF, libusb) share one pattern:
 
 ```c
 #include "esp_rtl_sdr.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 /* Keep this pointer in owner-task storage across calls and failures. */
 static esp_rtl_sdr_handle_t sdr;
 
-esp_err_t app_radio_start(void)
+esp_err_t app_radio_open(void)
 {
     if (sdr != NULL) return ESP_RTL_SDR_ERR_BUSY;
     esp_rtl_sdr_config_t cfg;
     esp_rtl_sdr_config_default(&cfg);
     cfg.delivery_mode = ESP_RTL_SDR_DELIVERY_READ;
-    esp_err_t err = esp_rtl_sdr_install(&cfg, &sdr);
-    if (err != ESP_OK) return err; /* sdr may need cleanup even on failure */
-    return esp_rtl_sdr_start_hz(sdr, 100100000u, ESP_RTL_SDR_RATE_960K);
+    return esp_rtl_sdr_install(&cfg, &sdr); /* failure may retain cleanup-only sdr */
+}
+
+/* Call only after open succeeded, from the owner task, never a callback. */
+esp_err_t app_radio_start(void)
+{
+    for (unsigned attempt = 0; attempt < 100; ++attempt) {
+        esp_err_t err = esp_rtl_sdr_start_hz(sdr, 100100000u, ESP_RTL_SDR_RATE_960K);
+        if (err != ESP_RTL_SDR_ERR_NO_DEVICE) return err;
+        vTaskDelay(pdMS_TO_TICKS(100)); /* let asynchronous discovery progress */
+    }
+    return ESP_RTL_SDR_ERR_NO_DEVICE; /* retain sdr for a later start retry */
 }
 
 esp_err_t app_radio_read(uint8_t *buf, size_t capacity, size_t *bytes)
@@ -91,12 +102,17 @@ esp_err_t app_radio_close(void)
 }
 ```
 
-Call start once from the owner task; read only after a successful start and
-process exactly the returned byte count. TIMEOUT means no bytes this time.
-After any install/start failure, call close if the stored pointer is non-NULL;
-a failed close leaves that pointer available for later cleanup retries. Do not
-retry normal controls through a cleanup-only handle. Board VBUS setup is the
-application's responsibility; this snippet does not configure a board.
+Call open once from the owner task, then start only if open succeeded. Install
+queues discovery, so an immediately attached receiver may not yet be open.
+The start helper yields between NO_DEVICE retries for roughly ten seconds;
+after that, retain the handle and retry start later (or notify the owner via
+EVT_READY in an event-based application). Do not close solely because discovery
+has not finished. When abandoning the session or on another failure, close any
+retained handle. Read only after a successful start and process exactly the
+returned byte count; TIMEOUT means no bytes this time. A failed close preserves
+a cleanup-only pointer for later close retries; never start/read through it.
+Board VBUS setup and application-level discovery deadlines remain the
+application's responsibility.
 
 Hardware walk-through: [`../examples/p4_serial_smoke/`](../examples/p4_serial_smoke/).
 
@@ -143,7 +159,7 @@ Config / stream / health / passport structs start with `size_t struct_size`.
 ```c
 uint32_t caps = esp_rtl_sdr_get_device_capabilities(sdr);
 if (!(caps & ESP_RTL_SDR_CAP_GAIN)) {
-    /* No accepted device is open, or this receiver lacks gain control. */
+    /* Gain is unavailable, or the query failed (zero mask can be transient). */
 }
 ```
 
@@ -304,7 +320,10 @@ uint32_t esp_rtl_sdr_get_capabilities(void);
 ### Capability map
 
 This table describes the binary's implemented paths. `esp_rtl_sdr_get_device_capabilities()`
-narrows that mask for the active profile; detached/unknown devices return zero.
+narrows that mask for the active profile. Zero can mean an unknown/unavailable
+receiver, invalid handle, or a query-lock timeout; retry transient contention
+using a live handle before concluding a feature/device is absent. The query has
+no separate status output. Route/rate restrictions still apply to nonzero masks.
 Neither mask establishes RF calibration or hardware soak acceptance.
 
 | Flag | Bit | Status | Meaning |
@@ -1106,10 +1125,14 @@ tune_hz = request_hz + request_hz * ppm / 1e6   (integer)
 |---|---|
 | Range | `[PPM_MIN, PPM_MAX]` = ±200 |
 | Default | 0 |
-| Effect | Stores preference; while streaming queues a retune, otherwise next tune/start |
+| Effect | Stores preference; while streaming attempts a retune when a frequency is set, otherwise next tune/start |
 
 This is **RF tuning correction**, including the direct-Q tuning path, not
-sample-clock calibration. While streaming the setter requests a retune.
+sample-clock calibration. While streaming with a frequency set, the setter
+attempts the retune on the calling task and can block while bulk transfers drain.
+Another sideband operation can leave it pending. Immediate retune errors are
+returned; `ESP_OK` may still mean pending. This setter rejects callback reentry;
+unlike `retune_hz`, call it from an application task.
 Its stored PPM preference is updated before the retune result is known; a
 getter is not proof that a failed operation changed the hardware. Acquisition
 clock estimates (§21) describe rate uncertainty without correcting the clock.
@@ -1297,17 +1320,38 @@ captures document sequence derivation; readback on the tested receiver and
 physical measurements provide separate evidence of programmed and RF state.
 
 ```c
-if (esp_rtl_sdr_get_device_capabilities(sdr) & ESP_RTL_SDR_CAP_GAIN) {
-    ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain_mode(sdr, ESP_RTL_SDR_GAIN_MODE_MANUAL));
-    ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain(sdr, 400)); /* nearest nominal ladder label, not measured RF gain */
+/* Owner/application task; caps are profile-wide, not a promise for every route. */
+uint32_t caps = esp_rtl_sdr_get_device_capabilities(sdr);
+if (caps & ESP_RTL_SDR_CAP_GAIN) {
+    esp_err_t err = esp_rtl_sdr_set_tuner_gain_mode(sdr, ESP_RTL_SDR_GAIN_MODE_MANUAL);
+    if (err == ESP_OK) err = esp_rtl_sdr_set_tuner_gain(sdr, 400); /* nominal label */
+    if (err == ESP_RTL_SDR_ERR_UNSUPPORTED) {
+        /* Expected when direct-Q bypasses the tuner: disable gain UI for this route. */
+    } else if (err != ESP_OK) {
+        ESP_LOGW(TAG, "gain request: %s", esp_rtl_sdr_err_to_name(err));
+    }
 }
-if (esp_rtl_sdr_get_device_capabilities(sdr) & ESP_RTL_SDR_CAP_GAIN_AUTO) {
-    ESP_ERROR_CHECK(esp_rtl_sdr_set_tuner_gain_mode(sdr, ESP_RTL_SDR_GAIN_MODE_AUTO));
+if (caps & ESP_RTL_SDR_CAP_GAIN_AUTO) {
+    esp_err_t err = esp_rtl_sdr_set_tuner_gain_mode(sdr, ESP_RTL_SDR_GAIN_MODE_AUTO);
+    if (err == ESP_RTL_SDR_ERR_UNSUPPORTED) {
+        /* Direct-Q route has no tuner AUTO control. */
+    } else if (err != ESP_OK) {
+        ESP_LOGW(TAG, "AUTO request: %s", esp_rtl_sdr_err_to_name(err));
+    }
 }
-if (esp_rtl_sdr_get_device_capabilities(sdr) & ESP_RTL_SDR_CAP_BIAS_TEE) {
-    ESP_ERROR_CHECK(esp_rtl_sdr_set_bias_tee(sdr, true));
+/* Warn before asking for an affirmative user response. Confirm the accessory
+ * is compatible and unpowered; a generic V3 capability does not prove a bias
+ * circuit exists. Default to OFF until the application has that confirmation. */
+bool accessory_confirmed_compatible_and_unpowered = false;
+if ((caps & ESP_RTL_SDR_CAP_BIAS_TEE) && accessory_confirmed_compatible_and_unpowered) {
+    esp_err_t err = esp_rtl_sdr_set_bias_tee(sdr, true);
+    if (err != ESP_OK) ESP_LOGW(TAG, "bias request: %s", esp_rtl_sdr_err_to_name(err));
 }
 ```
+
+These are independent control examples; an application chooses MANUAL or AUTO.
+Successful live requests can still be pending. If `caps==0`, retry transient
+query contention before deciding that the receiver has no controls.
 
 ---
 
@@ -1385,7 +1429,8 @@ static void on_sdr(esp_rtl_sdr_event_t ev, const void *payload, void *ctx)
 This uses the owner-storage functions in §1, configured for READ delivery.
 
 ```c
-esp_err_t started = app_radio_start();
+esp_err_t started = app_radio_open();
+if (started == ESP_OK) started = app_radio_start();
 while (started == ESP_OK) {
     uint8_t buf[8192];
     size_t n = 0;
@@ -1400,6 +1445,10 @@ esp_err_t cleanup = app_radio_close();
 /* On failure, the static owner pointer is preserved. Schedule another close
  * attempt; do not call start/read through the cleanup-only handle. */
 ```
+
+This recipe closes on loop exit because it abandons the session. An application
+waiting for an absent receiver should instead retain the successfully installed
+handle after NO_DEVICE and schedule another start attempt (§1).
 
 ### C. Both callback + `read`
 
@@ -1450,7 +1499,8 @@ if (err == ESP_RTL_SDR_ERR_NO_DEVICE) {
 ## 19. Symbol index
 
 Every declared public function and named struct/enum in both headers is listed
-here. Sections provide behavior and the headers provide exact declarations.
+here, including opaque-handle and callback typedefs. Sections provide behavior
+and the headers provide exact declarations.
 
 | Symbol | Section |
 |---|---|
@@ -1458,16 +1508,17 @@ here. Sections provide behavior and the headers provide exact declarations.
 | `esp_rtl_sdr_cap_t` | §5 |
 | `esp_rtl_sdr_capture_meta_default` | §20 |
 | `esp_rtl_sdr_capture_meta_t` | §20 |
-| `esp_rtl_sdr_config_default` | §1 |
-| `esp_rtl_sdr_config_t` | §1 |
+| `esp_rtl_sdr_config_default` | §9 |
+| `esp_rtl_sdr_config_t` | §7 |
 | `esp_rtl_sdr_config_validate` | §9 |
 | `esp_rtl_sdr_delivery_mode_t` | §20 |
 | `esp_rtl_sdr_delivery_mode_uses_callback_iq` | §7 |
 | `esp_rtl_sdr_delivery_mode_uses_read` | §20 |
 | `esp_rtl_sdr_device_info_t` | §7 |
-| `esp_rtl_sdr_err_to_name` | §2 |
+| `esp_rtl_sdr_err_to_name` | §4 |
 | `esp_rtl_sdr_error_info_t` | §7 |
 | `esp_rtl_sdr_event_t` | §7 |
+| `esp_rtl_sdr_event_cb_t` | §7 |
 | `esp_rtl_sdr_fill_capture_meta` | §20 |
 | `esp_rtl_sdr_format_usb_path` | §20 |
 | `esp_rtl_sdr_frequency_uses_hf_upconverter` | §20 |
@@ -1478,7 +1529,7 @@ here. Sections provide behavior and the headers provide exact declarations.
 | `esp_rtl_sdr_get_capture_meta` | §20 |
 | `esp_rtl_sdr_get_center_freq` | §13 |
 | `esp_rtl_sdr_get_device_at` | §14 |
-| `esp_rtl_sdr_get_device_capabilities` | §2 |
+| `esp_rtl_sdr_get_device_capabilities` | §20 |
 | `esp_rtl_sdr_get_device_count` | §14 |
 | `esp_rtl_sdr_get_device_info` | §11 |
 | `esp_rtl_sdr_get_freq_correction` | §14 |
@@ -1486,7 +1537,7 @@ here. Sections provide behavior and the headers provide exact declarations.
 | `esp_rtl_sdr_get_hf_direct_min_hz` | §20 |
 | `esp_rtl_sdr_get_hub_stats` | §20 |
 | `esp_rtl_sdr_get_identity` | §20 |
-| `esp_rtl_sdr_get_last_error` | §2 |
+| `esp_rtl_sdr_get_last_error` | §11 |
 | `esp_rtl_sdr_get_logical_index` | §20 |
 | `esp_rtl_sdr_get_metrics` | §11 |
 | `esp_rtl_sdr_get_offset_tuning_state` | §20 |
@@ -1507,12 +1558,13 @@ here. Sections provide behavior and the headers provide exact declarations.
 | `esp_rtl_sdr_health_from_window` | §15 |
 | `esp_rtl_sdr_health_info_t` | §7 |
 | `esp_rtl_sdr_health_t` | §7 |
+| `esp_rtl_sdr_handle_t` | §2 |
 | `esp_rtl_sdr_hub_port_power_cycle` | §20 |
 | `esp_rtl_sdr_hub_stats_default` | §20 |
 | `esp_rtl_sdr_hub_stats_t` | §20 |
 | `esp_rtl_sdr_identity_default` | §20 |
 | `esp_rtl_sdr_identity_t` | §20 |
-| `esp_rtl_sdr_install` | §1 |
+| `esp_rtl_sdr_install` | §10 |
 | `esp_rtl_sdr_iq_block_t` | §7 |
 | `esp_rtl_sdr_is_rate_supported` | §9 |
 | `esp_rtl_sdr_metrics_delta` | §15 |
@@ -1531,7 +1583,7 @@ here. Sections provide behavior and the headers provide exact declarations.
 | `esp_rtl_sdr_profile_to_name` | §20 |
 | `esp_rtl_sdr_quantize_sample_rate` | §9 |
 | `esp_rtl_sdr_rate_passport_t` | §7 |
-| `esp_rtl_sdr_read` | §1 |
+| `esp_rtl_sdr_read` | §13 |
 | `esp_rtl_sdr_refresh_device_list` | §14 |
 | `esp_rtl_sdr_release_iq_block` | §12 |
 | `esp_rtl_sdr_reset` | §12 |
@@ -1539,17 +1591,17 @@ here. Sections provide behavior and the headers provide exact declarations.
 | `esp_rtl_sdr_select_device` | §14 |
 | `esp_rtl_sdr_select_device_serial` | §14 |
 | `esp_rtl_sdr_set_bias_tee` | §16 |
-| `esp_rtl_sdr_set_center_freq` | §12 |
+| `esp_rtl_sdr_set_center_freq` | §13 |
 | `esp_rtl_sdr_set_freq_correction` | §14 |
 | `esp_rtl_sdr_set_hf_direct_min_hz` | §20 |
 | `esp_rtl_sdr_set_offset_tuning` | §20 |
 | `esp_rtl_sdr_set_rtl_agc` | §20 |
-| `esp_rtl_sdr_set_sample_rate` | §12 |
+| `esp_rtl_sdr_set_sample_rate` | §13 |
 | `esp_rtl_sdr_set_tuner_bandwidth` | §20 |
 | `esp_rtl_sdr_set_tuner_gain` | §16 |
 | `esp_rtl_sdr_set_tuner_gain_mode` | §16 |
-| `esp_rtl_sdr_start` | §1 |
-| `esp_rtl_sdr_start_hz` | §1 |
+| `esp_rtl_sdr_start` | §12 |
+| `esp_rtl_sdr_start_hz` | §12 |
 | `esp_rtl_sdr_state_t` | §7 |
 | `esp_rtl_sdr_state_to_name` | §7 |
 | `esp_rtl_sdr_stop` | §12 |
@@ -1559,7 +1611,7 @@ here. Sections provide behavior and the headers provide exact declarations.
 | `esp_rtl_sdr_stream_stats_default` | §20 |
 | `esp_rtl_sdr_stream_stats_t` | §20 |
 | `esp_rtl_sdr_tuner_frequency_hz` | §20 |
-| `esp_rtl_sdr_uninstall` | §1 |
+| `esp_rtl_sdr_uninstall` | §10 |
 | `esp_rtl_sdr_usb_device_count` | §20 |
 | `esp_rtl_sdr_usb_fault_guard_reset` | §20 |
 | `esp_rtl_sdr_usb_safe_mode_active` | §20 |
@@ -1589,9 +1641,9 @@ Value-returning profile/capability queries instead use UNKNOWN/zero sentinels.
 | API / type | Inputs, output and limits |
 |---|---|
 | `esp_rtl_sdr_profile_t` | UNKNOWN, BLOG_V4, BLOG_V3, NOOELEC_SMART_V5, BLOG_V4L, E4000. A profile identifies implemented behavior, not a hardware qualification level. |
-| `esp_rtl_sdr_get_profile(handle)` | Returns the active profile, or UNKNOWN for an invalid/unavailable handle. |
+| `esp_rtl_sdr_get_profile(handle)` | Returns the active profile, or UNKNOWN for an invalid/unavailable handle or query-lock failure. |
 | `esp_rtl_sdr_profile_to_name(profile)` | Static diagnostic name for the enum; no allocation or hardware access. |
-| `esp_rtl_sdr_get_device_capabilities(handle)` | Active-device bitmask; zero for unknown/unavailable device. Use this for device controls, rather than the binary-wide mask. Route/rate restrictions still apply. |
+| `esp_rtl_sdr_get_device_capabilities(handle)` | Active-device bitmask; zero for unknown/unavailable device, invalid handle or query-lock failure (retry transient contention). Use this for device controls, rather than the binary-wide mask. Route/rate restrictions still apply. |
 | `esp_rtl_sdr_frequency_uses_hf_upconverter(rf_hz)` | Pure legacy V4 arithmetic helper: tests RF below 28.8 MHz. Does not inspect a handle or prove another profile uses an upconverter. |
 | `esp_rtl_sdr_tuner_frequency_hz(rf_hz)` | Pure legacy V4 RF-to-tuner mapping; adds 28.8 MHz below the boundary. Do not use it to infer the active route of another receiver. |
 | `esp_rtl_sdr_delivery_mode_t` | BOTH feeds callback and read channels; CALLBACK omits the pull ring; READ omits IQ callbacks but retains the worker for controls/recovery. BOTH consumers observe separate deliveries of the same source data. |

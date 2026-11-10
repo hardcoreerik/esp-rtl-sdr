@@ -125,7 +125,9 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 
 `get_capabilities()` describes implemented paths in the binary, not the attached
 receiver. After discovery/open, use `get_device_capabilities(handle)` for controls.
-Unknown/detached devices report no device capabilities. A bit does not establish
+A zero mask can mean an unknown/detached receiver, invalid handle or query-lock
+timeout; retry transient contention with a live handle before concluding a
+feature/device is absent. A bit does not establish
 physical calibration or acceptance at every frequency/rate; consult
 [`PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) and the dated evidence.
 
@@ -180,7 +182,7 @@ Apps must:
 if (esp_rtl_sdr_get_device_capabilities(sdr) & ESP_RTL_SDR_CAP_STREAM) {
     /* an attached profile implements streaming; start can still fail */
 } else {
-    /* no accepted receiver is open, or this profile lacks the feature */
+    /* Feature/device unavailable, or query lock timed out: retry transient contention. */
 }
 ```
 

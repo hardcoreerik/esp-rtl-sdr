@@ -9,6 +9,8 @@ def public_symbols(header):
     header = re.sub(r"/\*.*?\*/|//[^\n]*", "", header, flags=re.S)
     functions = set(re.findall(r"\b(esp_rtl_sdr_\w+)\s*\([^;{}]*\)\s*;", header))
     types = set(re.findall(r"}\s*(esp_rtl_sdr_\w+_t)\s*;", header))
+    types |= set(re.findall(r"\btypedef\s+struct\s+\w+\s*\*\s*(esp_rtl_sdr_\w+_t)\s*;", header))
+    types |= set(re.findall(r"\btypedef\s+[^;{}]*\(\s*\*\s*(esp_rtl_sdr_\w+_t)\s*\)\s*\([^;{}]*\)\s*;", header))
     return functions | types
 
 

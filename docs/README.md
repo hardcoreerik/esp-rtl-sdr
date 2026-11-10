@@ -26,6 +26,7 @@ When docs disagree, PROJECT_TRUTH wins.
 |---|---|
 | [API_REFERENCE.md](API_REFERENCE.md) | **Full API reference** — params, returns, examples |
 | [API.md](API.md) | Design contract (invariants, threading, ABI) |
+| [LIBRTLSDR_PARITY_2026-11-09.md](LIBRTLSDR_PARITY_2026-11-09.md) | Pinned source comparison with Osmocom; no hardware-performance claim |
 | [EXAMPLES.md](EXAMPLES.md) | Usage recipes (FM/ADS-B/WX/sync/passport) |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common failures |
 | [KCONFIG.md](KCONFIG.md) | menuconfig options |

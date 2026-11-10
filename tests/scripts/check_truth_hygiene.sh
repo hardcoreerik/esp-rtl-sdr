@@ -62,15 +62,9 @@ do
   test -f "$f" || { echo "missing $f"; exit 1; }
 done
 
-# API reference must track header major.minor (detailed ref, not marketing)
-grep -qE "${MAJOR}\\.${MINOR}" docs/API_REFERENCE.md || {
-  echo "docs/API_REFERENCE.md missing version ${MAJOR}.${MINOR}"
-  exit 1
-}
-grep -qE "${MAJOR}\\.${MINOR}" docs/API.md || {
-  echo "docs/API.md missing version ${MAJOR}.${MINOR}"
-  exit 1
-}
+# Match declared versions exactly and check public symbols from both headers.
+# Searching major.minor anywhere accepted stale patch versions and history.
+python3 tests/scripts/check_api_docs.py
 
 # CAP_GAIN / CAP_BIAS may only appear in get_capabilities with MEASURED marker + tables
 if grep -E 'ESP_RTL_SDR_CAP_GAIN|ESP_RTL_SDR_CAP_BIAS_TEE' src/esp_rtl_sdr_policy.cpp | grep -v '//' >/dev/null; then

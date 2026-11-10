@@ -1,7 +1,7 @@
 # esp_rtl_sdr public API — design contract
 
 **Header:** [`include/esp_rtl_sdr.h`](../include/esp_rtl_sdr.h)  
-**Version:** 0.9.3
+**Version:** 0.9.6
 **Full parameter / return / example reference:** [`API_REFERENCE.md`](API_REFERENCE.md)
 
 This document is the **design contract** (invariants, threading, ABI growth).  
@@ -21,7 +21,7 @@ For every function’s parameters, return semantics, and copy-paste examples, us
 | Events outside lock | Callbacks run only after mutex release |
 | Stable ABI growth | `struct_size` on config structs; new fields only at end |
 | Clear failures | Component error codes + `err_to_name` + `get_last_error` |
-| Feature discovery | `get_capabilities`, rate allowlist, `get_supported_rates` |
+| Feature discovery | Binary `get_capabilities`; attached-device `get_device_capabilities`; rate windows and recommended rates |
 | No silent over-claim | Capability bits are enabled only for implemented paths |
 | Idempotent teardown | `stop` when idle; `uninstall(NULL)`; skip events during destroy |
 
@@ -49,19 +49,20 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 | `start` while STREAMING | `ERR_BUSY` |
 | `start` / `stop` / `reset` / `probe_rates` from event callback | `ERR_REENTRANT` |
 | `retune_hz` / `set_center_freq` from event callback | **Allowed** — queues async apply (0.7.3+); later `EVT_RETUNED` |
-| `get_*` with NULL/stale handle | safe; no crash |
-| failed `start` | handle remains **IDLE**; no interface claim |
+| stale handle | Invalid after successful uninstall; do not call through a freed pointer. Validation is not a lifetime guarantee. |
+| failed `start` | Inspect state/error; IDLE or FAULT depending on cleanup. Retain resources until stop/uninstall succeeds. |
 
 ---
 
 ## Threading
 
-1. Public API is serialized per handle (mutex).
+1. Use one owner task for lifecycle operations. Query/control paths use per-handle synchronization; this is not a guarantee that arbitrary operations can overlap safely.
 2. Event callbacks must not call `install` / `uninstall` / `start` / `stop` / `reset` / `probe_rates` on the same handle (`ERR_REENTRANT`).
 3. Callbacks **may** call `get_state`, `get_metrics`, `get_device_info`, `get_last_error`, `release_iq_block`, and **`retune_hz` / `set_center_freq`** (async queue).
-4. IQ payload pointers are **borrowed** until the callback returns (unless acquire mode + `release_iq_block` when CAP_IQ_ACQUIRE is set).
+4. IQ payload pointers are **borrowed** until the callback returns. Acquire mode is not implemented: its flag is ignored, CAP_IQ_ACQUIRE is off, and `release_iq_block` is a no-op.
 5. Never invoke API from a USB completion ISR.
 6. Do not call other APIs concurrent with `uninstall` on the same handle (single owner task).
+7. Use one reader for legacy `read()`. Acquisition `read_ex()` serializes readers, but does not make concurrent uninstall safe.
 
 ---
 
@@ -69,7 +70,7 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 
 ### Config (`config_validate`)
 
-- `struct_size == sizeof(config)`
+- Use `config_default()` for current size; validation accepts the legacy minimum through current `sizeof`, defaulting omitted trailing fields
 - `transfer_bytes` in [512, 262144] and **multiple of 512**
 - `transfer_count` in [2, 8]
 - `control_timeout_ms` in (0, 30000]
@@ -77,7 +78,7 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 
 ### Stream (`stream_config_validate`)
 
-- `struct_size` match
+- Use `stream_config_default()`; validation accepts the legacy minimum through current `sizeof`
 - `sample_rate_sps` 0 (fill preferred) or any in-window rate (see `docs/RATES.md`)
 - `CUSTOM_HZ`: exact-Hz frequency in the 24 kHz…1766 MHz arithmetic range;
   the attached profile can reject a narrower unsupported range
@@ -90,8 +91,8 @@ reset   → IDLE from FAULT if not streaming (clears metrics)
 | Function | Purpose |
 |---|---|
 | `config_default` / `stream_config_default` | Zero + safe defaults + `struct_size` |
-| `is_rate_supported` | Single-rate allowlist check |
-| `get_supported_rates` | Copy or size-query the allowlist |
+| `is_rate_supported` | Validate continuous hardware rate windows |
+| `get_supported_rates` | Copy or size-query recommended rates; not an exhaustive list |
 | `normalize_frequency` | Clamp/quantize policy |
 | `preset_frequency_hz` | Named preset LO (not CUSTOM) |
 | `state_to_name` / `err_to_name` | Logging without sprintf tables in apps |
@@ -105,22 +106,30 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 
 | Code | Meaning |
 |---|---|
-| `NO_DEVICE` | No Blog V4 attached |
+| `NO_DEVICE` | No accepted receiver available |
 | `NOT_V4` / `UNSUPPORTED_DEVICE` | USB device present but identity mismatch |
 | `BAD_DEVICE` | Device index / serial selection invalid |
 | `BUSY` | Already streaming / stop in progress / concurrent uninstall |
 | `NOT_STREAMING` | retune without stream |
 | `BAD_RATE` / `BAD_FREQ` | Policy reject |
 | `USB` / `TIMEOUT` / `FAULT` | Hardware path |
-| `UNSUPPORTED` | Feature not built yet |
-| `STALE_HANDLE` | Use after uninstall / bad pointer |
+| `UNSUPPORTED` | Unavailable feature, profile, RF route or operating configuration |
+| `STALE_HANDLE` | Handle validation failed; not permission to reuse a freed pointer |
 | `REENTRANT` | Lifecycle API called from event callback |
 | `NOT_CLAIMED` | Device present but not claimed (future) |
 | `NOT_READY` | Transient not-ready (USB client not ready) |
 
 ---
 
-## Capabilities (0.7.8 binary)
+## Capabilities
+
+`get_capabilities()` describes implemented paths in the binary, not the attached
+receiver. After discovery/open, use `get_device_capabilities(handle)` for controls.
+A zero mask can mean an unknown/detached receiver, invalid handle or query-lock
+timeout; retry transient contention with a live handle before concluding a
+feature/device is absent. A bit does not establish
+physical calibration or acceptance at every frequency/rate; consult
+[`PROJECT_TRUTH.md`](../PROJECT_TRUTH.md) and the dated evidence.
 
 | Flag | Status |
 |---|---|
@@ -140,10 +149,12 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | `GAIN` | On (measured Blog V4 manual ladder) |
 | `GAIN_AUTO` | On (measured Tuner AGC AUTO, 0.7.8) |
 | `RTL_AGC` | On (measured demod 0x19, 0.7.8; additive) |
-| `HF_UPCONVERTER` | On (0.7.7) |
-| `BIAS_TEE` | On (measured SYS sequence; no multimeter DC yet) |
+| `HF_UPCONVERTER` | V4/V4L model-specific route; not ADC direct sampling |
+| `BIAS_TEE` | Profile-specific; a generic V3 identity does not prove a bias circuit |
 | `IQ_ACQUIRE` | Off |
-| `DIRECT_SAMPLING` | On only for Blog V3/V3c; Q branch below 24 MHz |
+| `DIRECT_SAMPLING` | V3/V3c and Nooelec V5 automatic Q branch below 24 MHz |
+| `TUNER_BANDWIDTH` | V4/V4L/V3/Nooelec V5, at 2.4 MS/s on supported tuner routes |
+| `OFFSET_TUNING` | Experimental E4000 only; configure in IDLE |
 
 ---
 
@@ -157,7 +168,7 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 | `quantize_sample_rate` | Pure helper; no handle |
 | `read` | Blocking CU8 IQ |
 | `start_hz` | Convenience start (0 = preferred) |
-| `set/get_freq_correction` | ±200 ppm software LO |
+| `set/get_freq_correction` | ±200 ppm RF tuning correction; not sample-clock calibration |
 | Gain / AUTO / RTL AGC / bias **set** | Claimed stream; **async** while streaming (bulk pause + EP0 on delivery task). `ESP_OK` = accepted |
 | Gain / AUTO / RTL AGC / bias **get** | Last **requested** shadow — **not** EP0/I2C readback |
 | Multi-device APIs | refresh / count / at / select |
@@ -168,10 +179,10 @@ Prefer component codes over generic `INVALID_STATE` when the app can branch:
 Apps must:
 
 ```c
-if (esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_STREAM) {
-    /* start guaranteed to attempt USB */
+if (esp_rtl_sdr_get_device_capabilities(sdr) & ESP_RTL_SDR_CAP_STREAM) {
+    /* an attached profile implements streaming; start can still fail */
 } else {
-    /* feature is unavailable in this build */
+    /* Feature/device unavailable, or query lock timed out: retry transient contention. */
 }
 ```
 
@@ -179,28 +190,13 @@ if (esp_rtl_sdr_get_capabilities() & ESP_RTL_SDR_CAP_STREAM) {
 
 ## Recommended app pattern
 
-```c
-esp_rtl_sdr_config_t cfg;
-esp_rtl_sdr_config_default(&cfg);
-cfg.event_cb = on_evt;
-ESP_ERROR_CHECK(esp_rtl_sdr_config_validate(&cfg));
+The [minimal receive example](API_REFERENCE.md#1-ten-minute-path) keeps the
+handle in owner-task storage, reads CU8 pairs, and preserves the pointer after
+failed cleanup. Use the [cleanup retry example](API_REFERENCE.md#cleanup-retry-example)
+for error paths, including a failed install that returns a non-NULL handle.
 
-esp_rtl_sdr_handle_t sdr = NULL;
-esp_err_t err = esp_rtl_sdr_install(&cfg, &sdr);
-if (err != ESP_OK) { /* sdr is NULL */ }
-
-esp_rtl_sdr_stream_config_t st;
-esp_rtl_sdr_stream_config_default(&st);
-st.preset = ESP_RTL_SDR_PRESET_CUSTOM_HZ;
-st.frequency_hz = 100100000;
-err = esp_rtl_sdr_start(sdr, &st);
-/* handle hardware and validation errors; check CAP_STREAM first */
-
-/* teardown always */
-(void)esp_rtl_sdr_stop(sdr, 0); /* 0 = default timeout */
-(void)esp_rtl_sdr_uninstall(sdr);
-sdr = NULL;
-```
+Do not abort on recoverable USB errors or unconditionally clear the handle after
+uninstall. Suspend readers/callback-dependent work before destroying the handle.
 
 ### Event callback rules (copy-paste)
 
@@ -255,7 +251,7 @@ Bump `ESP_RTL_SDR_VERSION_*`, `ESP_RTL_SDR_VERSION_STRING` (via macros), and `id
 
 Packed runtime version: `(major << 16) | (minor << 8) | patch` from `get_version()`.
 
-## Incomplete teardown (maintenance branch)
+## Incomplete teardown
 
 `uninstall()` destroys the handle only on `ESP_OK`. A drain, worker join,
 device close, client deregistration or final host cleanup failure retains the
@@ -271,3 +267,12 @@ returns `ESP_ERR_INVALID_STATE` on final owned-host teardown in that case and
 keeps the host resident. A reboot may be required. This is an explicit limitation,
 including the no-dongle case, rather than proof of clean teardown. See the
 [2026-10-29 investigation](reviews/EXTERNAL_DRIVER_FINDINGS_2026-10-29.md).
+
+## Additional integration reference
+
+The [complete reference](API_REFERENCE.md#20-profile-routing-identity-and-recovery)
+covers device capabilities, identity, recovery and board controls. Its
+[acquisition section](API_REFERENCE.md#21-acquisition-metadata)
+covers both public headers and byte-associated metadata. The
+[dated Osmocom comparison](LIBRTLSDR_PARITY_2026-11-09.md) distinguishes implemented
+differences from physical acceptance and future proposals.

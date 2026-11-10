@@ -60,6 +60,7 @@ jobs:
 
       - name: Run hygiene script
         run: |
+          python3 tests/scripts/test_check_api_docs.py
           chmod +x tests/scripts/check_truth_hygiene.sh
           ./tests/scripts/check_truth_hygiene.sh
 

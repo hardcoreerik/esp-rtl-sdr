@@ -1,0 +1,47 @@
+name: Lab OrcSDR integration observation
+on:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Observation duration per board (20-300 seconds)
+        type: number
+        default: 60
+permissions:
+  contents: read
+concurrency:
+  group: esp-rtl-sdr-physical-lab
+  cancel-in-progress: false
+jobs:
+  observe:
+    runs-on: [self-hosted, Windows, esp-rtl-sdr-lab]
+    environment: orcsdr-lab
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Observe installed application firmware
+        shell: pwsh
+        env:
+          TAB_PORT: ${{ vars.TAB5_PORT }}
+          TAB_SERIAL: ${{ vars.TAB5_USB_SERIAL }}
+          P4_PORT: ${{ vars.HOSYOND_PORT }}
+          P4_SERIAL: ${{ vars.HOSYOND_USB_SERIAL }}
+          OBSERVE_SECONDS: ${{ inputs.seconds }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($value in @($env:TAB_PORT, $env:TAB_SERIAL, $env:P4_PORT, $env:P4_SERIAL)) {
+            if ([string]::IsNullOrWhiteSpace($value)) { throw 'Configure the lab environment device variables first' }
+          }
+          $duration = [int]$env:OBSERVE_SECONDS
+          if ($duration -lt 20 -or $duration -gt 300) { throw 'Invalid observation duration' }
+          $output = Join-Path $env:RUNNER_TEMP "orcsdr-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $output -ErrorAction Stop | Out-Null
+          python tools/lab/observe_orcsdr.py --board tab5 --port $env:TAB_PORT --usb-serial $env:TAB_SERIAL --seconds $duration --output "$output/tab5.json"
+          $tabResult = $LASTEXITCODE
+          python tools/lab/observe_orcsdr.py --board hosyond --port $env:P4_PORT --usb-serial $env:P4_SERIAL --seconds $duration --output "$output/hosyond.json"
+          if ($tabResult -ne 0 -or $LASTEXITCODE -ne 0) { throw 'Hardware integration observation failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orcsdr-lab-observation
+          path: ${{ runner.temp }}/orcsdr-${{ github.run_id }}-${{ github.run_attempt }}/*.json
+          if-no-files-found: warn

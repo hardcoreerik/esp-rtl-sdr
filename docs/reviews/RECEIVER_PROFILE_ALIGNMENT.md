@@ -79,7 +79,7 @@ Validation was performed **read-only against the GitHub source and file tree** i
 | Check current branch docs/navigational references | **PASS:** root README, docs index, truth and central profiles link the appropriate pages |
 | Resolve internal Markdown links against the repository tree | **PASS on completed branch:** **329 relative references checked** across all ten changed files; **zero unresolved internal links** against the final branch tree |
 | Align driver version markers | **PASS:** public header and `idf_component.yml` both specify `0.9.6`; README/truth use this version |
-| Documentation-only diff inspection | **PASS on completed branch:** GitHub compare from `b3cc572` reports **3 commits, ahead by 3, behind by 0**, changing exactly **10 Markdown files**; no implementation/build/config changes |
+| Documentation-only diff inspection | **PASS on documentation branch:** GitHub compare from `b3cc572` reported exactly **10 changed Markdown files**, with no implementation/build/config changes; branch was ahead of the base with no unrelated commits |
 | Repo-provided test scripts | **NOT RUN:** contents reviewed; full checkout/command execution unavailable in this sandbox GitHub editing workflow |
 | Physical hardware | **NOT RUN**, intentionally out of scope |
 

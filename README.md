@@ -45,7 +45,7 @@ The driver supplies I/Q samples and hardware control. Decoders, audio, displays,
 | [RTL-SDR Blog V4 Lite](docs/BLOG_V4L_PROFILE.md) | Implemented; ESP32-P4 tested |
 | [RTL-SDR Blog V3c](docs/BLOG_V3_PROFILE.md) | Implemented; ESP32-P4 tested |
 | [Nooelec NESDR SMArt V5](docs/NOOELEC_V5_PROFILE.md) | Implemented; ESP32-P4 tested |
-| [Nooelec XTR / E4000](docs/E4000_PROFILE.md) | Implemented; initial ESP32-P4 reception recorded |
+| [Nooelec XTR / E4000](docs/E4000_PROFILE.md) | Implemented; ESP32-P4 tested |
 
 Not all features are available on every receiver. Other RTL2832U dongles are not automatically supported.
 

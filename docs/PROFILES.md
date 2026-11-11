@@ -28,7 +28,7 @@ All **five** names below are implemented profiles in the [current source registr
 | RTL-SDR Blog V4 Lite / R828S | `blog_v4l_r828s` | **[V4L engineering profile](BLOG_V4L_PROFILE.md)** | Tab5 IQ/bandwidth/hotplug, HF FT8, PC AM |
 | Blog V3 family / R820T2 or R860 | `blog_v3_r820t2` | **[V3/V3c engineering profile](BLOG_V3_PROFILE.md)** | **V3c** FM/RDS, Q-HF, Tab5 hotplug; earlier V3 revisions individually verify |
 | Nooelec NESDR SMArt V5 / R820 family | `nooelec_smart_v5_r820t2` | **[SMArt V5 engineering profile](NOOELEC_V5_PROFILE.md)** | Standalone Tab5 smoke, band/stream/hotplug, 7.074 MHz FT8 |
-| Nooelec XTR / Elonics E4000 | `e4000_experimental` (historical name) | **[E4000/XTR engineering profile](E4000_PROFILE.md)** | Tab5 FM/RDS and IQ; extended RF/gain/soak gates remain |
+| Nooelec XTR / Elonics E4000 | `e4000_experimental` (historical name) | **[E4000/XTR engineering profile](E4000_PROFILE.md)** | Tab5 FM/RDS, multi-rate IQ, offset and bounded lifecycle tests; RF/gain/long-soak gates remain |
 
 Per-model capabilities come from `esp_rtl_sdr_get_device_capabilities()`, **not** the library-wide capability union; the source registry is the authority. See [status terminology](STATUS_TERMINOLOGY.md), [v0.9.6 release](releases/v0.9.6.md), [full API](API_REFERENCE.md).
 
@@ -38,13 +38,13 @@ Per-model capabilities come from `esp_rtl_sdr_get_device_capabilities()`, **not*
 
 | Field | Value |
 |---|---|
-| Status | **Implemented**; initial Tab5 FM audio/RDS and IQ streaming recorded 2026-10-31, with broader current-release RF/gain/soak acceptance remaining open. Internal profile name is historical, not a marketing status label. |
+| Status | **Implemented; ESP32-P4 hardware-tested**, including FM stereo/RDS, IQ at multiple rates, offset-tuning and bounded lifecycle cycles on named candidates. Broad RF/gain calibration, long soak and a complete current-release matrix remain open. Internal profile name is historical, not a marketing status label. |
 | USB | Exact `0bda:2838` + `Nooelec` / product contains `SMArTee XTR v5`; other shared-ID descriptors require E4000 register-0x02 ID `0x40`. Other VID/PID pairs are not accepted yet |
 | Tuner | E4000 at seven-bit I2C address `0x64` (USB bridge encoded `wValue=0x00c8`) |
 | Clock / RF | Assumes a 28.8 MHz tuner reference; published E4000 range **64 MHz–1.7 GHz** |
 | Path | Shared RTL2832U demodulator and IQ streaming; E4000-specific zero-IF tuning and RF filter selection |
 | Caps | STREAM/RETUNE, manual tuner gain (`CAP_GAIN`, 14 nominal steps including -1 dB) and tuner AUTO (`CAP_GAIN_AUTO`) are implemented, along with RTL digital AGC (`CAP_RTL_AGC`). Tuner bandwidth, direct sampling, HF upconverter and **software-switchable** bias tee are unavailable; the reported XTR hardware bias tee is not a controllable driver capability. |
-| Evidence | Host profile/PLL/actual-tune checks, first-party PC captures, initial Tab5 2.4 MS/s streaming with FM audio and KZEL RDS; targeted gain-history comparison on COM39. A complete full-band hardware/soak acceptance matrix is not recorded. See [E4000 profile](E4000_PROFILE.md) and [gain controls](E4000_GAIN_CONTROLS.md). |
+| Evidence | Host profile/PLL/actual-tune checks; first-party PC captures; Tab5 2.4 MS/s FM/KZEL RDS and 60.71-second stream; separately recorded 960 kS/s and 3.2 MS/s IQ, six COM39 offset IQ captures and bounded reconnect/hotplug cycles; targeted gain-history comparison. Candidate/date and external SDK patch boundaries apply. See [E4000 profile](E4000_PROFILE.md), [completion audit](validation/E4000_REMAINING_GATES.md) and [gain controls](E4000_GAIN_CONTROLS.md). |
 
 The profile deliberately bypasses the R828D/R820-family initialization, tune tables, and the two R828D gain writes embedded in the shared sample-rate slice. It uses a fixed, conservative IF-filter configuration and a captured 14-step manual gain ladder plus tuner AUTO. The E4000 tuner clock is an assumption until confirmed on hardware; divider fallbacks outside the datasheet's nominal VCO range are logged.
 

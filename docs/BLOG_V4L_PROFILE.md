@@ -40,7 +40,7 @@ At 2.4 MS/s, captured filter/IF selection is coupled to the requested bandwidth.
 
 - **Manual gain:** `CAP_GAIN`, 29 nominal 0.0–49.6 dB requests were exercised in first-party **PC** FM and AM sweeps; these are register/API levels, not a calibrated measurement of RF gain.
 - **Tuner AUTO:** `CAP_GAIN_AUTO` is distinct from RTL2832U digital `CAP_RTL_AGC`; both are represented by the V4L capability mask, with separate APIs.
-- **Native tuner bandwidth:** `CAP_TUNER_BANDWIDTH`, AUTO and six explicit plans (200k/300k/500k/1.0M/1.8M/2.4M) at **2.4 MS/s**, with matched demod IF and tuner programming.
+- **Native tuner bandwidth:** `CAP_TUNER_BANDWIDTH`, AUTO and six explicit plans (200k/300k/500k/1.0M/1.8M/2.4M) at **2.4 MS/s**, with matched demod IF and tuner programming. At or below 28.8 MHz on the HF upconverter route (not direct tuner), only AUTO, 200 kHz, 500 kHz and 2.4 MHz are accepted; 300 kHz, 1.0 MHz and 1.8 MHz return `ESP_RTL_SDR_ERR_UNSUPPORTED`.
 - **Bias tee:** V4L advertises `CAP_BIAS_TEE`. First-party PC captures include software OFF/ON and no-load voltage checks. No loaded output-current acceptance was recorded.
 - **Unavailable:** direct sampling Q and E4000 hardware offset tuning. It does advertise `CAP_HF_UPCONVERTER`.
 
@@ -48,7 +48,7 @@ A live [Tab5 bandwidth regression](captures/v3c_live_bandwidth_2026-09-28.md) fi
 
 ## 6. IQ streaming, start/stop and hotplug
 
-The common ESP-IDF High-Speed USB Host client manages enumeration, interface claim, tuner setup, RTL2832U rate programming, bulk-IN multi-URB streaming, and interleaved unsigned 8-bit I/Q (CU8). The public API supports callback, blocking-read and BOTH delivery; `start`, asynchronous in-stream `retune_hz`, `stop`, detach and reattachment use the shared lifecycle. Metrics and health counters are available, but an API acknowledgment is not equivalent to measured RF quality. A hardware test for one profile, host or firmware image **must not** be copied to another. [API contract](API.md) · [USB recovery test plan](acquisition-reliability/TEST_PLAN.md) · [test harness](../examples/p4_serial_smoke/README.md).
+The common ESP-IDF High-Speed USB Host client manages enumeration, interface claim, tuner setup, RTL2832U rate programming, bulk-IN multi-URB streaming, and interleaved unsigned 8-bit I/Q (CU8). The public API supports callback, blocking-read and BOTH delivery; `start`, in-stream `retune_hz`, `stop`, detach and reattachment use the shared lifecycle. Retunes from event callbacks are queued; application-task retunes attempt the change immediately and can block during transfer draining. Metrics and health counters are available, but an API acknowledgment is not equivalent to measured RF quality. A hardware test for one profile, host or firmware image **must not** be copied to another. [API contract](API.md) · [USB recovery test plan](acquisition-reliability/TEST_PLAN.md) · [test harness](../examples/p4_serial_smoke/README.md).
 
 V4L has named Tab5 IQ, rate, bandwidth and replug results. [2026-10-01 hotplug records](captures/tab5_rate_matrix_2026-10-01/README.md) report **six disconnects, six probes, six restarts**, with zero start failures/reboots/leaked URBs in the stated candidate/software setup; a separate console-text interleaving timeout must not be mistaken for USB failure. The shared 0.9.6 interrupted-start recovery changes are not a retrospective V4L full release soak.
 

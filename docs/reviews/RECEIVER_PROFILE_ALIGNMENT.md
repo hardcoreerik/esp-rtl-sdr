@@ -77,9 +77,9 @@ Validation was performed **read-only against the GitHub source and file tree** i
 | Confirm default branch and release | **PASS:** `master` / current published driver version `0.9.6` |
 | Compare source registry and public enum | **PASS:** exactly five implemented profile identifiers, excluding `Unknown`; each has a dedicated page |
 | Check current branch docs/navigational references | **PASS:** root README, docs index, truth and central profiles link the appropriate pages |
-| Resolve internal Markdown links against the repository tree | **PASS on pre-report snapshot:** **303 relative references checked** across nine changed files; only missing destination was this not-yet-created audit report; repeat after report creation |
+| Resolve internal Markdown links against the repository tree | **PASS on completed branch:** **329 relative references checked** across all ten changed files; **zero unresolved internal links** against the final branch tree |
 | Align driver version markers | **PASS:** public header and `idf_component.yml` both specify `0.9.6`; README/truth use this version |
-| Documentation-only diff inspection | **PASS on first two commits:** GitHub compare showed only nine `.md` changes, no code/build/config changes; repeat on final branch |
+| Documentation-only diff inspection | **PASS on completed branch:** GitHub compare from `b3cc572` reports **3 commits, ahead by 3, behind by 0**, changing exactly **10 Markdown files**; no implementation/build/config changes |
 | Repo-provided test scripts | **NOT RUN:** contents reviewed; full checkout/command execution unavailable in this sandbox GitHub editing workflow |
 | Physical hardware | **NOT RUN**, intentionally out of scope |
 
@@ -91,7 +91,7 @@ python3 tests/scripts/check_api_docs.py
 bash tests/scripts/run_host_tests.sh
 ```
 
-The first two are the repository's version/truth and API-document checks; the last runs the host suite and is useful independent release regression coverage but does not validate a physical RF receiver. All three should be run in normal CI or a complete local checkout before merging. Verify the final 303+ links and all changes are documentation-only from the proposed PR diff.
+The first two are the repository's version/truth and API-document checks; the last runs the host suite and is useful independent release regression coverage but does not validate a physical RF receiver. All three should be run in normal CI or a complete local checkout before merging. The completed branch's 329 checked internal links resolved at review time; inspect the final PR diff and rerun the repository's normal CI before merging.
 
 ## 7. Merge policy and follow-ups
 

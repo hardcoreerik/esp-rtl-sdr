@@ -48,7 +48,12 @@ When docs disagree, PROJECT_TRUTH wins.
 | [PHASE3_CAPTURE_REPORT.md](PHASE3_CAPTURE_REPORT.md) | Plain-English report: bias+gain lab captures and why they matter |
 | [TESTING.md](TESTING.md) | Lab gear (Heltec, Baofeng, Flipper, hosts) |
 | [PROFILES.md](PROFILES.md) | Dongle profiles and acceptance status |
+| [BLOG_V4_PROFILE.md](BLOG_V4_PROFILE.md) | Blog V4 / R828D: identity, HF, controls and dated RF validation |
+| [BLOG_V4L_PROFILE.md](BLOG_V4L_PROFILE.md) | Blog V4 Lite / R828S: separate HF path, tuning, controls and validation |
+| [BLOG_V3_PROFILE.md](BLOG_V3_PROFILE.md) | Blog V3/V3c: R820/R860 identity, Q direct sampling, V3c-only RF acceptance |
+| [NOOELEC_V5_PROFILE.md](NOOELEC_V5_PROFILE.md) | NESDR SMArt V5: comprehensive Nooelec engineering, captures and Tab5/OrcSDR evidence |
 | [E4000_PROFILE.md](E4000_PROFILE.md) | Implemented E4000/XTR driver profile, recorded reception and remaining qualification |
+| [reviews/RECEIVER_PROFILE_ALIGNMENT.md](reviews/RECEIVER_PROFILE_ALIGNMENT.md) | Documentation-only receiver alignment audit and verification report |
 | [PORTING.md](PORTING.md) | Board BSP vs driver |
 | [CLEAN_ROOM.md](CLEAN_ROOM.md) | Measurement rules |
 | [archive/](archive/README.md) | Point-in-time handoffs and notes (not maintained) |

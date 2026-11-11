@@ -18,19 +18,33 @@ Plug-and-play: the driver selects the profile; apps read
 
 Default until identified (and after detach): **`Unknown`** — never Blog V4.
 
+## Quick reference — implemented receiver profiles
+
+All **five** names below are implemented profiles in the [current source registry](../private/rtl_profile.hpp). Physical verification is **model- and revision-specific**; “implemented” is not “calibrated on every board”.
+
+| Device / tuner | Driver ID | Document | Dated evidence at a glance |
+|---|---|---|---|
+| RTL-SDR Blog V4 / R828D | `blog_v4_r828d` | **[V4 engineering profile](BLOG_V4_PROFILE.md)** | Tab5 FM/bandwidth, V4 HF FT8, PC captures |
+| RTL-SDR Blog V4 Lite / R828S | `blog_v4l_r828s` | **[V4L engineering profile](BLOG_V4L_PROFILE.md)** | Tab5 IQ/bandwidth/hotplug, HF FT8, PC AM |
+| Blog V3 family / R820T2 or R860 | `blog_v3_r820t2` | **[V3/V3c engineering profile](BLOG_V3_PROFILE.md)** | **V3c** FM/RDS, Q-HF, Tab5 hotplug; earlier V3 revisions individually verify |
+| Nooelec NESDR SMArt V5 / R820 family | `nooelec_smart_v5_r820t2` | **[SMArt V5 engineering profile](NOOELEC_V5_PROFILE.md)** | Standalone Tab5 smoke, band/stream/hotplug, 7.074 MHz FT8 |
+| Nooelec XTR / Elonics E4000 | `e4000_experimental` (historical name) | **[E4000/XTR engineering profile](E4000_PROFILE.md)** | Tab5 FM/RDS, multi-rate IQ, offset and bounded lifecycle tests; RF/gain/long-soak gates remain |
+
+Per-model capabilities come from `esp_rtl_sdr_get_device_capabilities()`, **not** the library-wide capability union; the source registry is the authority. See [status terminology](STATUS_TERMINOLOGY.md), [v0.9.6 release](releases/v0.9.6.md), [full API](API_REFERENCE.md).
+
 ## Active profiles
 
 ### `e4000_experimental` (internal ID; Nooelec XTR / E4000) — IMPLEMENTED; EXTENDED ACCEPTANCE OPEN
 
 | Field | Value |
 |---|---|
-| Status | **Implemented**; initial Tab5 FM audio/RDS and IQ streaming recorded 2026-10-31, with broader current-release RF/gain/soak acceptance remaining open. Internal profile name is historical, not a marketing status label. |
+| Status | **Implemented; ESP32-P4 hardware-tested**, including FM stereo/RDS, IQ at multiple rates, offset-tuning and bounded lifecycle cycles on named candidates. Broad RF/gain calibration, long soak and a complete current-release matrix remain open. Internal profile name is historical, not a marketing status label. |
 | USB | Exact `0bda:2838` + `Nooelec` / product contains `SMArTee XTR v5`; other shared-ID descriptors require E4000 register-0x02 ID `0x40`. Other VID/PID pairs are not accepted yet |
-| Tuner | E4000 at RTL2832U control I2C value `0x64` |
+| Tuner | E4000 at seven-bit I2C address `0x64` (USB bridge encoded `wValue=0x00c8`) |
 | Clock / RF | Assumes a 28.8 MHz tuner reference; published E4000 range **64 MHz–1.7 GHz** |
 | Path | Shared RTL2832U demodulator and IQ streaming; E4000-specific zero-IF tuning and RF filter selection |
-| Caps | STREAM/RETUNE, manual tuner gain (`CAP_GAIN`, 14 nominal steps including -1 dB) and tuner AUTO (`CAP_GAIN_AUTO`) are implemented, along with RTL digital AGC (`CAP_RTL_AGC`). Tuner bandwidth, direct sampling, HF upconverter and bias tee remain unavailable. |
-| Evidence | Host profile/PLL/actual-tune checks, first-party PC captures, initial Tab5 2.4 MS/s streaming with FM audio and KZEL RDS; targeted gain-history comparison on COM39. A complete full-band hardware/soak acceptance matrix is not recorded. See [E4000 profile](E4000_PROFILE.md) and [gain controls](E4000_GAIN_CONTROLS.md). |
+| Caps | STREAM/RETUNE, manual tuner gain (`CAP_GAIN`, 14 nominal steps including -1 dB) and tuner AUTO (`CAP_GAIN_AUTO`) are implemented, along with RTL digital AGC (`CAP_RTL_AGC`). Tuner bandwidth, direct sampling, HF upconverter and **software-switchable** bias tee are unavailable; the reported XTR hardware bias tee is not a controllable driver capability. |
+| Evidence | Host profile/PLL/actual-tune checks; first-party PC captures; Tab5 2.4 MS/s FM/KZEL RDS and 60.71-second stream; separately recorded 960 kS/s and 3.2 MS/s IQ, six COM39 offset IQ captures and bounded reconnect/hotplug cycles; targeted gain-history comparison. Candidate/date and external SDK patch boundaries apply. See [E4000 profile](E4000_PROFILE.md), [completion audit](validation/E4000_REMAINING_GATES.md) and [gain controls](E4000_GAIN_CONTROLS.md). |
 
 The profile deliberately bypasses the R828D/R820-family initialization, tune tables, and the two R828D gain writes embedded in the shared sample-rate slice. It uses a fixed, conservative IF-filter configuration and a captured 14-step manual gain ladder plus tuner AUTO. The E4000 tuner clock is an assumption until confirmed on hardware; divider fallbacks outside the datasheet's nominal VCO range are logged.
 
@@ -42,7 +56,7 @@ The profile deliberately bypasses the R828D/R820-family initialization, tune tab
 | USB | VID `0x0BDA` PID `0x2838` + exact `RTLSDRBlog` / `Blog V4` |
 | Tuner | R828D @ I2C `0x74` |
 | HF | RF<28.8 MHz -> LO+28.8e6; RF<=28.8 MHz -> Cable-2 + GPIO5-low |
-| Caps | Full library set including STREAM, HF_UPCONVERTER, GAIN, BIAS_TEE |
+| Caps | STREAM, HF_UPCONVERTER, GAIN, GAIN_AUTO, RTL_AGC, TUNER_BANDWIDTH and switchable BIAS_TEE; **no DIRECT_SAMPLING or OFFSET_TUNING** |
 | Hardware | Blog V4 has Tab5 FM/RDS and 7.074 MHz FT8 acceptance, plus observed band-select/retune cycles; analog gain calibration, GPIO electrical measurements and all-band soak are separate evidence tasks. |
 | Tuner bandwidth | Live bandwidth AUTO, 200k, 300k, 500k, 1.0M, 1.8M, 2.4M, AUTO **hardware-tested** on the M5 Tab5 at 96.1 MHz (2026-09-28, with the read-after-write fix: one cold boot and one unplug/replug): the carrier stays within +/-1.4 kHz of the request at every stage and final AUTO matches the cold-boot passband within 0.4 dB. **Not measured before the fix**; the V4L, which shares these plan words, shifted -312..+386 kHz without it. Plan values are vendor-driver control choices derived from captures, not measured analog passbands. See `docs/captures/v3c_live_bandwidth_2026-09-28.md`. |
 
@@ -72,8 +86,8 @@ V4L has its own accepted device profile with a 28.8 MHz HF upconverter route, na
 | USB | Exact V3 descriptors, or completed R820T2 chip-id `0x96`/`0x69` on ambiguous `0bda:2838` (the tested V3c unit reports the bare factory `RTL2838UHIDIR` descriptor, not `RTLSDRBlog`/`Blog V3` — identified via the ambiguous-descriptor chip-id probe, not string match) |
 | Tuner | R820T2/R860 @ I2C `0x34` (same USB IR template addressing as Nooelec; independently measured board differences remain profile-specific) |
 | HF/LF | Below 24 MHz uses first-party-capture-derived RTL2832 Q-branch direct sampling; **no** V4 HF upconverter / Cable-2 / GPIO5 |
-| Caps | STREAM/RETUNE/etc. plus provisional manual GAIN and DIRECT_SAMPLING; without HF_UPCONVERTER / GAIN_AUTO / RTL_AGC / BIAS_TEE. Tuner gain setters are unsupported while direct sampling bypasses the tuner. |
-| IF evidence | Official-driver capture measured the V3c PLL IF at 3.570 MHz and ended RTL2832 setup with `0x19/0x1A/0x1B = 0x38/0x11/0x12`, including a settle read after each write. The driver restores that sequence after sample-rate setup and before the first tune. When tuner bandwidth returns to AUTO it restores the whole V3c boot tuning state: demod IF `38 11 12`, PLL IF 3.570 MHz and tuner filter registers `0x0a/0x0b = d5/6b` (read back from the chip after a cold boot). The explicit bandwidth plans use their own captured IF (2.125, 2.025, 1.700, 1.750 or 1.815 MHz) and are written from the same plan; the V3c therefore runs a variable IF by design. V4 stays on its existing matched 1.814972 MHz path; Nooelec separately matches its PLL offset to the 3.57 MHz IF in its init table, pending hardware validation. |
+| Caps | Current registry exposes STREAM/RETUNE, nominal GAIN, GAIN_AUTO, RTL_AGC, BIAS_TEE, DIRECT_SAMPLING and TUNER_BANDWIDTH; **no HF_UPCONVERTER or OFFSET_TUNING**. The tested V3c has captured PC gain/AGC and no-load bias observations, but ambiguous R820-family identity does **not** validate a bias circuit on every earlier V3 revision. Tuner gain and bandwidth setters are unsupported while Q direct sampling bypasses the tuner. |
+| IF evidence | Official-driver capture measured the V3c PLL IF at 3.570 MHz and ended RTL2832 setup with `0x19/0x1A/0x1B = 0x38/0x11/0x12`, including a settle read after each write. The driver restores that sequence after sample-rate setup and before the first tune. When tuner bandwidth returns to AUTO it restores the whole V3c boot tuning state: demod IF `38 11 12`, PLL IF 3.570 MHz and tuner filter registers `0x0a/0x0b = d5/6b` (read back from the chip after a cold boot). The explicit bandwidth plans use their own captured IF (2.125, 2.025, 1.700, 1.750 or 1.815 MHz) and are written from the same plan; the V3c therefore runs a variable IF by design. V4 stays on its existing matched 1.814972 MHz path; Nooelec separately matches its PLL offset to the 3.57 MHz IF at cold start; standalone Tab5 streaming/control is now tested, while a directly paired physical before/after IF-offset experiment and broad calibration remain open. |
 | Evidence | Probe recovered from `agent/blog-v3-profile` / `d870740`. Identification/streaming verified via repeated cold-boot and hot-swap testing (V4 ↔ V3-family, both directions) with zero crashes. The matched-IF fix passes both host suites, truth hygiene, ESP-IDF 5.5.4 ESP32-P4 compile, and physical V3c/V4 tuning acceptance. Manual-gain calibration remains open. |
 | Tuner bandwidth | Live bandwidth AUTO, 200k, 300k, 500k, 1.0M, 1.8M, 2.4M, AUTO **hardware-tested** on the M5 Tab5 at 96.1 MHz (2026-09-28): the carrier stays within +2.0 kHz of the request at every stage across seven runs (six cold boots and one cold boot followed by an unplug/replug), final AUTO matches the cold-boot passband within 0.8 dB in all but one run (that run: 3.6 dB, repeated cleanly), no USB overruns or IQ drops. Plan values are vendor-driver control choices derived from captures, not measured analog passbands. See `docs/captures/v3c_live_bandwidth_2026-09-28.md`. |
 

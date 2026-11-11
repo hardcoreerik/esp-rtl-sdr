@@ -41,11 +41,11 @@ The driver supplies I/Q samples and hardware control. Decoders, audio, displays,
 
 | Receiver | Status |
 |---|---|
-| RTL-SDR Blog V4 | Implemented; ESP32-P4 tested |
-| RTL-SDR Blog V4 Lite | Implemented; ESP32-P4 tested |
-| RTL-SDR Blog V3c | Implemented; ESP32-P4 tested |
-| Nooelec NESDR SMArt V5 | Implemented; ESP32-P4 tested |
-| Nooelec XTR / E4000 | Implemented; initial ESP32-P4 reception recorded |
+| [RTL-SDR Blog V4](docs/BLOG_V4_PROFILE.md) | Implemented; ESP32-P4 tested |
+| [RTL-SDR Blog V4 Lite](docs/BLOG_V4L_PROFILE.md) | Implemented; ESP32-P4 tested |
+| [RTL-SDR Blog V3c](docs/BLOG_V3_PROFILE.md) | Implemented; ESP32-P4 tested |
+| [Nooelec NESDR SMArt V5](docs/NOOELEC_V5_PROFILE.md) | Implemented; ESP32-P4 tested |
+| [Nooelec XTR / E4000](docs/E4000_PROFILE.md) | Implemented; ESP32-P4 tested |
 
 Not all features are available on every receiver. Other RTL2832U dongles are not automatically supported.
 
@@ -149,7 +149,7 @@ The public API covers device detection and selection, streaming, frequency and s
 - [API design contract](docs/API.md) — threading and lifecycle rules
 - [Usage examples](docs/EXAMPLES.md) — integration recipes
 
-The header is the source of truth for available functions while the API reference is being brought up to date with version 0.9.6.
+The header is authoritative for the compiled API; the reference tracks version 0.9.6 and is checked for public-symbol coverage in CI.
 
 ## Current limitations
 
@@ -164,7 +164,7 @@ See [PROJECT_TRUTH.md](PROJECT_TRUTH.md) for the current implementation and veri
 ## Documentation
 
 - [API reference](docs/API_REFERENCE.md)
-- [Receiver profiles](docs/PROFILES.md)
+- [Receiver profiles and hardware validation](docs/PROFILES.md) — links to each model's complete engineering reference
 - [Architecture](architecture.md)
 - [Testing guide](docs/TESTING_GUIDE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)

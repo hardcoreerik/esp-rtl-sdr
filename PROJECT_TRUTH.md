@@ -150,6 +150,9 @@ Product vision: **`docs/VISION.md`**. Silicon / DS map: **`docs/SILICON.md`**.
 | **0.9.1** | Live tuner-bandwidth frequency/passband fixes verified on V3c/V4L/V4; first published 0.9 release |
 | **0.9.2** | Complete existing Nooelec SMArt v5 profile from independent PC captures; fix mismatched cold IF and preserve native gain/mode across retunes and HF returns. Host checks and P4 build verified; Nooelec P4 RF acceptance remains open |
 | **0.9.3** | R820T2 RF mux / tracking-filter band select (Blog V3, Nooelec; V4/V4L above 28.8 MHz) from our own vendor-DLL captures; unplug, failed-enumeration and control-transfer recovery; Nooelec manual-gain restart and low-band rate fixes. Host checks and P4 build verified; Tab5 band spot checks and five-cycle unplug tests passed on all four dongles; hubs untested |
+| **0.9.4** | Initial published E4000/XTR profile and independent host/control bring-up; early release label “experimental” is historical, not the profile's present-day implementation status. |
+| **0.9.5** | E4000 RTL2832U digital AGC control and restoration of requested state before streaming ([PR #65](https://github.com/hardcoreerik/esp-rtl-sdr/pull/65)); physical acceptance remains evidence-bounded. |
+| **0.9.6** | Interrupted-start disconnect/reattach recovery ([PR #69](https://github.com/hardcoreerik/esp-rtl-sdr/pull/69)); host regressions/CI and a bounded patch-assisted Tab5 receiver-swap observation. Installing this driver does not install OrcSDR-local ESP-IDF USB patches. |
 
 ---
 

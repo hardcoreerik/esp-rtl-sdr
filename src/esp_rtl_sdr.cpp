@@ -2616,6 +2616,8 @@ static void bulk_recover_stall(esp_rtl_sdr_handle *h)
  * Safe from delivery task or app tasks. Coalesces: if pending changes mid-apply,
  * leaves the newer pending_retune_hz set for another pass.
  */
+static void pull_ring_reset(esp_rtl_sdr_handle *h);   /* defined below; used by a live rate change */
+
 static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 {
     if (h == nullptr || !h->streaming) {

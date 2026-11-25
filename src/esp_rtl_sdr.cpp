@@ -2618,6 +2618,14 @@ static void bulk_recover_stall(esp_rtl_sdr_handle *h)
  */
 static void pull_ring_reset(esp_rtl_sdr_handle *h);   /* defined below; used by a live rate change */
 
+/* The measured tuner-bandwidth plans (vendor control choices, written for 2.4 MS/s) are also the right front-end setup at 2.56 MS/s,
+ * the vendor stable ceiling: without them the tuner keeps its boot filter, which clips the upper end of the wider span. */
+static inline bool rate_uses_measured_bandwidth(uint32_t sps)
+{
+    return sps == ESP_RTL_SDR_RATE_2400K || sps == ESP_RTL_SDR_RATE_2560K;
+}
+
+
 static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 {
     if (h == nullptr || !h->streaming) {
@@ -2686,7 +2694,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         }
         if (h->pending_rate_sps == new_rate) h->pending_rate_sps = 0;
     }
-    const bool measured_bw = err == ESP_OK && h->sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
+    const bool measured_bw = err == ESP_OK && rate_uses_measured_bandwidth(h->sample_rate_sps) &&
         measured_tuner_bandwidth_count(h->profile, tune_hz, hf_direct_route(h, tune_hz)) != 0 &&
         (rtl_profile_demod_if_restore_hz(h->profile) == 0 || h->bandwidth_applied_valid ||
          h->pending_bandwidth);
@@ -4845,7 +4853,7 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
          * bandwidth request switches Nooelec to its captured variable IF;
          * AUTO is 1.815 MHz there, unlike the older V3c AUTO policy. */
         if (rtl_profile_demod_if_restore_hz(handle->profile) == 0 &&
-            local.sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
+            rate_uses_measured_bandwidth(local.sample_rate_sps) &&
             measured_tuner_bandwidth_count(handle->profile, freq, hf_direct_route(handle, freq)) != 0) {
             ret = apply_bandwidth_transaction(handle, freq, 0);
         } else {
@@ -6768,7 +6776,7 @@ esp_err_t esp_rtl_sdr_get_tuner_bandwidths(esp_rtl_sdr_handle_t handle,
     const size_t count = measured_tuner_bandwidth_count(handle->profile, rf_hz,
                                                         hf_direct_route(handle, rf_hz));
     if ((handle->device_caps & ESP_RTL_SDR_CAP_TUNER_BANDWIDTH) == 0 ||
-        handle->sample_rate_sps != ESP_RTL_SDR_RATE_2400K || count == 0) {
+        !rate_uses_measured_bandwidth(handle->sample_rate_sps) || count == 0) {
         *out_count = 0;
         return ESP_RTL_SDR_ERR_UNSUPPORTED;
     }
@@ -6797,7 +6805,7 @@ esp_err_t esp_rtl_sdr_set_tuner_bandwidth(esp_rtl_sdr_handle_t handle, uint32_t 
         ? handle->pending_retune_hz : handle->frequency_hz;
     MeasuredTunerBandwidthPlan plan{};
     if ((handle->device_caps & ESP_RTL_SDR_CAP_TUNER_BANDWIDTH) == 0 ||
-        handle->sample_rate_sps != ESP_RTL_SDR_RATE_2400K ||
+        !rate_uses_measured_bandwidth(handle->sample_rate_sps) ||
         !measured_tuner_bandwidth_plan(handle->profile, rf_hz, hz, &plan,
                                        hf_direct_route(handle, rf_hz))) {
         set_error_unlocked(handle, ESP_RTL_SDR_ERR_UNSUPPORTED);

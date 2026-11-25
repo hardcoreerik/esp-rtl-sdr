@@ -2,6 +2,12 @@
 
 > **Current-status clarification (2026-11-04, documentation only):** V4, V4L, V3c, Nooelec SMArt V5 and E4000/XTR are all implemented driver profiles. The maintainer confirms E4000 works **in OrcSDR within its tuning range**, with invalid out-of-range dashboard tune requests correctly suppressed. Broader RF calibration and long-soak evidence are still needed. The v0.9.4 E4000 release was **historically described as experimental**; its original wording below is preserved to record what was known at publication. This clarification is not a new driver release or a retroactive v0.9.4 qualification. See [current driver truth](PROJECT_TRUTH.md) and [profiles](docs/PROFILES.md).
 
+## Unreleased
+
+- **Bias survives stop/start on the same dongle.** `esp_rtl_sdr_stop` no longer clears the bias request or switches the bias pin off when the owner had bias ON on a bias-capable dongle (V4, V4L); the next `esp_rtl_sdr_start` on the same device restores it. Uninstall, a failed start, reset, detach, any bias error and a fresh handle still start with bias OFF, and dongles without bias are untouched. Nothing is persisted: a reboot or power cycle always starts OFF.
+- **New `esp_rtl_sdr_set_sample_rate_live()` and `ESP_RTL_SDR_EVT_RATE_CHANGED`.** Changes the sample rate of a streaming receiver using the hot-retune window (drain, resampler records, IF restore, tune, pull-ring reset, new acquisition epoch) instead of stop/start. `esp_rtl_sdr_set_sample_rate` still returns `ERR_BUSY` while streaming.
+- **Not hardware-tested.** Host suites pass (20 of 20); no automated test drives the new paths and no dongle has been exercised with them. Needs on-device checks on V4, V4L, V3c and Nooelec before release.
+
 ## 0.9.4 (2026-11-02)
 
 - Experimental SMArt XTR/E4000 bring-up, manual/tuner AUTO gain and opt-in offset tuning.

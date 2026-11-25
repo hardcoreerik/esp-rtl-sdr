@@ -414,6 +414,11 @@ struct esp_rtl_sdr_handle {
 
     /** LO request; applied after bulk drain (never EP0 mid-bulk). 0 = none. */
     volatile uint32_t pending_retune_hz = 0;
+    /** Live sample-rate request (quantized); applied with the retune path after a bulk drain. 0 = none. */
+    volatile uint32_t pending_rate_sps = 0;
+    /** True when the last stop() deliberately left bias ON; the next start() on the same device restores it.
+     *  Never set by anything else, never persisted: a new handle, reset, detach or error starts with bias OFF. */
+    bool bias_kept_across_stop = false;
     /** True while apply_pending_retune() runs (delivery or app task). */
     volatile bool retune_busy = false;
     /**
@@ -2154,12 +2159,12 @@ static esp_err_t run_bias_gpio_records(esp_rtl_sdr_handle *h, bool enable)
     return run_records(h, records, std::size(records));
 }
 
-static void run_cleanup_best_effort(esp_rtl_sdr_handle *h)
+static void run_cleanup_best_effort(esp_rtl_sdr_handle *h, bool keep_bias = false)
 {
     if (h == nullptr) {
         return;
     }
-    if ((h->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0) {
+    if ((h->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0 && !(keep_bias && h->bias_tee_want)) {
         (void)run_bias_gpio_records(h, false);
     }
     if (h->profile == RtlProfileId::BlogV3 || h->profile == RtlProfileId::BlogV4L) {
@@ -2616,7 +2621,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         return ESP_RTL_SDR_ERR_NOT_STREAMING;
     }
     const uint32_t freq = h->pending_retune_hz;
-    if (freq == 0) {
+    if (freq == 0 && h->pending_rate_sps == 0) {
         return ESP_OK;
     }
     if (h->ep0_sideband_busy.exchange(true)) {
@@ -2651,18 +2656,40 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
 
     /* Use latest pending if a newer retune arrived while draining. */
     const uint32_t tune_hz =
-        (h->pending_retune_hz != 0) ? h->pending_retune_hz : freq;
+        (h->pending_retune_hz != 0) ? h->pending_retune_hz : (freq != 0 ? freq : h->frequency_hz);
+    const uint32_t new_rate = h->pending_rate_sps;
 
     t_drained = esp_timer_get_time();
     h->frontend_applied_valid = false;
     esp_err_t err = ESP_OK;
     const uint32_t requested_width = h->bandwidth_requested_hz;
     uint32_t applied_width = requested_width;
-    const bool measured_bw = h->sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
+    bool rate_applied = false;
+    if (new_rate != 0) {
+        /* Live rate change: same drained, EP0-only window as a retune. Only the resampler records are written (no
+         * init table, no bias or AGC write); the IF restore and the tune below put the front end back for the new rate. */
+        err = run_sample_rate(h, new_rate);
+        if (err == ESP_OK) {
+            h->sample_rate_sps = new_rate;
+            h->preferred_sample_rate_sps = new_rate;
+            h->requested_sample_rate_sps = new_rate;
+            h->metrics.sample_rate_sps = new_rate;
+            if (h->profile == RtlProfileId::E4000) h->e4000_rate_sps = new_rate;
+            h->bandwidth_applied_valid = false;
+            h->bandwidth_requested_hz = 0;
+            h->pending_bandwidth = false;
+            rate_applied = true;
+            if (!rtl_profile_uses_v3_direct_sampling(h->profile, tune_hz)) err = run_profile_demod_if_restore(h);
+        }
+        if (h->pending_rate_sps == new_rate) h->pending_rate_sps = 0;
+    }
+    const bool measured_bw = err == ESP_OK && h->sample_rate_sps == ESP_RTL_SDR_RATE_2400K &&
         measured_tuner_bandwidth_count(h->profile, tune_hz, hf_direct_route(h, tune_hz)) != 0 &&
         (rtl_profile_demod_if_restore_hz(h->profile) == 0 || h->bandwidth_applied_valid ||
          h->pending_bandwidth);
-    if (measured_bw) {
+    if (err != ESP_OK) {
+        /* the rate write failed: do not tune on top of a half-programmed resampler */
+    } else if (measured_bw) {
         MeasuredTunerBandwidthPlan requested{};
         if (!measured_tuner_bandwidth_plan(h->profile, tune_hz, applied_width, &requested,
                                            hf_direct_route(h, tune_hz))) {
@@ -2676,6 +2703,9 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
     if (err == ESP_OK) {
         err = run_acquisition_fifo_reset(h);
         if (err != ESP_OK) { h->streaming = false; h->state = ESP_RTL_SDR_STATE_FAULT; }
+    }
+    if (err == ESP_OK && rate_applied && esp_rtl_sdr_delivery_mode_uses_read(h->cfg.delivery_mode)) {
+        pull_ring_reset(h);   /* queued samples are at the old rate; the acquisition epoch below marks the break */
     }
     t_tuned = esp_timer_get_time();
     t_frontend = esp_timer_get_time();
@@ -2701,6 +2731,7 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         if (h->pending_retune_hz == tune_hz) {
             h->pending_retune_hz = 0;
         }
+        if (rate_applied) ESP_LOGI(TAG, "live rate change applied sps=%u", static_cast<unsigned>(h->sample_rate_sps));
         ESP_LOGI(TAG, "hot retune applied rf=%u Hz tuner=%u Hz direct=%d",
                  static_cast<unsigned>(tune_hz),
                  static_cast<unsigned>(rtl_profile_tuner_frequency_hz(
@@ -2733,6 +2764,10 @@ static esp_err_t apply_pending_retune(esp_rtl_sdr_handle *h)
         void *ctx = h->cfg.event_ctx;
         if (cb != nullptr) {
             uint32_t f = h->frequency_hz;
+            if (rate_applied) {
+                uint32_t r = h->sample_rate_sps;
+                emit_after_unlock(h, ESP_RTL_SDR_EVT_RATE_CHANGED, &r, cb, ctx);
+            }
             emit_after_unlock(h, ESP_RTL_SDR_EVT_RETUNED, &f, cb, ctx);
         }
     }
@@ -2983,7 +3018,7 @@ static void delivery_task_fn(void *arg)
             bulk_recover_stall(h);
         }
         /* Async EP0 off the USB client task (retune first, then gain/bias). */
-        if (h->streaming && h->pending_retune_hz != 0 && !h->retune_busy &&
+        if (h->streaming && (h->pending_retune_hz != 0 || h->pending_rate_sps != 0) && !h->retune_busy &&
             !h->ep0_sideband_busy) {
             (void)apply_pending_retune(h);
         }
@@ -4167,7 +4202,7 @@ esp_err_t esp_rtl_sdr_install(const esp_rtl_sdr_config_t *config,
     return ESP_OK;
 }
 
-static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms);
+static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms, bool keep_bias = false);
 
 esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
 {
@@ -4504,7 +4539,7 @@ esp_err_t esp_rtl_sdr_get_hub_stats(esp_rtl_sdr_handle_t handle, esp_rtl_sdr_hub
 /* Streaming                                                                  */
 /* -------------------------------------------------------------------------- */
 
-static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms)
+static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms, bool keep_bias)
 {
     if (timeout_ms == 0) {
         timeout_ms = ESP_RTL_SDR_DEFAULT_STOP_TIMEOUT_MS;
@@ -4532,7 +4567,13 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     h->pending_gain = false;
     h->pending_gain_mode = false;
     h->pending_bias = false;
-    rtl_profile_clear_bias_request(h->bias_tee_want);
+    /* keep_bias (public stop only): bias is the owner's accessory switch (an LNA), not part of the stream. A
+     * stop/start on the same attached dongle leaves it as the owner set it. Uninstall, a failed start, reset,
+     * detach and any bias error still clear it, so a fresh attachment always starts OFF. */
+    h->bias_kept_across_stop = keep_bias && h->bias_tee_want &&
+                               (h->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0;
+    if (!h->bias_kept_across_stop) rtl_profile_clear_bias_request(h->bias_tee_want);
+    h->pending_rate_sps = 0;
     h->pending_rtl_agc = false;
     h->pending_bandwidth = false;
     h->bandwidth_applied_valid = false;
@@ -4567,7 +4608,7 @@ static esp_err_t stop_stream_internal(esp_rtl_sdr_handle *h, uint32_t timeout_ms
     }
 
     if (drained && h->iface_claimed && h->dev != nullptr) {
-        run_cleanup_best_effort(h);
+        run_cleanup_best_effort(h, h->bias_kept_across_stop);
         usb_host_interface_release(h->client, h->dev, 0);
         h->iface_claimed = false;
     }
@@ -4740,10 +4781,16 @@ esp_err_t esp_rtl_sdr_start(esp_rtl_sdr_handle_t handle,
         if (ret != ESP_OK) {
             break;
         }
-        /* A reused handle never carries an ON request across attachments. */
+        /* A new attachment starts with bias OFF. The one exception is a stop()/start() pair on the same device where
+         * the owner had bias ON: stop() recorded that, and it is restored here (and only if the dongle has bias). */
         if ((handle->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0) {
-            ret = run_bias_gpio_records(handle, false);
-            if (ret != ESP_OK) break;
+            const bool restore = handle->bias_kept_across_stop && handle->bias_tee_want;
+            handle->bias_kept_across_stop = false;
+            if (!restore) rtl_profile_clear_bias_request(handle->bias_tee_want);
+            ret = run_bias_gpio_records(handle, restore);
+            if (ret != ESP_OK) { rtl_profile_clear_bias_request(handle->bias_tee_want); break; }
+        } else {
+            handle->bias_kept_across_stop = false;
         }
         ret = run_sample_rate(handle, local.sample_rate_sps);
         if (ret != ESP_OK) {
@@ -5037,7 +5084,7 @@ esp_err_t esp_rtl_sdr_stop(esp_rtl_sdr_handle_t handle, uint32_t timeout_ms)
             return ESP_RTL_SDR_ERR_BUSY;
         }
     }
-    return stop_stream_internal(handle, timeout_ms);
+    return stop_stream_internal(handle, timeout_ms, /*keep_bias=*/true);
 }
 
 esp_err_t esp_rtl_sdr_reset(esp_rtl_sdr_handle_t handle)
@@ -5164,6 +5211,44 @@ esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t samp
     handle->metrics.sample_rate_sps = exact;
     set_error_unlocked(handle, ESP_OK);
     return ESP_OK;
+}
+
+esp_err_t esp_rtl_sdr_set_sample_rate_live(esp_rtl_sdr_handle_t handle, uint32_t sample_rate_sps)
+{
+    if (!handle_ok(handle)) {
+        return ESP_RTL_SDR_ERR_STALE_HANDLE;
+    }
+    uint32_t exact = 0;
+    if (!esp_rtl_sdr_quantize_sample_rate(sample_rate_sps, &exact)) {
+        return ESP_RTL_SDR_ERR_BAD_RATE;
+    }
+    bool from_callback = false;
+    {
+        HandleLock lk(handle, kQueryLockTicks);
+        if (!lk.ok()) {
+            return ESP_RTL_SDR_ERR_TIMEOUT;
+        }
+        if (handle->state != ESP_RTL_SDR_STATE_STREAMING || !handle->streaming) {
+            set_error_unlocked(handle, ESP_RTL_SDR_ERR_NOT_STREAMING);
+            return ESP_RTL_SDR_ERR_NOT_STREAMING;
+        }
+        if (handle->sample_rate_sps == exact && handle->pending_rate_sps == 0) {
+            set_error_unlocked(handle, ESP_OK);
+            return ESP_OK;   /* already at this rate: nothing to do, no blanking */
+        }
+        handle->pending_rate_sps = exact;
+        {
+            const uint32_t depth = __atomic_load_n(&handle->in_callback_depth, __ATOMIC_SEQ_CST);
+            const TaskHandle_t cb = __atomic_load_n(&handle->callback_task, __ATOMIC_SEQ_CST);
+            from_callback =
+                esp_rtl_sdr_caller_is_event_callback(depth, cb, xTaskGetCurrentTaskHandle());
+        }
+        set_error_unlocked(handle, ESP_OK);
+    }
+    if (from_callback) {
+        return ESP_OK;   /* the delivery task applies it */
+    }
+    return apply_pending_retune(handle);
 }
 
 esp_err_t esp_rtl_sdr_get_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t *out_sps)

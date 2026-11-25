@@ -311,6 +311,7 @@ typedef enum {
     ESP_RTL_SDR_EVT_PASSPORT_PROGRESS = 10, /**< payload: passport_entry */
     ESP_RTL_SDR_EVT_IQ_BLOCK_EX = 12, /**< opt-in borrowed payload: see esp_rtl_sdr_acquisition.h */
     ESP_RTL_SDR_EVT_PASSPORT_DONE = 11,     /**< payload: rate_passport */
+    ESP_RTL_SDR_EVT_RATE_CHANGED = 14,      /**< payload: uint32_t sample_rate_sps; sent just before EVT_RETUNED */
 } esp_rtl_sdr_event_t;
 
 /**
@@ -990,6 +991,17 @@ esp_err_t esp_rtl_sdr_get_center_freq(esp_rtl_sdr_handle_t handle, uint32_t *out
  * - STREAMING: returns ERR_BUSY (rate change requires stop/start in Phase 1).
  */
 esp_err_t esp_rtl_sdr_set_sample_rate(esp_rtl_sdr_handle_t handle, uint32_t sample_rate_sps);
+
+/**
+ * Change the sample rate of a RUNNING stream without stop/start.
+ * - STREAMING: queues the rate, drains in-flight transfers, writes the resampler registers, re-applies the front
+ *   end at the current frequency, discards samples queued at the old rate and begins a new acquisition epoch
+ *   (like a hot retune). Emits ESP_RTL_SDR_EVT_RATE_CHANGED then ESP_RTL_SDR_EVT_RETUNED. Samples around the change
+ *   are blanked for roughly the cost of a hot retune. Each iq_block carries its own sample_rate_sps.
+ * - Any other state: ESP_RTL_SDR_ERR_NOT_STREAMING (use esp_rtl_sdr_set_sample_rate before start).
+ * Does not touch bias, gain mode or RTL AGC.
+ */
+esp_err_t esp_rtl_sdr_set_sample_rate_live(esp_rtl_sdr_handle_t handle, uint32_t sample_rate_sps);
 
 /**
  * Get last applied or preferred sample rate (Hz).

@@ -798,6 +798,7 @@ static void clear_profile_runtime_state(esp_rtl_sdr_handle *h)
     h->tuner_reg07 = 0x75;
     h->tuner_auto_applied = false;
     rtl_profile_clear_bias_request(h->bias_tee_want);
+    h->bias_kept_across_stop = false;
     h->rtl_agc_want = false;
     h->gain_mode = ESP_RTL_SDR_GAIN_MODE_AUTO;
     h->gain_tenth_db = 0;
@@ -4255,6 +4256,13 @@ esp_err_t esp_rtl_sdr_uninstall(esp_rtl_sdr_handle_t handle)
     if (handle->live_urbs != 0 || handle->ctrl_inflight.load(std::memory_order_acquire)) {
         return retain(ESP_RTL_SDR_ERR_TIMEOUT);
     }
+    /* A stop() that kept bias ON must not outlive the handle: cut it before the device is closed. */
+    if (handle->bias_kept_across_stop && handle->dev != nullptr &&
+        (handle->device_caps & ESP_RTL_SDR_CAP_BIAS_TEE) != 0) {
+        (void)run_bias_gpio_records(handle, false);
+    }
+    handle->bias_kept_across_stop = false;
+    rtl_profile_clear_bias_request(handle->bias_tee_want);
     close_opened_device(handle);
     retry_deferred_closes(handle);
     for (auto dev : handle->deferred_close) {

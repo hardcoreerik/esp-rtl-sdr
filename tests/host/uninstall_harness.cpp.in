@@ -19,11 +19,12 @@
 #define RTL_LOGI(...) ((void)0)
 #define pdMS_TO_TICKS(x) (x)
 #define pdTRUE 1
+#define ESP_RTL_SDR_CAP_BIAS_TEE 1u
 using TickType_t = unsigned;
 using TaskHandle_t = void *;
 using SemaphoreHandle_t = void *;
 static constexpr unsigned kHandleMagic = 123, kUninstallLockTicks = 2000;
-static int destroyed, deregistered, released, freed;
+static int destroyed, deregistered, released, freed, bias_off_calls;
 static int stop_result, deregister_result, release_result;
 static bool stall_workers, lock_ok = true;
 static unsigned ticks;
@@ -41,6 +42,9 @@ struct esp_rtl_sdr_handle {
     void *client = reinterpret_cast<void *>(2), *ctrl_xfer = nullptr, *probe_q = nullptr;
     void *ctrl_sem = nullptr, *ctrl_mutex = nullptr, *bulk_done_sem = nullptr;
     void *deferred_close[2]{};
+    void *dev = nullptr;
+    unsigned device_caps = 0;
+    bool bias_kept_across_stop = false, bias_tee_want = false;
     int state = 1, last_error = 0;
     ~esp_rtl_sdr_handle() { ++destroyed; }
 };
@@ -62,6 +66,8 @@ static void set_error_unlocked(esp_rtl_sdr_handle *h, int err) { h->last_error =
 static void usb_fault_guard_disarm() {}
 static int stop_stream_internal(esp_rtl_sdr_handle *, int) { return stop_result; }
 static void close_opened_device(esp_rtl_sdr_handle *) {}
+static int run_bias_gpio_records(esp_rtl_sdr_handle *, bool enable) { if (!enable) ++bias_off_calls; return ESP_OK; }
+static void rtl_profile_clear_bias_request(bool &want) { want = false; }
 static void retry_deferred_closes(esp_rtl_sdr_handle *) {}
 static int usb_host_client_handle_events(void *, int) { return ESP_OK; }
 static int usb_host_client_deregister(void *) { ++deregistered; return deregister_result; }
@@ -77,7 +83,7 @@ static int xSemaphoreTake(void *, int) { return pdTRUE; }
 static int checks;
 #define CHECK(x) do { ++checks; if (!(x)) { std::printf("FAIL %d: %s\n", __LINE__, #x); return 1; } } while (0)
 static esp_rtl_sdr_handle *reset() {
-    ticks = 0; destroyed = deregistered = released = freed = 0;
+    ticks = 0; destroyed = deregistered = released = freed = bias_off_calls = 0;
     stop_result = deregister_result = release_result = ESP_OK;
     stall_workers = false; lock_ok = true;
     active = new esp_rtl_sdr_handle; return active;
@@ -116,5 +122,13 @@ int main() {
     CHECK(esp_rtl_sdr_uninstall(h) == ESP_RTL_SDR_ERR_REENTRANT && !h->destroying);
     h->in_callback_depth = 0;
     CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK);
+    // A bias left ON by stop() is cut at uninstall; a dongle without bias, or a handle that kept none, is not touched.
+    h = reset(); h->dev = reinterpret_cast<void *>(5); h->device_caps = ESP_RTL_SDR_CAP_BIAS_TEE;
+    h->bias_kept_across_stop = true; h->bias_tee_want = true;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK && bias_off_calls == 1);
+    h = reset(); h->dev = reinterpret_cast<void *>(5); h->device_caps = ESP_RTL_SDR_CAP_BIAS_TEE;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK && bias_off_calls == 0);
+    h = reset(); h->dev = reinterpret_cast<void *>(5); h->bias_kept_across_stop = true; h->bias_tee_want = true;
+    CHECK(esp_rtl_sdr_uninstall(h) == ESP_OK && bias_off_calls == 0);
     std::printf("actual uninstall checks=%d\n", checks); return 0;
 }
